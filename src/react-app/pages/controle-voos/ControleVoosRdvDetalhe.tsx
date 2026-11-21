@@ -78,7 +78,7 @@ const inputClass =
 
 function FieldError({ message }: { message?: string }) {
   if (!message) return null;
-  return <p className="text-[11px] text-red-600 dark:text-red-400">{message}</p>;
+  return <p className="text-xs text-red-600 dark:text-red-400">{message}</p>;
 }
 
 function formatLocalDateTimeInput(value: string | null | undefined) {
@@ -608,7 +608,7 @@ export default function ControleVoosRdvDetalhe() {
                               : undefined
                           }
                         />
-                        <span className="block text-[11px] text-slate-400">
+                        <span className="block text-xs text-slate-400">
                           Prefixo esperado:{' '}
                           {formatRdvNumero(form.data_voo || voo.data_programacao, voo.prefixo)}
                         </span>
@@ -764,7 +764,7 @@ export default function ControleVoosRdvDetalhe() {
                           <dd className="font-medium">{reviewSummary.carga_kg ? `${reviewSummary.carga_kg} kg` : 'Não informada'}</dd>
                         </div>
                       </dl>
-                      <p className="mt-3 text-[11px] text-slate-500 dark:text-slate-400">
+                      <p className="mt-3 text-xs text-slate-500 dark:text-slate-400">
                         Campo vazio no trecho significa que o piloto não informou aquele dado. Em modo de correção, a Coordenação pode preenchê-lo antes da aprovação.
                       </p>
                     </div>
@@ -816,7 +816,7 @@ export default function ControleVoosRdvDetalhe() {
                                 <span className="block whitespace-nowrap">Trecho {index + 1}</span>
                                 {rota ? (
                                   <span
-                                    className={`block max-w-[14rem] truncate text-[11px] ${
+                                    className={`block max-w-[14rem] truncate text-xs ${
                                       active ? 'text-blue-100' : 'text-slate-400'
                                     }`}
                                   >
@@ -865,7 +865,7 @@ export default function ControleVoosRdvDetalhe() {
                       )}
                     </>
                   )}
-                  <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
                     Trechos são gravados em `cv_voo_etapas` (fonte canônica). Horas e consumo do
                     cartão são preview; totais oficiais vêm do backend após o save.
                   </p>
@@ -955,7 +955,7 @@ export default function ControleVoosRdvDetalhe() {
                       <span className="text-xs font-medium text-slate-500">
                         Divergências do planejado
                       </span>
-                      <textarea
+                      <textarea aria-label="Alterações de rota, horário, destinos…"
                         value={form.divergencias}
                         disabled={!editable}
                         onChange={(e) => updateField('divergencias', e.target.value)}
@@ -1174,7 +1174,7 @@ export default function ControleVoosRdvDetalhe() {
                 </Link>
               </div>
 
-              <p className="text-[11px] text-amber-700 dark:text-amber-400">
+              <p className="text-xs text-amber-700 dark:text-amber-400">
                 Uso operacional interno. Não regulado. Breakpoints: mobile (&lt;sm select),
                 tablet/desktop (stepper horizontal).
               </p>

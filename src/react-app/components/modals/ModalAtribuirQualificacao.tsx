@@ -16,6 +16,7 @@ import { showAlertDialog } from '@/react-app/utils/confirmDialog';
 import { emitirEventoModulo } from '@/react-app/lib/moduloBus';
 import { tryAddCalendarMonthsClamped } from '@/shared/utils/validade-meses';
 import { isCmaCode, resolveCmaValidity } from '@/shared/utils/cma-validity';
+import { ModalOverlay } from '@/react-app/components/modals/ModalOverlay';
 
 interface Props {
   isOpen: boolean;
@@ -442,7 +443,7 @@ export function ModalAtribuirQualificacao({
 
   return (
     <>
-      <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-modal p-4">
+      <ModalOverlay className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-modal p-4">
         <div className="bg-white rounded-lg shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto relative">
           {/* Overlay de salvamento */}
           {saving && (
@@ -457,7 +458,7 @@ export function ModalAtribuirQualificacao({
 
           <div className="flex justify-between items-center p-6 border-b">
             <h2 className="text-xl font-bold">Nova Qualificação</h2>
-            <button
+            <button aria-label="Fechar" type="button"
               onClick={onClose}
               className="text-gray-500 hover:text-gray-700"
               disabled={saving}
@@ -470,11 +471,11 @@ export function ModalAtribuirQualificacao({
             <div className="space-y-4">
               {/* 1. Funcionário */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                <label htmlFor="modalatribuirqualificacao-funcionario" className="block text-sm font-medium text-gray-700 mb-2">
                   <User className="inline w-4 h-4 mr-1" />
                   Funcionário <span className="text-red-500">*</span>
                 </label>
-                <select
+                <select id="modalatribuirqualificacao-funcionario" aria-label="Funcionário"
                   value={form.funcionario_id}
                   onChange={(e) => {
                     console.debug(
@@ -500,18 +501,18 @@ export function ModalAtribuirQualificacao({
                 </select>
                 {!loadingFuncionarios && funcionariosData.length === 0 && (
                   <p className="text-xs text-red-500 mt-1">
-                    ⚠️ Nenhum funcionário encontrado. Verifique se há funcionários ativos.
+                    <span aria-hidden="true">⚠️</span> Nenhum funcionário encontrado. Verifique se há funcionários ativos.
                   </p>
                 )}
               </div>
 
               {/* 2. Categoria */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                <label htmlFor="modalatribuirqualificacao-categoria" className="block text-sm font-medium text-gray-700 mb-2">
                   <Tag className="inline w-4 h-4 mr-1" />
                   Categoria <span className="text-red-500">*</span>
                 </label>
-                <select
+                <select id="modalatribuirqualificacao-categoria" aria-label="Categoria"
                   value={form.categoria}
                   onChange={(e) => {
                     console.debug(
@@ -532,10 +533,10 @@ export function ModalAtribuirQualificacao({
                   ))}
                 </select>
                 {errorCategorias && (
-                  <p className="mt-1 text-xs text-red-600">⚠️ Não foi possível carregar as categorias canônicas. O salvamento está bloqueado.</p>
+                  <p className="mt-1 text-xs text-red-600"><span aria-hidden="true">⚠️</span> Não foi possível carregar as categorias canônicas. O salvamento está bloqueado.</p>
                 )}
                 {isLegacyEditing && (
-                  <p className="mt-1 text-xs text-amber-600">⚠️ Categoria legada: preserve o modelo para salvar sem reclassificar, ou selecione uma categoria canônica.</p>
+                  <p className="mt-1 text-xs text-amber-600"><span aria-hidden="true">⚠️</span> Categoria legada: preserve o modelo para salvar sem reclassificar, ou selecione uma categoria canônica.</p>
                 )}
                 {!form.funcionario_id && (
                   <p className="mt-1 text-xs text-gray-500">ℹ️ Selecione um funcionário primeiro</p>
@@ -544,11 +545,11 @@ export function ModalAtribuirQualificacao({
 
               {/* 3. Tipo (filtrado por categoria) */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                <label htmlFor="modalatribuirqualificacao-modelo" className="block text-sm font-medium text-gray-700 mb-2">
                   <FileText className="inline w-4 h-4 mr-1" />
                   Modelo <span className="text-red-500">*</span>
                 </label>
-                <select
+                <select id="modalatribuirqualificacao-modelo" aria-label="Modelo"
                   value={form.qualificacao_codigo}
                   onChange={(e) => {
                     const codigo = e.target.value;
@@ -584,7 +585,7 @@ export function ModalAtribuirQualificacao({
                 )}
                 {form.categoria && tiposFiltrados.length === 0 && !loadingTipos && !errorTipos && (
                   <p className="mt-1 text-xs text-amber-600">
-                    ⚠️ Nenhum tipo de qualificação encontrado para esta categoria
+                    <span aria-hidden="true">⚠️</span> Nenhum tipo de qualificação encontrado para esta categoria
                   </p>
                 )}
                 {validadeMeses && (
@@ -675,11 +676,11 @@ export function ModalAtribuirQualificacao({
 
               {/* 4. Data de Realização */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                <label htmlFor="modalatribuirqualificacao-data-de-realizacao" className="block text-sm font-medium text-gray-700 mb-2">
                   <Calendar className="inline w-4 h-4 mr-1" />
                   Data de Realização <span className="text-red-500">*</span>
                 </label>
-                <input
+                <input id="modalatribuirqualificacao-data-de-realizacao" aria-label="Data de Realização"
                   type="date"
                   value={form.data_realizacao}
                   onChange={(e) => {
@@ -696,11 +697,11 @@ export function ModalAtribuirQualificacao({
 
               {/* 5. Data de Vencimento (auto-calculada) */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                <label htmlFor="modalatribuirqualificacao-data-de-vencimento" className="block text-sm font-medium text-gray-700 mb-2">
                   <Calendar className="inline w-4 h-4 mr-1" />
                   Data de Vencimento <span className="text-red-500">*</span>
                 </label>
-                <input
+                <input id="modalatribuirqualificacao-data-de-vencimento" aria-label="Data de Vencimento"
                   type="date"
                   value={form.data_vencimento}
                   onChange={(e) => {
@@ -727,18 +728,18 @@ export function ModalAtribuirQualificacao({
                 )}
                 {!validadeMeses && form.qualificacao_codigo && !isG1SemSelected && (
                   <p className="mt-1 text-xs text-amber-600">
-                    ⚠️ Este tipo não tem validade definida. Informe manualmente se necessário.
+                    <span aria-hidden="true">⚠️</span> Este tipo não tem validade definida. Informe manualmente se necessário.
                   </p>
                 )}
               </div>
 
               {/* 6. Instrutor */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                <label htmlFor="modalatribuirqualificacao-instrutor-opcional" className="block text-sm font-medium text-gray-700 mb-2">
                   <User className="inline w-4 h-4 mr-1" />
                   Instrutor (opcional)
                 </label>
-                <select
+                <select id="modalatribuirqualificacao-instrutor-opcional" aria-label="Instrutor (opcional)"
                   value={form.instrutor_id}
                   onChange={(e) => setForm({ ...form, instrutor_id: e.target.value })}
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary/30 focus:border-transparent"
@@ -758,8 +759,8 @@ export function ModalAtribuirQualificacao({
 
               {/* 7. Observações */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Observações</label>
-                <textarea
+                <label htmlFor="modalatribuirqualificacao-observacoes" className="block text-sm font-medium text-gray-700 mb-2">Observações</label>
+                <textarea id="modalatribuirqualificacao-observacoes" aria-label="Observações"
                   value={form.observacoes}
                   onChange={(e) => setForm({ ...form, observacoes: e.target.value })}
                   placeholder="Observações adicionais..."
@@ -797,7 +798,7 @@ export function ModalAtribuirQualificacao({
             </div>
           </form>
         </div>
-      </div>
+      </ModalOverlay>
     </>
   );
 }

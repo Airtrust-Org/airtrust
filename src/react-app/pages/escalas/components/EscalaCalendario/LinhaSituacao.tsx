@@ -204,7 +204,7 @@ export default function LinhaSituacao({
                 <span
                   key={`${tripulante.funcionarioId}-q-${tripulante.quinzenaPreferencial}`}
                   className={cn(
-                    'inline-flex items-center rounded-full px-1.5 py-px text-[10px] font-semibold leading-none',
+                    'inline-flex items-center rounded-full px-1.5 py-px text-xs font-semibold leading-none',
                     getQuinzenaBadgeClasses(tripulante.quinzenaPreferencial),
                   )}
                 >
@@ -213,19 +213,19 @@ export default function LinhaSituacao({
               )}
               {funcaoBadge && (
                 <span
-                  className={`rounded px-1 py-px text-[9px] font-semibold ${getFuncaoVisualToken(funcaoBadge.token).badgeClassName}`}
+                  className={`rounded px-1 py-px text-xs font-semibold ${getFuncaoVisualToken(funcaoBadge.token).badgeClassName}`}
                 >
                   {funcaoBadge.label}
                 </span>
               )}
               {tripulante.modelo && (
-                <span className="rounded bg-slate-100 px-1 py-px text-[9px] font-mono text-slate-500">
+                <span className="rounded bg-slate-100 px-1 py-px text-xs font-mono text-slate-500">
                   {tripulante.modelo}
                 </span>
               )}
             </div>
             {tripulante.situacoesVisiveis.length === 0 && !temDisponibilidadeBaseVisivel && (
-              <p className="mt-1 text-[11px] text-slate-400">Sem situação registrada no período</p>
+              <p className="mt-1 text-xs text-slate-400">Sem situação registrada no período</p>
             )}
           </div>
 
@@ -325,7 +325,7 @@ export default function LinhaSituacao({
 export function CabecalhoDiasSituacao({ diasDoMes, q1Fim }: { diasDoMes: Date[]; q1Fim?: string }) {
   return (
     <tr className="border-b border-slate-200 bg-white">
-      <th
+      <th scope="col"
         className={cn(
           'sticky left-0 z-10 border-r border-slate-200 bg-white text-left text-slate-600',
           CELL.labelWidth,
@@ -338,11 +338,11 @@ export function CabecalhoDiasSituacao({ diasDoMes, q1Fim }: { diasDoMes: Date[];
         const diaIso = format(dia, 'yyyy-MM-dd');
         const fimDeSemana = [0, 6].includes(getDay(dia));
         return (
-          <th
+          <th scope="col"
             key={`situacao-header-${diaIso}`}
             className={`${GEOMETRY_TOKENS.DAY_CELL_WIDTH} border-r border-slate-100 px-0 py-2 text-center ${isToday(dia) ? 'bg-sky-500 text-white' : fimDeSemana ? 'bg-slate-50 text-slate-500' : 'text-slate-600'}`}
           >
-            <div className="text-[9px] font-medium">{DIAS_SEMANA_CURTO[getDay(dia)]}</div>
+            <div className="text-xs font-medium">{DIAS_SEMANA_CURTO[getDay(dia)]}</div>
             <div className="text-xs font-bold">{format(dia, 'd')}</div>
           </th>
         );

@@ -22,6 +22,7 @@ import {
 } from '@/react-app/utils/pdfPreview';
 import { buildPasta360Url } from '@/react-app/utils/pasta360';
 import { prepareCertificateUploadFile } from '@/react-app/utils/certificateUploadOptimization';
+import { ModalOverlay } from '@/react-app/components/modals/ModalOverlay';
 
 /**
  * Erro de API tipado para as chamadas deste modal. `requestJson` popula
@@ -705,7 +706,7 @@ export function ModalCertificado({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-modal flex items-center justify-center bg-black/50">
+    <ModalOverlay className="fixed inset-0 z-modal flex items-center justify-center bg-black/50">
       <div
         className="bg-white rounded-lg shadow-xl w-full max-w-4xl max-h-[90vh] overflow-y-auto"
         onClick={(e) => e.stopPropagation()}
@@ -720,7 +721,7 @@ export function ModalCertificado({
               {qualificacao.qualificacao_nome}
             </p>
           </div>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 transition">
+          <button aria-label="Fechar" onClick={onClose} className="text-gray-400 hover:text-gray-600 transition">
             <X size={24} />
           </button>
         </div>
@@ -999,10 +1000,10 @@ export function ModalCertificado({
                       </div>
                     )}
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                    <label htmlFor="modalcertificado-descricao-opcional" className="block text-sm font-medium text-gray-700 mb-2">
                       Descrição (opcional)
                     </label>
-                    <input
+                    <input id="modalcertificado-descricao-opcional" aria-label="Descrição (opcional)"
                       type="text"
                       value={descricao}
                       onChange={(e) => setDescricao(e.target.value)}
@@ -1114,7 +1115,7 @@ export function ModalCertificado({
 
       {/* Modal de Confirmação de Delete */}
       {showConfirmDelete && (
-        <div
+        <ModalOverlay
           className="fixed inset-0 bg-black/50 flex items-center justify-center z-modal p-4"
           onClick={(e) => e.stopPropagation()}
         >
@@ -1156,8 +1157,8 @@ export function ModalCertificado({
               </button>
             </div>
           </div>
-        </div>
+        </ModalOverlay>
       )}
-    </div>
+    </ModalOverlay>
   );
 }

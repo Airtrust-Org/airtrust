@@ -266,7 +266,7 @@ export default function BlocoAeronave({
               <div className="flex items-center gap-1 min-w-0">
                 <span
                   className={cn(
-                    'truncate font-semibold text-[11px]',
+                    'truncate font-semibold text-xs',
                     instrutorEmVoo ? 'text-amber-950' : 'text-slate-800',
                   )}
                   title={nomeExibido}
@@ -282,14 +282,14 @@ export default function BlocoAeronave({
                   </span>
                 )}
                 {prefixoLinha && (
-                  <span className="flex-shrink-0 rounded bg-slate-100 px-1 py-px text-[9px] font-medium text-slate-500">
+                  <span className="flex-shrink-0 rounded bg-slate-100 px-1 py-px text-xs font-medium text-slate-500">
                     {prefixoLinha}
                   </span>
                 )}
                 {cma && cma.status !== 'ok' && (
                   <span
                     className={cn(
-                      'inline-flex shrink-0 items-center rounded px-1 py-px text-[9px] font-semibold leading-none',
+                      'inline-flex shrink-0 items-center rounded px-1 py-px text-xs font-semibold leading-none',
                       cmaExpirado ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700',
                     )}
                     title={
@@ -302,11 +302,11 @@ export default function BlocoAeronave({
                   </span>
                 )}
               </div>
-              <div className="mt-0.5 flex items-center gap-1 min-w-0 whitespace-nowrap overflow-hidden text-[9px] text-slate-500">
+              <div className="mt-0.5 flex items-center gap-1 min-w-0 whitespace-nowrap overflow-hidden text-xs text-slate-500">
                 {slotLabel && (
                   <span
                     className={cn(
-                      'inline-flex min-w-[1.75rem] items-center justify-center whitespace-nowrap rounded-full px-1 py-px text-[9px] font-semibold leading-none',
+                      'inline-flex min-w-[1.75rem] items-center justify-center whitespace-nowrap rounded-full px-1 py-px text-xs font-semibold leading-none',
                       slotToken.pill,
                     )}
                   >
@@ -314,7 +314,7 @@ export default function BlocoAeronave({
                   </span>
                 )}
                 <span
-                  className={`rounded-full px-1.5 py-px text-[9px] font-semibold ${getFuncaoVisualToken(linha.funcao).badgeClassName}`}
+                  className={`rounded-full px-1.5 py-px text-xs font-semibold ${getFuncaoVisualToken(linha.funcao).badgeClassName}`}
                 >
                   {linha.funcao}
                 </span>
@@ -344,7 +344,7 @@ export default function BlocoAeronave({
                     <Pencil className="h-3 w-3" />
                   </button>
                 )}
-                <button
+                <button aria-label="Excluir"
                   type="button"
                   onClick={() => onRemoverAlocacao?.(linha.id, nomeExibido)}
                   className="rounded-md p-1 text-slate-400 hover:bg-red-50 hover:text-red-600"
@@ -479,22 +479,22 @@ export default function BlocoAeronave({
           <div className="flex items-center justify-between gap-2">
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-1 min-w-0">
-                <span className="truncate text-[11px] italic text-slate-400">Nao alocado</span>
+                <span className="truncate text-xs italic text-slate-400">Nao alocado</span>
               </div>
               <div
-                className="mt-0.5 flex items-center gap-1 whitespace-nowrap overflow-hidden text-[9px] text-slate-500"
+                className="mt-0.5 flex items-center gap-1 whitespace-nowrap overflow-hidden text-xs text-slate-500"
                 title={slotResumoPeriodo}
               >
                 <span
                   className={cn(
-                    'inline-flex min-w-[1.75rem] items-center justify-center whitespace-nowrap rounded-full px-1 py-px text-[9px] font-semibold leading-none',
+                    'inline-flex min-w-[1.75rem] items-center justify-center whitespace-nowrap rounded-full px-1 py-px text-xs font-semibold leading-none',
                     slotToken.pill,
                   )}
                 >
                   {slot.quinzenaLabel}
                 </span>
                 <span
-                  className={`rounded-full px-1.5 py-px text-[9px] font-semibold ${getFuncaoVisualToken(slot.funcao).badgeClassName}`}
+                  className={`rounded-full px-1.5 py-px text-xs font-semibold ${getFuncaoVisualToken(slot.funcao).badgeClassName}`}
                 >
                   {slot.funcao}
                 </span>
@@ -512,7 +512,7 @@ export default function BlocoAeronave({
                     quinzenaId: slot.quinzenaId,
                   })
                 }
-                className="inline-flex items-center gap-1 rounded-md border border-dashed border-slate-300 bg-white px-2 py-0.5 text-[10px] font-semibold text-slate-500 transition-colors hover:border-primary hover:bg-primary/5 hover:text-primary"
+                className="inline-flex items-center gap-1 rounded-md border border-dashed border-slate-300 bg-white px-2 py-0.5 text-xs font-semibold text-slate-500 transition-colors hover:border-primary hover:bg-primary/5 hover:text-primary"
                 data-export-hide="true"
               >
                 <Plus className="h-3 w-3" />
@@ -582,7 +582,7 @@ export default function BlocoAeronave({
               {semAeronave ? SEM_AERONAVE_LABEL : prefixo}
             </h3>
             {!semAeronave && modelo && modelo !== prefixo && (
-              <span className="text-[10px] font-medium text-slate-400">{modelo}</span>
+              <span className="text-xs font-medium text-slate-400">{modelo}</span>
             )}
           </div>
           <div className="flex flex-shrink-0 items-center gap-1.5" data-export-hide="true">
@@ -590,7 +590,7 @@ export default function BlocoAeronave({
               (cobertura?.resumo.dias_cobertos ?? 0) > 0 &&
               (cobertura?.resumo.dias_cobertos ?? 0) ===
                 (cobertura?.resumo.total_dias ?? diasDoMes.length) && (
-                <span className="rounded-full bg-emerald-50 px-1.5 py-0.5 text-[9px] font-semibold text-emerald-700">
+                <span className="rounded-full bg-emerald-50 px-1.5 py-0.5 text-xs font-semibold text-emerald-700">
                   ✓
                 </span>
               )}
@@ -605,7 +605,7 @@ export default function BlocoAeronave({
                     modoGestaoAeronave: true,
                   })
                 }
-                className="inline-flex items-center gap-0.5 rounded-full bg-red-50 px-1.5 py-0.5 text-[9px] font-semibold text-red-700 hover:bg-red-100"
+                className="inline-flex items-center gap-0.5 rounded-full bg-red-50 px-1.5 py-0.5 text-xs font-semibold text-red-700 hover:bg-red-100"
                 title={`PIC descoberto: ${formatarIntervalos(gapsPic).join(', ')}`}
               >
                 <AlertTriangle className="h-2.5 w-2.5" />
@@ -623,7 +623,7 @@ export default function BlocoAeronave({
                     modoGestaoAeronave: true,
                   })
                 }
-                className="inline-flex items-center gap-0.5 rounded-full bg-amber-50 px-1.5 py-0.5 text-[9px] font-semibold text-amber-700 hover:bg-amber-100"
+                className="inline-flex items-center gap-0.5 rounded-full bg-amber-50 px-1.5 py-0.5 text-xs font-semibold text-amber-700 hover:bg-amber-100"
                 title={`SIC descoberto: ${formatarIntervalos(gapsSic).join(', ')}`}
               >
                 <AlertTriangle className="h-2.5 w-2.5" />
@@ -641,7 +641,7 @@ export default function BlocoAeronave({
                     modoGestaoAeronave: true,
                   })
                 }
-                className="inline-flex items-center gap-0.5 rounded-full bg-primary px-1.5 py-0.5 text-[9px] font-semibold text-white hover:bg-primary/90"
+                className="inline-flex items-center gap-0.5 rounded-full bg-primary px-1.5 py-0.5 text-xs font-semibold text-white hover:bg-primary/90"
               >
                 <Plus className="h-2.5 w-2.5" />
                 Alocar
@@ -658,7 +658,7 @@ export default function BlocoAeronave({
         >
           <thead>
             <tr className="border-b border-slate-200 bg-white">
-              <th
+              <th scope="col"
                 className={cn(
                   'sticky left-0 z-10 border-r border-slate-200 bg-white text-left text-slate-600',
                   CELL.labelWidth,
@@ -671,7 +671,7 @@ export default function BlocoAeronave({
                 const diaIso = format(dia, 'yyyy-MM-dd');
                 const fimDeSemana = [0, 6].includes(getDay(dia));
                 return (
-                  <th
+                  <th scope="col"
                     key={`${prefixo}-${diaIso}`}
                     data-testid={`coluna-dia-${format(dia, 'd')}`}
                     className={cn(
@@ -685,7 +685,7 @@ export default function BlocoAeronave({
                       diaIso === q1Fim && 'border-r-[3px] border-r-slate-300',
                     )}
                   >
-                    <div className="text-[9px] font-medium">{DIAS_SEMANA_CURTO[getDay(dia)]}</div>
+                    <div className="text-xs font-medium">{DIAS_SEMANA_CURTO[getDay(dia)]}</div>
                     <div className="text-xs font-bold">{format(dia, 'd')}</div>
                   </th>
                 );

@@ -168,7 +168,7 @@ export default function FrmsFadigaHistorico() {
               Tripulante
               <div className="relative mt-1">
                 <Search className="pointer-events-none absolute left-2 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                <input
+                <input aria-label="Buscar por nome ou identificador"
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                   placeholder="Buscar por nome ou identificador"
@@ -209,16 +209,16 @@ export default function FrmsFadigaHistorico() {
               <table className="min-w-full text-sm">
                 <thead>
                   <tr className="border-b border-slate-200 text-left text-slate-500">
-                    <th className="px-2 py-2">Data</th>
-                    <th className="px-2 py-2">Tripulante</th>
-                    <th className="px-2 py-2">KSS</th>
-                    <th className="px-2 py-2">Sono</th>
-                    <th className="px-2 py-2">Qualidade do sono</th>
-                    <th className="px-2 py-2" title="Índice composto de triagem: 0–100; valores maiores representam maior risco estimado de fadiga. Não é decisão isolada de aptidão.">Índice composto (0–100)</th>
-                    <th className="px-2 py-2">Nível de alerta informado</th>
-                    <th className="px-2 py-2">Status</th>
-                    <th className="px-2 py-2">Fonte do dado</th>
-                    <th className="px-2 py-2">FRAT</th>
+                    <th scope="col" className="px-2 py-2">Data</th>
+                    <th scope="col" className="px-2 py-2">Tripulante</th>
+                    <th scope="col" className="px-2 py-2">KSS</th>
+                    <th scope="col" className="px-2 py-2">Sono</th>
+                    <th scope="col" className="px-2 py-2">Qualidade do sono</th>
+                    <th scope="col" className="px-2 py-2" title="Índice composto de triagem: 0–100; valores maiores representam maior risco estimado de fadiga. Não é decisão isolada de aptidão.">Índice composto (0–100)</th>
+                    <th scope="col" className="px-2 py-2">Nível de alerta informado</th>
+                    <th scope="col" className="px-2 py-2">Status</th>
+                    <th scope="col" className="px-2 py-2">Fonte do dado</th>
+                    <th scope="col" className="px-2 py-2">FRAT</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -253,7 +253,7 @@ export default function FrmsFadigaHistorico() {
                       <td className="px-2 py-2">
                         <span
                           title={sourceMeta.help}
-                          className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold ${sourceMeta.tone}`}
+                          className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-semibold ${sourceMeta.tone}`}
                         >
                           {sourceMeta.label}
                         </span>

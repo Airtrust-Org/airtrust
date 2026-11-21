@@ -18,6 +18,7 @@ import {
   useMatriculaDetalhe,
   useSalvarProgresso,
 } from '@/react-app/hooks/useLms';
+import { confirmDialog } from '@/react-app/utils/confirmDialog';
 
 const CONCLUDE_DELAY_SECONDS = 30;
 
@@ -165,10 +166,10 @@ export default function LmsPlayerPdf() {
     });
   }, [completed, alreadyConcluded, finalizarMatricula, id]);
 
-  const handleLeave = useCallback(() => {
+  const handleLeave = useCallback(async () => {
     const shouldConfirm = !completed && !alreadyConcluded;
     if (shouldConfirm) {
-      const confirmed = window.confirm('O curso ainda não foi concluído. Deseja sair mesmo assim?');
+      const confirmed = (await confirmDialog('O curso ainda não foi concluído. Deseja sair mesmo assim?'));
       if (!confirmed) return;
     }
     navigate('/lms/cursos');
@@ -229,7 +230,7 @@ export default function LmsPlayerPdf() {
               </span>
             </div>
             {matricula.qualificacao_tipo_nome ? (
-              <span className="inline-flex max-w-full items-center rounded-full border border-amber-400/20 bg-amber-400/10 px-2.5 py-1 text-[11px] font-medium leading-5 text-amber-200">
+              <span className="inline-flex max-w-full items-center rounded-full border border-amber-400/20 bg-amber-400/10 px-2.5 py-1 text-xs font-medium leading-5 text-amber-200">
                 Qualificação {matricula.qualificacao_tipo_nome}
                 {matricula.qualificacao_validade
                   ? ` · ${matricula.qualificacao_validade} meses`
@@ -239,7 +240,7 @@ export default function LmsPlayerPdf() {
           </div>
 
           <div className="flex flex-col items-stretch gap-2 md:min-w-[280px] md:items-end">
-            <span className="rounded-full border border-white/10 bg-white/5 px-2.5 py-1 text-[11px] font-medium text-white/70">
+            <span className="rounded-full border border-white/10 bg-white/5 px-2.5 py-1 text-xs font-medium text-white/70">
               {alreadyConcluded ? 'Status: concluído' : 'Status: em consumo'}
             </span>
             {!done && (

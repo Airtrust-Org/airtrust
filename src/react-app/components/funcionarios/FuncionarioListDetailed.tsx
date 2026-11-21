@@ -89,7 +89,7 @@ const FuncionarioListDetailed: React.FC<FuncionarioListDetailedProps> = ({
         {/* Filtros */}
         <div className="mt-4 flex space-x-4">
           <div className="flex-1">
-            <input
+            <input aria-label="Buscar por nome, matrícula ou email..."
               type="text"
               placeholder="Buscar por nome, matrícula ou email..."
               value={searchTerm}
@@ -114,22 +114,22 @@ const FuncionarioListDetailed: React.FC<FuncionarioListDetailedProps> = ({
         <table className="w-full">
           <thead className="bg-gray-50">
             <tr>
-              <th className="py-3 px-6 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              <th scope="col" className="py-3 px-6 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                 Matrícula
               </th>
-              <th className="py-3 px-6 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              <th scope="col" className="py-3 px-6 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                 Nome
               </th>
-              <th className="py-3 px-6 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              <th scope="col" className="py-3 px-6 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                 Função
               </th>
-              <th className="py-3 px-6 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              <th scope="col" className="py-3 px-6 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                 Equipamentos
               </th>
-              <th className="py-3 px-6 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              <th scope="col" className="py-3 px-6 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                 Status
               </th>
-              <th className="py-3 px-6 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
+              <th scope="col" className="py-3 px-6 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
                 Ações
               </th>
             </tr>

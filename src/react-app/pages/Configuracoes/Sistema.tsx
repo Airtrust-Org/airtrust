@@ -264,7 +264,7 @@ export default function SistemaConfiguracoes() {
             <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
               {t('settings.system.appName.label')}
             </label>
-            <input
+            <input aria-label="AirTrust"
               type="text"
               value={form.appName}
               maxLength={60}
@@ -319,11 +319,11 @@ export default function SistemaConfiguracoes() {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1 flex items-center gap-1">
+            <label htmlFor="sistema-fuso-horario-operacional" className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1 flex items-center gap-1">
               <Globe className="w-3.5 h-3.5" />
               Fuso horário operacional
             </label>
-            <select
+            <select id="sistema-fuso-horario-operacional" aria-label="Fuso horário operacional"
               value={form.timezone}
               onChange={(e) => setForm((prev) => ({ ...prev, timezone: e.target.value }))}
               className="w-full px-3 py-2 border border-slate-300 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-950 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary/30"

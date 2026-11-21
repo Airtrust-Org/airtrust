@@ -424,7 +424,7 @@ const AvaliacaoManobras: React.FC<AvaliacaoManobrasProps> = ({ fichaUuid, onClos
                     </div>
                   ) : (
                     <div className="text-sm text-gray-500 italic">
-                      📝 Primeira avaliação desta manobra
+                      <span aria-hidden="true">📝</span> Primeira avaliação desta manobra
                     </div>
                   )}
                 </div>
@@ -437,7 +437,7 @@ const AvaliacaoManobras: React.FC<AvaliacaoManobrasProps> = ({ fichaUuid, onClos
                     <label className="block text-sm font-medium text-gray-700 mb-2">
                       Nova Nota:
                     </label>
-                    <select
+                    <select aria-label="Nova Nota"
                       value={notas[manobra.manobra_id] || ''}
                       onChange={(e) => handleNotaChange(manobra.manobra_id, e.target.value)}
                       className="w-full border border-gray-300 rounded-lg px-3 py-2 text-lg font-semibold"
@@ -458,7 +458,7 @@ const AvaliacaoManobras: React.FC<AvaliacaoManobrasProps> = ({ fichaUuid, onClos
                     <label className="block text-sm font-medium text-gray-700 mb-2">
                       Observações:
                     </label>
-                    <textarea
+                    <textarea aria-label="Observações"
                       value={observacoes[manobra.manobra_id] || ''}
                       onChange={(e) => handleObservacaoChange(manobra.manobra_id, e.target.value)}
                       className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"

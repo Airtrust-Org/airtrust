@@ -116,7 +116,7 @@ const Treinamentos = () => {
           <div className="flex gap-3 flex-1 max-w-2xl">
             <div className="relative flex-1">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
-              <input
+              <input aria-label="Buscar treinamentos..."
                 type="text"
                 placeholder="Buscar treinamentos..."
                 value={filtro}
@@ -124,7 +124,7 @@ const Treinamentos = () => {
                 className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary"
               />
             </div>
-            <input
+            <input aria-label="Filtrar por funcionário..."
               type="text"
               placeholder="Filtrar por funcionário..."
               value={filtroFuncionario}
@@ -137,7 +137,7 @@ const Treinamentos = () => {
               onClick={exportarParaExcel}
               className="flex items-center gap-2  py-2 bg-green-600 text-white rounded-lg hover:bg-green-700"
             >
-              📊 Exportar Excel
+              <span aria-hidden="true">📊</span> Exportar Excel
             </button>
             <button
               onClick={handleNovo}
@@ -154,22 +154,22 @@ const Treinamentos = () => {
         <table className="min-w-full divide-y divide-gray-200">
           <thead className="bg-gray-50">
             <tr>
-              <th className=" py-3 text-left text-xs font-medium text-gray-500 uppercase">
+              <th scope="col" className=" py-3 text-left text-xs font-medium text-gray-500 uppercase">
                 Funcionário
               </th>
-              <th className=" py-3 text-left text-xs font-medium text-gray-500 uppercase">
+              <th scope="col" className=" py-3 text-left text-xs font-medium text-gray-500 uppercase">
                 Categoria
               </th>
-              <th className=" py-3 text-left text-xs font-medium text-gray-500 uppercase">
+              <th scope="col" className=" py-3 text-left text-xs font-medium text-gray-500 uppercase">
                 Número
               </th>
-              <th className=" py-3 text-left text-xs font-medium text-gray-500 uppercase">
+              <th scope="col" className=" py-3 text-left text-xs font-medium text-gray-500 uppercase">
                 Validade
               </th>
-              <th className=" py-3 text-left text-xs font-medium text-gray-500 uppercase">
+              <th scope="col" className=" py-3 text-left text-xs font-medium text-gray-500 uppercase">
                 Status
               </th>
-              <th className=" py-3 text-left text-xs font-medium text-gray-500 uppercase">Ações</th>
+              <th scope="col" className=" py-3 text-left text-xs font-medium text-gray-500 uppercase">Ações</th>
             </tr>
           </thead>
           <tbody className="bg-white divide-y divide-gray-200">

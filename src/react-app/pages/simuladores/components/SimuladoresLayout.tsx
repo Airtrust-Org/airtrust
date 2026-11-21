@@ -127,7 +127,7 @@ export const SimuladoresCard = ({
   };
 
   return (
-    <div
+    <div role={onClick ? 'button' : undefined} tabIndex={onClick ? 0 : undefined} onKeyDown={onClick ? (e) => { if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); e.currentTarget.click(); } } : undefined}
       className={`
         bg-white dark:bg-slate-900
         rounded-lg 

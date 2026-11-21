@@ -4,6 +4,7 @@ import { Card, CardHeader, CardTitle, CardContent } from '@/react-app/components
 import Button from '@/react-app/components/Button';
 import { AgendamentoForm } from '@/react-app/components/forms/AgendamentoForm';
 import { toast } from 'sonner';
+import { ModalOverlay } from '@/react-app/components/modals/ModalOverlay';
 
 interface AgendamentoModalProps {
   open: boolean;
@@ -34,7 +35,7 @@ export function AgendamentoModal({ open, onClose, initialData, onSave }: Agendam
   };
 
   return (
-    <div className="fixed inset-0 z-modal flex items-center justify-center bg-black/50">
+    <ModalOverlay className="fixed inset-0 z-modal flex items-center justify-center bg-black/50">
       <Card className="w-full max-w-2xl max-h-[90vh] overflow-y-auto">
         <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle>{initialData ? 'Editar Agendamento' : 'Novo Agendamento'}</CardTitle>
@@ -47,6 +48,6 @@ export function AgendamentoModal({ open, onClose, initialData, onSave }: Agendam
           <AgendamentoForm onSubmit={handleSubmit} initialData={initialData} isLoading={loading} />
         </CardContent>
       </Card>
-    </div>
+    </ModalOverlay>
   );
 }

@@ -409,7 +409,7 @@ const BackupRestorePage = () => {
                 Gerando...
               </>
             ) : (
-              <>📦 Gerar Backup Completo</>
+              <><span aria-hidden="true">📦</span> Gerar Backup Completo</>
             )}
           </Button>
 
@@ -512,7 +512,7 @@ const BackupRestorePage = () => {
                     Importando...
                   </>
                 ) : (
-                  <>✅ Importar Dados</>
+                  <><span aria-hidden="true">✅</span> Importar Dados</>
                 )}
               </Button>
 
@@ -543,12 +543,12 @@ const BackupRestorePage = () => {
           <table className="w-full">
             <thead>
               <tr className="border-b border-neutral-200">
-                <th className="text-left py-3  font-semibold text-neutral-700">Data/Hora</th>
-                <th className="text-left py-3  font-semibold text-neutral-700">Operação</th>
-                <th className="text-left py-3  font-semibold text-neutral-700">Tamanho</th>
-                <th className="text-left py-3  font-semibold text-neutral-700">Status</th>
-                <th className="text-left py-3  font-semibold text-neutral-700">Usuário</th>
-                <th className="text-left py-3  font-semibold text-neutral-700">Ações</th>
+                <th scope="col" className="text-left py-3  font-semibold text-neutral-700">Data/Hora</th>
+                <th scope="col" className="text-left py-3  font-semibold text-neutral-700">Operação</th>
+                <th scope="col" className="text-left py-3  font-semibold text-neutral-700">Tamanho</th>
+                <th scope="col" className="text-left py-3  font-semibold text-neutral-700">Status</th>
+                <th scope="col" className="text-left py-3  font-semibold text-neutral-700">Usuário</th>
+                <th scope="col" className="text-left py-3  font-semibold text-neutral-700">Ações</th>
               </tr>
             </thead>
             <tbody>
@@ -570,7 +570,7 @@ const BackupRestorePage = () => {
                   </td>
                   <td className="py-3  text-neutral-600">{item.usuario}</td>
                   <td className="py-3 ">
-                    <button className="text-neutral-400 hover:text-red-600 p-1">
+                    <button aria-label="Excluir" className="text-neutral-400 hover:text-red-600 p-1">
                       <Trash2 className="w-4 h-4" />
                     </button>
                   </td>

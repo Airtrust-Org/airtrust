@@ -70,7 +70,7 @@ function GroupHeader({
         <span>{label}</span>
         <span className="rounded-full bg-current/10 px-2 py-0.5 text-xs">{count}</span>
       </div>
-      <p className="mt-0.5 text-[11px] font-medium normal-case tracking-normal opacity-80">
+      <p className="mt-0.5 text-xs font-medium normal-case tracking-normal opacity-80">
         {description}
       </p>
     </div>

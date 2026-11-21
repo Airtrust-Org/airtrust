@@ -11,6 +11,7 @@ import { ArrowLeft, Plus, Trash2, Inbox } from 'lucide-react';
 import { RowActionsMenu } from '@/react-app/components/UI/RowActionsMenu';
 import { confirmDialog } from '@/react-app/utils/confirmDialog';
 import { getColorByIndex, getAllColors } from '@/react-app/utils/colorPalette';
+import { ModalOverlay } from '@/react-app/components/modals/ModalOverlay';
 
 interface TipoSessao {
   id: number;
@@ -188,19 +189,19 @@ export default function CrudTiposSessao({ embedded = false, onBack }: Props = {}
 
       {/* Tabela */}
       <div className="bg-white dark:bg-slate-900 rounded-lg border border-gray-200 dark:border-slate-700 overflow-hidden">
-        <table className="w-full">
+        <div className="overflow-x-auto"><table className="w-full">
           <thead className="bg-gray-50 dark:bg-slate-800 border-b border-gray-200 dark:border-slate-700">
             <tr>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-slate-400 uppercase">
+              <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-slate-400 uppercase">
                 Código
               </th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-slate-400 uppercase">
+              <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-slate-400 uppercase">
                 Nome
               </th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-slate-400 uppercase">
+              <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-slate-400 uppercase">
                 Descrição
               </th>
-              <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 dark:text-slate-400 uppercase">
+              <th scope="col" className="px-4 py-3 text-center text-xs font-medium text-gray-500 dark:text-slate-400 uppercase">
                 Ações
               </th>
             </tr>
@@ -252,7 +253,7 @@ export default function CrudTiposSessao({ embedded = false, onBack }: Props = {}
               );
             })}
           </tbody>
-        </table>
+        </table></div>
       </div>
 
       {tipos.length === 0 && (
@@ -267,7 +268,7 @@ export default function CrudTiposSessao({ embedded = false, onBack }: Props = {}
 
       {/* Modal */}
       {showModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 animate-fade-in" onClick={fecharModal}>
+        <ModalOverlay className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 animate-fade-in" onClick={fecharModal}>
           <div className="bg-white dark:bg-slate-900 rounded-lg max-w-md w-full animate-scale-in" onClick={(e) => e.stopPropagation()}>
             <div className="p-6 border-b border-gray-200 dark:border-slate-700">
               <h3 className="text-lg font-semibold text-gray-900 dark:text-slate-100">
@@ -276,8 +277,8 @@ export default function CrudTiposSessao({ embedded = false, onBack }: Props = {}
             </div>
             <div className="p-6 space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">Código <span className="text-red-500">*</span></label>
-                <Input
+                <label htmlFor="index-codigo" className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">Código <span className="text-red-500">*</span></label>
+                <Input id="index-codigo" aria-label="Código"
                   value={formData.codigo}
                   onChange={(e) =>
                     setFormData({ ...formData, codigo: e.target.value.toUpperCase() })
@@ -286,16 +287,16 @@ export default function CrudTiposSessao({ embedded = false, onBack }: Props = {}
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">Nome <span className="text-red-500">*</span></label>
-                <Input
+                <label htmlFor="index-nome" className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">Nome <span className="text-red-500">*</span></label>
+                <Input id="index-nome" aria-label="Nome"
                   value={formData.nome}
                   onChange={(e) => setFormData({ ...formData, nome: e.target.value })}
                   placeholder="Ex: Treinamento Inicial"
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">Descrição</label>
-                <textarea
+                <label htmlFor="index-descricao" className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">Descrição</label>
+                <textarea id="index-descricao" aria-label="Descrição"
                   className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md bg-white dark:bg-slate-800 text-gray-900 dark:text-slate-100"
                   value={formData.descricao}
                   onChange={(e) => setFormData({ ...formData, descricao: e.target.value })}
@@ -304,9 +305,9 @@ export default function CrudTiposSessao({ embedded = false, onBack }: Props = {}
               </div>
               <div className="flex items-center gap-4">
                 <div className="flex-1">
-                  <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">Cor da Tag</label>
+                  <label htmlFor="index-cor-da-tag" className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">Cor da Tag</label>
                   <div className="flex items-center gap-2">
-                    <input
+                    <input id="index-cor-da-tag" aria-label="Cor da Tag"
                       type="color"
                       value={formData.cor}
                       onChange={(e) => setFormData({ ...formData, cor: e.target.value })}
@@ -333,7 +334,7 @@ export default function CrudTiposSessao({ embedded = false, onBack }: Props = {}
               </Button>
             </div>
           </div>
-        </div>
+        </ModalOverlay>
       )}
     </div>
   );

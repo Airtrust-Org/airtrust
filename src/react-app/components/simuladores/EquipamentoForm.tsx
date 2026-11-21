@@ -146,10 +146,10 @@ const EquipamentoForm: React.FC<EquipamentoFormProps> = ({ equipamento, onSalvar
           {/* Informações Básicas */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
+              <label htmlFor="equipamentoform-nome-do-simulador" className="block text-sm font-medium text-gray-700 mb-2">
                 Nome do Simulador *
               </label>
-              <input
+              <input id="equipamentoform-nome-do-simulador" aria-label="Nome do Simulador"
                 type="text"
                 value={dados.nome}
                 onChange={(e) => handleInputChange('nome', e.target.value)}
@@ -167,10 +167,10 @@ const EquipamentoForm: React.FC<EquipamentoFormProps> = ({ equipamento, onSalvar
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
+              <label htmlFor="equipamentoform-codigo-de-identificacao" className="block text-sm font-medium text-gray-700 mb-2">
                 Código de Identificação *
               </label>
-              <input
+              <input id="equipamentoform-codigo-de-identificacao" aria-label="Código de Identificação"
                 type="text"
                 value={dados.codigo_identificacao}
                 onChange={(e) => handleInputChange('codigo_identificacao', e.target.value)}
@@ -188,10 +188,10 @@ const EquipamentoForm: React.FC<EquipamentoFormProps> = ({ equipamento, onSalvar
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
+              <label htmlFor="equipamentoform-tipo-de-simulador" className="block text-sm font-medium text-gray-700 mb-2">
                 Tipo de Simulador *
               </label>
-              <select
+              <select id="equipamentoform-tipo-de-simulador" aria-label="Tipo de Simulador"
                 value={dados.tipo_simulador}
                 onChange={(e) => handleInputChange('tipo_simulador', e.target.value)}
                 className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary focus:border-primary ${
@@ -213,10 +213,10 @@ const EquipamentoForm: React.FC<EquipamentoFormProps> = ({ equipamento, onSalvar
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
+              <label htmlFor="equipamentoform-equipamento-base" className="block text-sm font-medium text-gray-700 mb-2">
                 Equipamento Base *
               </label>
-              <input
+              <input id="equipamentoform-equipamento-base" aria-label="Equipamento Base"
                 type="text"
                 value={dados.aeronave_base}
                 onChange={(e) => handleInputChange('aeronave_base', e.target.value)}
@@ -234,8 +234,8 @@ const EquipamentoForm: React.FC<EquipamentoFormProps> = ({ equipamento, onSalvar
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Empresa/Local</label>
-              <input
+              <label htmlFor="equipamentoform-empresa-local" className="block text-sm font-medium text-gray-700 mb-2">Empresa/Local</label>
+              <input id="equipamentoform-empresa-local" aria-label="Empresa/Local"
                 type="text"
                 value={dados.empresa_local}
                 onChange={(e) => handleInputChange('empresa_local', e.target.value)}
@@ -245,8 +245,8 @@ const EquipamentoForm: React.FC<EquipamentoFormProps> = ({ equipamento, onSalvar
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Fabricante</label>
-              <input
+              <label htmlFor="equipamentoform-fabricante" className="block text-sm font-medium text-gray-700 mb-2">Fabricante</label>
+              <input id="equipamentoform-fabricante" aria-label="Fabricante"
                 type="text"
                 value={dados.fabricante}
                 onChange={(e) => handleInputChange('fabricante', e.target.value)}
@@ -256,8 +256,8 @@ const EquipamentoForm: React.FC<EquipamentoFormProps> = ({ equipamento, onSalvar
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Modelo</label>
-              <input
+              <label htmlFor="equipamentoform-modelo" className="block text-sm font-medium text-gray-700 mb-2">Modelo</label>
+              <input id="equipamentoform-modelo" aria-label="Modelo"
                 type="text"
                 value={dados.modelo}
                 onChange={(e) => handleInputChange('modelo', e.target.value)}
@@ -267,8 +267,8 @@ const EquipamentoForm: React.FC<EquipamentoFormProps> = ({ equipamento, onSalvar
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Status</label>
-              <select
+              <label htmlFor="equipamentoform-status" className="block text-sm font-medium text-gray-700 mb-2">Status</label>
+              <select id="equipamentoform-status" aria-label="Status"
                 value={dados.status}
                 onChange={(e) => handleInputChange('status', e.target.value)}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-primary"
@@ -287,10 +287,10 @@ const EquipamentoForm: React.FC<EquipamentoFormProps> = ({ equipamento, onSalvar
             <h3 className="text-lg font-medium text-gray-900 mb-4">Configuração Técnica</h3>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                <label htmlFor="equipamentoform-sistema-visual" className="block text-sm font-medium text-gray-700 mb-2">
                   Sistema Visual
                 </label>
-                <input
+                <input id="equipamentoform-sistema-visual" aria-label="Sistema Visual"
                   type="text"
                   value={dados.configuracao_tecnica.visual_system}
                   onChange={(e) => handleConfigChange('visual_system', e.target.value)}
@@ -300,10 +300,10 @@ const EquipamentoForm: React.FC<EquipamentoFormProps> = ({ equipamento, onSalvar
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                <label htmlFor="equipamentoform-sistema-de-movimento" className="block text-sm font-medium text-gray-700 mb-2">
                   Sistema de Movimento
                 </label>
-                <input
+                <input id="equipamentoform-sistema-de-movimento" aria-label="Sistema de Movimento"
                   type="text"
                   value={dados.configuracao_tecnica.motion_system}
                   onChange={(e) => handleConfigChange('motion_system', e.target.value)}
@@ -313,10 +313,10 @@ const EquipamentoForm: React.FC<EquipamentoFormProps> = ({ equipamento, onSalvar
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                <label htmlFor="equipamentoform-sistema-de-som" className="block text-sm font-medium text-gray-700 mb-2">
                   Sistema de Som
                 </label>
-                <input
+                <input id="equipamentoform-sistema-de-som" aria-label="Sistema de Som"
                   type="text"
                   value={dados.configuracao_tecnica.sound_system}
                   onChange={(e) => handleConfigChange('sound_system', e.target.value)}

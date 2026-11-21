@@ -625,7 +625,7 @@ export function ListaFuncionarios({
                     const direction = isActive ? sortConfig.direction : null;
 
                     return (
-                      <th
+                      <th scope="col"
                         key={col.id}
                         onClick={() => isSortable && handleSort(col.id as SortableColumn)}
                         className={`whitespace-nowrap px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-700 dark:text-slate-300 ${
@@ -651,7 +651,7 @@ export function ListaFuncionarios({
                       </th>
                     );
                   })}
-                  <th className="w-32 whitespace-nowrap px-2 py-3 text-center text-xs font-semibold uppercase tracking-wider text-slate-700 dark:text-slate-300">
+                  <th scope="col" className="w-32 whitespace-nowrap px-2 py-3 text-center text-xs font-semibold uppercase tracking-wider text-slate-700 dark:text-slate-300">
                     Ações
                   </th>
                 </tr>

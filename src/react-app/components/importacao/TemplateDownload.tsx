@@ -120,7 +120,7 @@ export function TemplateDownload({ entidade, showExcel = true }: TemplateDownloa
 
           {showExcel && (
             <p className="text-xs text-blue-600 mt-2">
-              💡 Dica: Use Excel se preferir trabalhar com planilhas formatadas
+              <span aria-hidden="true">💡</span> Dica: Use Excel se preferir trabalhar com planilhas formatadas
             </p>
           )}
         </div>

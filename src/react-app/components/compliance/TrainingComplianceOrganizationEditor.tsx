@@ -356,7 +356,7 @@ export function TrainingComplianceOrganizationEditor() {
                         <option value="RECOMENDADA">Recomendado</option>
                         <option value="NAO_APLICA">Não se aplica</option>
                       </select>
-                      <span className="text-[11px] text-slate-400">salva ao alterar</span>
+                      <span className="text-xs text-slate-400">salva ao alterar</span>
                     </div>
                   </td>
                 </tr>

@@ -108,7 +108,7 @@ function escapeHtml(value: string): string {
 }
 
 function buildHtmlEmail(text: string): string {
-  return `<html><body style="font-family:Arial,sans-serif;font-size:14px;color:#1f2937;line-height:1.55;max-width:640px;margin:0 auto;padding:20px">${escapeHtml(
+  return `<html lang="pt-BR"><body style="font-family:Arial,sans-serif;font-size:14px;color:#1f2937;line-height:1.55;max-width:640px;margin:0 auto;padding:20px">${escapeHtml(
     text,
   ).replace(/\n/g, '<br/>')}</body></html>`;
 }

@@ -24,6 +24,8 @@ import { fetchPptxViewerSession, type PptxViewerSession } from './pptxViewer';
 import { sanitizePptxSlideHtml } from './pptxSanitization';
 import { observePptxSlideLayout } from './pptxViewport';
 import { PptxPdfCanvas, openPptxPdf, type PptxPdfDocument } from './PptxPdfCanvas';
+import { confirmDialog } from '@/react-app/utils/confirmDialog';
+import { ModalOverlay } from '@/react-app/components/modals/ModalOverlay';
 
 type PptxEvidence = {
   total_slides: number;
@@ -403,9 +405,7 @@ export default function LmsPlayerPptx() {
   const handleLeave = useCallback(async () => {
     const shouldConfirm = !done;
     if (shouldConfirm) {
-      const confirmed = window.confirm(
-        'A apresentação ainda não foi concluída. Deseja sair mesmo assim?',
-      );
+      const confirmed = (await confirmDialog('A apresentação ainda não foi concluída. Deseja sair mesmo assim?'));
       if (!confirmed) return;
     }
     await flushLatestProgress();
@@ -465,7 +465,7 @@ export default function LmsPlayerPptx() {
               </span>
             </div>
             {matricula.qualificacao_tipo_nome ? (
-              <span className="inline-flex max-w-full items-center rounded-full border border-amber-400/20 bg-amber-400/10 px-2.5 py-1 text-[11px] font-medium leading-5 text-amber-200">
+              <span className="inline-flex max-w-full items-center rounded-full border border-amber-400/20 bg-amber-400/10 px-2.5 py-1 text-xs font-medium leading-5 text-amber-200">
                 Qualificação {matricula.qualificacao_tipo_nome}
                 {matricula.qualificacao_validade
                   ? ` · ${matricula.qualificacao_validade} meses`
@@ -475,7 +475,7 @@ export default function LmsPlayerPptx() {
           </div>
 
           <div className="flex flex-col items-stretch gap-2 md:min-w-[280px] md:items-end">
-            <span className="rounded-full border border-white/10 bg-white/5 px-2.5 py-1 text-[11px] font-medium text-white/70">
+            <span className="rounded-full border border-white/10 bg-white/5 px-2.5 py-1 text-xs font-medium text-white/70">
               {alreadyConcluded ? 'Status: concluído' : 'Status: em consumo'}
             </span>
 
@@ -572,7 +572,7 @@ export default function LmsPlayerPptx() {
 
         {/* Office preview overlay (optional) */}
         {previewOpen && viewerSession && (
-          <div className="fixed inset-0 z-50 flex flex-col bg-slate-950">
+          <ModalOverlay className="fixed inset-0 z-50 flex flex-col bg-slate-950">
             <div className="flex items-center justify-between border-b border-white/10 bg-slate-900 px-4 py-3">
               <span className="text-sm text-white/80">
                 Visualização original (PowerPoint Online)
@@ -596,7 +596,7 @@ export default function LmsPlayerPptx() {
               allow="fullscreen"
               onLoad={() => setIframeLoaded(true)}
             />
-          </div>
+          </ModalOverlay>
         )}
 
         {!loadingPptx && !loadError && slides && slideHtml && (

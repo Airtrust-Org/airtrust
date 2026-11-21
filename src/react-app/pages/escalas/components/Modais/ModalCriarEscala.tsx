@@ -79,8 +79,8 @@ export default function ModalCriarEscala({ onClose, onSuccess }: Props) {
         {/* Mês + Ano */}
         <div className="grid grid-cols-2 gap-4">
           <div>
-            <label className="block text-xs font-semibold text-slate-700 mb-1.5">Mês *</label>
-            <select
+            <label htmlFor="modalcriarescala-mes" className="block text-xs font-semibold text-slate-700 mb-1.5">Mês *</label>
+            <select id="modalcriarescala-mes" aria-label="Mês"
               value={mes}
               onChange={(e) => setMes(Number(e.target.value))}
               className={INPUT_CLASS}
@@ -93,8 +93,8 @@ export default function ModalCriarEscala({ onClose, onSuccess }: Props) {
             </select>
           </div>
           <div>
-            <label className="block text-xs font-semibold text-slate-700 mb-1.5">Ano *</label>
-            <select
+            <label htmlFor="modalcriarescala-ano" className="block text-xs font-semibold text-slate-700 mb-1.5">Ano *</label>
+            <select id="modalcriarescala-ano" aria-label="Ano"
               value={ano}
               onChange={(e) => setAno(Number(e.target.value))}
               className={INPUT_CLASS}
@@ -113,10 +113,10 @@ export default function ModalCriarEscala({ onClose, onSuccess }: Props) {
 
         {/* Título */}
         <div>
-          <label className="block text-xs font-semibold text-slate-700 mb-1.5">
+          <label htmlFor="modalcriarescala-titulo-opcional" className="block text-xs font-semibold text-slate-700 mb-1.5">
             Título <span className="text-slate-400 font-normal">(opcional)</span>
           </label>
-          <input
+          <input id="modalcriarescala-titulo-opcional" aria-label="Título (opcional)"
             type="text"
             value={titulo}
             onChange={(e) => setTitulo(e.target.value)}
@@ -127,10 +127,10 @@ export default function ModalCriarEscala({ onClose, onSuccess }: Props) {
 
         {/* Observações */}
         <div>
-          <label className="block text-xs font-semibold text-slate-700 mb-1.5">
+          <label htmlFor="modalcriarescala-observacoes-opcional" className="block text-xs font-semibold text-slate-700 mb-1.5">
             Observações <span className="text-slate-400 font-normal">(opcional)</span>
           </label>
-          <textarea
+          <textarea id="modalcriarescala-observacoes-opcional" aria-label="Observações (opcional)"
             value={observacoes}
             onChange={(e) => setObservacoes(e.target.value)}
             rows={3}

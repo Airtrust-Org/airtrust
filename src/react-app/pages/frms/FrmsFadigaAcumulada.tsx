@@ -272,7 +272,7 @@ export default function FrmsFadigaAcumulada() {
         {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div className="flex items-center gap-3">
-            <button
+            <button aria-label="Voltar"
               onClick={() => navigate('/frms')}
               className="p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition"
             >
@@ -392,13 +392,13 @@ export default function FrmsFadigaAcumulada() {
                           }
                         />
                         {(t.trabalho_7d_max_horas != null || t.trabalho_14d_max_horas != null) && (
-                          <div className="mt-1 flex flex-wrap gap-2 text-[11px] text-slate-500 dark:text-slate-400">
+                          <div className="mt-1 flex flex-wrap gap-2 text-xs text-slate-500 dark:text-slate-400">
                             {t.trabalho_7d_max_horas != null && <span>RBAC B/C 7d: {t.trabalho_7d_max_horas}h / {limites?.trabalho_7d_horas ?? '—'}h</span>}
                             {t.trabalho_14d_max_horas != null && <span>RBAC B/C 14d: {t.trabalho_14d_max_horas}h / {limites?.trabalho_14d_horas ?? '—'}h</span>}
                           </div>
                         )}
                         {t.trabalho_status === 'UNKNOWN' && (
-                          <div className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">
+                          <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">
                             Acumulado mínimo conhecido: {t.trabalho_horas}h. Há atividade sem evidência suficiente de realização/intervalo.
                           </div>
                         )}
@@ -509,15 +509,15 @@ export default function FrmsFadigaAcumulada() {
                     <table className="w-full min-w-[920px] text-xs">
                       <thead className="bg-slate-50 text-slate-500 dark:bg-slate-800 dark:text-slate-300">
                         <tr>
-                          <th className="px-3 py-2 text-left">Dia</th>
-                          <th className="px-3 py-2 text-left">Data</th>
-                          <th className="px-3 py-2 text-right">Jornada diária</th>
-                          <th className="px-3 py-2 text-right">FAT.JORNADA% dia</th>
-                          <th className="px-3 py-2 text-right">HV diária</th>
-                          <th className="px-3 py-2 text-right">FAT.HV% dia</th>
-                          <th className="px-3 py-2 text-right">Jornada registrada mês</th>
-                          <th className="px-3 py-2 text-right">Uso mês HV</th>
-                          <th className="px-3 py-2 text-center">Auditoria</th>
+                          <th scope="col" className="px-3 py-2 text-left">Dia</th>
+                          <th scope="col" className="px-3 py-2 text-left">Data</th>
+                          <th scope="col" className="px-3 py-2 text-right">Jornada diária</th>
+                          <th scope="col" className="px-3 py-2 text-right">FAT.JORNADA% dia</th>
+                          <th scope="col" className="px-3 py-2 text-right">HV diária</th>
+                          <th scope="col" className="px-3 py-2 text-right">FAT.HV% dia</th>
+                          <th scope="col" className="px-3 py-2 text-right">Jornada registrada mês</th>
+                          <th scope="col" className="px-3 py-2 text-right">Uso mês HV</th>
+                          <th scope="col" className="px-3 py-2 text-center">Auditoria</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -547,7 +547,7 @@ export default function FrmsFadigaAcumulada() {
                               <span className="font-mono text-slate-600 dark:text-slate-300">
                                 {e.jornada_acumulada_horas}h
                               </span>
-                              <span className="ml-1 text-[10px] text-slate-400">diagnóstico</span>
+                              <span className="ml-1 text-xs text-slate-400">diagnóstico</span>
                             </td>
                             <td className="px-3 py-1.5 text-right">
                               <span className={`font-semibold ${alertText(e.alerta_voo_mes)}`}>
@@ -566,12 +566,12 @@ export default function FrmsFadigaAcumulada() {
                                   ]
                                     .filter(Boolean)
                                     .join(' | ')}
-                                  className="inline-flex max-w-[160px] items-center justify-center rounded-full border border-red-200 bg-red-50 px-2 py-0.5 text-[10px] font-semibold uppercase text-red-700 dark:border-red-800 dark:bg-red-950/30 dark:text-red-300"
+                                  className="inline-flex max-w-[160px] items-center justify-center rounded-full border border-red-200 bg-red-50 px-2 py-0.5 text-xs font-semibold uppercase text-red-700 dark:border-red-800 dark:bg-red-950/30 dark:text-red-300"
                                 >
                                   {integridadeLabel(e.integridade_codigo)}
                                 </span>
                               ) : (
-                                <span className="inline-flex rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold uppercase text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-300">
+                                <span className="inline-flex rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-xs font-semibold uppercase text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-300">
                                   OK
                                 </span>
                               )}

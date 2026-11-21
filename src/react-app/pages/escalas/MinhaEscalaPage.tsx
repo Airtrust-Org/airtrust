@@ -254,7 +254,7 @@ export default function MinhaEscalaPage() {
 
         {/* Month Navigation */}
         <div className="flex items-center justify-between bg-white rounded-xl shadow-sm border border-gray-100 p-4">
-          <button
+          <button aria-label="Mês anterior"
             onClick={prevMonth}
             className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
           >
@@ -282,7 +282,7 @@ export default function MinhaEscalaPage() {
               </span>
             )}
           </div>
-          <button
+          <button aria-label="Próximo mês"
             onClick={nextMonth}
             className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
           >
@@ -428,7 +428,7 @@ export default function MinhaEscalaPage() {
                         return (
                           <div
                             key={evt.id}
-                            className={`${cfg.color} text-white text-[10px] px-1 py-0.5 rounded truncate leading-tight`}
+                            className={`${cfg.color} text-white text-xs px-1 py-0.5 rounded truncate leading-tight`}
                             title={`${cfg.label}${evt.local ? ' — ' + evt.local : ''}`}
                           >
                             {cfg.label}
@@ -436,7 +436,7 @@ export default function MinhaEscalaPage() {
                         );
                       })}
                       {dayEvents.length > 3 && (
-                        <div className="text-[10px] text-gray-400 text-center">
+                        <div className="text-xs text-gray-400 text-center">
                           +{dayEvents.length - 3}
                         </div>
                       )}
@@ -477,12 +477,12 @@ export default function MinhaEscalaPage() {
                     <div className="flex items-center gap-2">
                       <span className="font-medium text-gray-900 text-sm">{cfg.label}</span>
                       {evt.status === 'pendente' && (
-                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-100 text-amber-700">
+                        <span className="text-xs px-1.5 py-0.5 rounded bg-amber-100 text-amber-700">
                           Pendente
                         </span>
                       )}
                       {evt.gerado_automaticamente === 1 && (
-                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-purple-100 text-purple-700">
+                        <span className="text-xs px-1.5 py-0.5 rounded bg-purple-100 text-purple-700">
                           Auto
                         </span>
                       )}

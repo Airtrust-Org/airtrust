@@ -496,7 +496,7 @@ export function TrainingComplianceIntelligence({
                       nextComplianceTableSort(current, column))}
                   />
                 ))}
-                <th className="px-3 py-3 text-left text-xs font-semibold">Origem</th>
+                <th scope="col" className="px-3 py-3 text-left text-xs font-semibold">Origem</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 bg-white">
@@ -896,7 +896,7 @@ export function TrainingComplianceIntelligence({
         <table className="min-w-full text-sm">
           <thead className="bg-slate-50 text-slate-500">
             <tr>
-              <th className="px-3 py-3 text-left">
+              <th scope="col" className="px-3 py-3 text-left">
                 <input
                   aria-label="Selecionar todas as pendências visíveis"
                   type="checkbox"
@@ -936,7 +936,7 @@ export function TrainingComplianceIntelligence({
                 sort={pendingSort}
                 onSort={(key) => setPendingSort((current) => nextComplianceTableSort(current, key))}
               />
-              <th className="px-3 py-3 text-right">Ação</th>
+              <th scope="col" className="px-3 py-3 text-right">Ação</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100 bg-white">
@@ -1065,7 +1065,7 @@ export function TrainingComplianceIntelligence({
                 <h3 className="font-semibold text-slate-900">Enviar cobrança de treinamento</h3>
                 <p className="mt-1 text-sm text-slate-500">Revise o alcance e escolha os canais.</p>
               </div>
-              <button
+              <button aria-label="Fechar"
                 type="button"
                 onClick={() => { setNoticeOpen(false); setReenviarHoje(false); }}
                 className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100"
@@ -1247,7 +1247,7 @@ function ComplianceTrendChart({
                 className="stroke-slate-200"
                 strokeWidth="1"
               />
-              <text x={left - 6} y={y + 3} textAnchor="end" className="fill-slate-400 text-[10px]">
+              <text x={left - 6} y={y + 3} textAnchor="end" className="fill-slate-400 text-xs">
                 {value}%
               </text>
             </g>

@@ -77,18 +77,18 @@ export default function ValidarCertificado() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 flex items-center justify-center p-6">
+      <main className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 flex items-center justify-center p-6">
         <div className="bg-white rounded-2xl shadow-2xl p-12 max-w-2xl w-full text-center">
           <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-primary mx-auto mb-6"></div>
           <p className="text-slate-600 text-lg">Validando certificado...</p>
         </div>
-      </div>
+      </main>
     );
   }
 
   if (erro || !resultado) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-red-50 to-red-100 flex items-center justify-center p-6">
+      <main className="min-h-screen bg-gradient-to-br from-red-50 to-red-100 flex items-center justify-center p-6">
         <div className="bg-white rounded-2xl shadow-2xl p-12 max-w-2xl w-full">
           <div className="flex items-center justify-center w-20 h-20 rounded-full bg-red-100 mx-auto mb-6">
             <svg
@@ -110,13 +110,13 @@ export default function ValidarCertificado() {
             {erro || 'Não foi possível validar o certificado'}
           </p>
         </div>
-      </div>
+      </main>
     );
   }
 
   if (!resultado.valido) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-yellow-50 to-orange-100 flex items-center justify-center p-6">
+      <main className="min-h-screen bg-gradient-to-br from-yellow-50 to-orange-100 flex items-center justify-center p-6">
         <div className="bg-white rounded-2xl shadow-2xl p-12 max-w-2xl w-full">
           <div className="flex items-center justify-center w-20 h-20 rounded-full bg-yellow-100 mx-auto mb-6">
             <svg
@@ -140,7 +140,7 @@ export default function ValidarCertificado() {
             {resultado.mensagem || 'Este certificado não foi encontrado ou foi revogado'}
           </p>
         </div>
-      </div>
+      </main>
     );
   }
 
@@ -157,7 +157,7 @@ export default function ValidarCertificado() {
           : 'Periódico';
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-emerald-50 via-teal-50 to-cyan-50 flex items-center justify-center p-6">
+    <main className="min-h-screen bg-gradient-to-br from-emerald-50 via-teal-50 to-cyan-50 flex items-center justify-center p-6">
       <div className="bg-white rounded-2xl shadow-2xl p-12 max-w-3xl w-full">
         {/* Header de Sucesso */}
         <div className="flex items-center justify-center w-24 h-24 rounded-full bg-emerald-100 mx-auto mb-8">
@@ -260,6 +260,6 @@ export default function ValidarCertificado() {
           </p>
         </div>
       </div>
-    </div>
+    </main>
   );
 }

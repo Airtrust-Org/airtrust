@@ -4,6 +4,7 @@ import { toast } from 'sonner';
 import { API_BASE_URL, getAccessToken } from '@/react-app/config/api';
 import { X, Check } from 'lucide-react';
 import { TemplateSessao, TemplateSessionManobra } from '../../../shared/types';
+import { ModalOverlay } from '@/react-app/components/modals/ModalOverlay';
 
 interface CriarTemplateModalProps {
   isOpen: boolean;
@@ -165,13 +166,13 @@ export const CriarTemplateModal: React.FC<CriarTemplateModalProps> = ({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+    <ModalOverlay className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
       <div className="bg-white rounded-lg w-full max-w-5xl max-h-screen overflow-y-auto m-4">
         <div className="flex justify-between items-center p-6 border-b">
           <h2 className="text-xl font-semibold">
             {templateEdit ? 'Editar Modelo' : 'Criar Modelo de Sessão'}
           </h2>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
+          <button aria-label="Fechar" type="button" onClick={onClose} className="text-gray-400 hover:text-gray-600">
             <X className="h-6 w-6" />
           </button>
         </div>
@@ -183,10 +184,10 @@ export const CriarTemplateModal: React.FC<CriarTemplateModalProps> = ({
               <h3 className="text-lg font-medium text-gray-900">Informações do Modelo</h3>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                <label htmlFor="criartemplatemodal-nome-do-modelo" className="block text-sm font-medium text-gray-700 mb-2">
                   Nome do Modelo *
                 </label>
-                <input
+                <input id="criartemplatemodal-nome-do-modelo" aria-label="Nome do Modelo"
                   type="text"
                   value={formData.nome}
                   onChange={(e) => setFormData((prev) => ({ ...prev, nome: e.target.value }))}
@@ -198,10 +199,10 @@ export const CriarTemplateModal: React.FC<CriarTemplateModalProps> = ({
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <label htmlFor="criartemplatemodal-duracao-horas" className="block text-sm font-medium text-gray-700 mb-2">
                     Duração (horas)
                   </label>
-                  <input
+                  <input id="criartemplatemodal-duracao-horas" aria-label="Duração (horas)"
                     type="number"
                     min="1"
                     max="8"
@@ -217,8 +218,8 @@ export const CriarTemplateModal: React.FC<CriarTemplateModalProps> = ({
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Tipo</label>
-                  <select
+                  <label htmlFor="criartemplatemodal-tipo" className="block text-sm font-medium text-gray-700 mb-2">Tipo</label>
+                  <select id="criartemplatemodal-tipo" aria-label="Tipo"
                     value={formData.tipo}
                     onChange={(e) =>
                       setFormData((prev) => ({ ...prev, tipo: e.target.value as any }))
@@ -234,8 +235,8 @@ export const CriarTemplateModal: React.FC<CriarTemplateModalProps> = ({
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Descrição</label>
-                <textarea
+                <label htmlFor="criartemplatemodal-descricao" className="block text-sm font-medium text-gray-700 mb-2">Descrição</label>
+                <textarea id="criartemplatemodal-descricao" aria-label="Descrição"
                   value={formData.descricao}
                   onChange={(e) => setFormData((prev) => ({ ...prev, descricao: e.target.value }))}
                   placeholder="Descreva o objetivo desta sessão..."
@@ -343,7 +344,7 @@ export const CriarTemplateModal: React.FC<CriarTemplateModalProps> = ({
           </div>
         </form>
       </div>
-    </div>
+    </ModalOverlay>
   );
 };
 

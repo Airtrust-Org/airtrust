@@ -235,10 +235,10 @@ export default function ReclassificacaoQualificacoes() {
       {/* Filtros */}
       <div className="grid md:grid-cols-3 gap-4">
         <div className="flex flex-col gap-2">
-          <label className="text-xs font-medium text-gray-600">Buscar Funcionário</label>
+          <label htmlFor="reclassificacaoqualificacoes-buscar-funcionario" className="text-xs font-medium text-gray-600">Buscar Funcionário</label>
           <div className="relative">
             <Search className="absolute left-3 top-2.5 w-4 h-4 text-gray-400" />
-            <input
+            <input id="reclassificacaoqualificacoes-buscar-funcionario" aria-label="Buscar Funcionário"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               onKeyDown={(e) => {
@@ -250,8 +250,8 @@ export default function ReclassificacaoQualificacoes() {
           </div>
         </div>
         <div className="flex flex-col gap-2">
-          <label className="text-xs font-medium text-gray-600">Filtrar Tipos</label>
-          <input
+          <label htmlFor="reclassificacaoqualificacoes-filtrar-tipos" className="text-xs font-medium text-gray-600">Filtrar Tipos</label>
+          <input id="reclassificacaoqualificacoes-filtrar-tipos" aria-label="Filtrar Tipos"
             value={tipoFilter}
             onChange={(e) => setTipoFilter(e.target.value)}
             placeholder="Buscar tipo (nome/código/categoria)"
@@ -288,14 +288,14 @@ export default function ReclassificacaoQualificacoes() {
           <table className="min-w-full text-sm">
             <thead className="bg-gray-50 text-xs uppercase text-gray-600">
               <tr>
-                <th className="px-4 py-3 text-left">Histórico ID</th>
-                <th className="px-4 py-3 text-left">Funcionário</th>
-                <th className="px-4 py-3 text-left">Data Conclusão</th>
-                <th className="px-4 py-3 text-left">Data Vencimento</th>
-                <th className="px-4 py-3 text-left">Código Atual</th>
-                <th className="px-4 py-3 text-left">Selecionar Tipo</th>
-                <th className="px-4 py-3 text-left">Sugestões</th>
-                <th className="px-4 py-3 text-left">Aplicar</th>
+                <th scope="col" className="px-4 py-3 text-left">Histórico ID</th>
+                <th scope="col" className="px-4 py-3 text-left">Funcionário</th>
+                <th scope="col" className="px-4 py-3 text-left">Data Conclusão</th>
+                <th scope="col" className="px-4 py-3 text-left">Data Vencimento</th>
+                <th scope="col" className="px-4 py-3 text-left">Código Atual</th>
+                <th scope="col" className="px-4 py-3 text-left">Selecionar Tipo</th>
+                <th scope="col" className="px-4 py-3 text-left">Sugestões</th>
+                <th scope="col" className="px-4 py-3 text-left">Aplicar</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200">
@@ -345,7 +345,7 @@ export default function ReclassificacaoQualificacoes() {
                       </td>
                       <td className="px-4 py-2">
                         <div className="flex flex-col gap-1">
-                          <input
+                          <input aria-label="Código ou nome"
                             list={`tipos-${historicoId}`}
                             placeholder="Código ou nome"
                             value={selectedTipoId ? selectedTipo?.codigo || selectedTipoId : ''}
@@ -393,7 +393,7 @@ export default function ReclassificacaoQualificacoes() {
                         </button>
                         <div className="max-h-24 overflow-y-auto space-y-1">
                           {suggestionsByHistorico[historicoId]?.map((s) => (
-                            <div
+                            <div role="button" tabIndex={0} onKeyDown={(e) => { if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); e.currentTarget.click(); } }}
                               key={s.id}
                               className="cursor-pointer px-2 py-1 rounded bg-gray-100 hover:bg-gray-200"
                               onClick={() =>

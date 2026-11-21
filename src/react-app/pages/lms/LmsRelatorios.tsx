@@ -270,14 +270,14 @@ export default function LmsRelatorios() {
                     <table className="w-full text-sm">
                       <thead className="bg-slate-50 text-xs text-slate-500 uppercase tracking-wide dark:bg-slate-800 dark:text-slate-400">
                         <tr>
-                          <th className="px-6 py-3 text-left">Função</th>
-                          <th className="px-4 py-3 text-right">Funcionários</th>
-                          <th className="px-4 py-3 text-right">Matriculados</th>
-                          <th className="px-4 py-3 text-right">Concluídos</th>
-                          <th className="px-4 py-3 text-right">Em Andamento</th>
-                          <th className="px-4 py-3 text-right">Não Iniciados</th>
-                          <th className="px-6 py-3 text-left">Taxa Conclusão</th>
-                          <th className="px-6 py-3 text-right">Ação</th>
+                          <th scope="col" className="px-6 py-3 text-left">Função</th>
+                          <th scope="col" className="px-4 py-3 text-right">Funcionários</th>
+                          <th scope="col" className="px-4 py-3 text-right">Matriculados</th>
+                          <th scope="col" className="px-4 py-3 text-right">Concluídos</th>
+                          <th scope="col" className="px-4 py-3 text-right">Em Andamento</th>
+                          <th scope="col" className="px-4 py-3 text-right">Não Iniciados</th>
+                          <th scope="col" className="px-6 py-3 text-left">Taxa Conclusão</th>
+                          <th scope="col" className="px-6 py-3 text-right">Ação</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
@@ -379,14 +379,14 @@ export default function LmsRelatorios() {
                     <table className="w-full text-sm">
                       <thead className="bg-slate-50 text-xs text-slate-500 uppercase tracking-wide dark:bg-slate-800 dark:text-slate-400">
                         <tr>
-                          <th className="px-6 py-3 text-left">Funcionário</th>
-                          <th className="px-4 py-3 text-left">Função</th>
-                          <th className="px-4 py-3 text-left">Base</th>
-                          <th className="px-4 py-3 text-left">Curso</th>
-                          <th className="px-4 py-3 text-left">Status</th>
-                          <th className="px-4 py-3 text-right">Prazo</th>
-                          <th className="px-4 py-3 text-right">Dias</th>
-                          <th className="px-6 py-3 text-right">Ações</th>
+                          <th scope="col" className="px-6 py-3 text-left">Funcionário</th>
+                          <th scope="col" className="px-4 py-3 text-left">Função</th>
+                          <th scope="col" className="px-4 py-3 text-left">Base</th>
+                          <th scope="col" className="px-4 py-3 text-left">Curso</th>
+                          <th scope="col" className="px-4 py-3 text-left">Status</th>
+                          <th scope="col" className="px-4 py-3 text-right">Prazo</th>
+                          <th scope="col" className="px-4 py-3 text-right">Dias</th>
+                          <th scope="col" className="px-6 py-3 text-right">Ações</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
@@ -502,14 +502,14 @@ export default function LmsRelatorios() {
                     <table className="w-full text-sm">
                       <thead className="bg-slate-50 text-xs text-slate-500 uppercase tracking-wide dark:bg-slate-800 dark:text-slate-400">
                         <tr>
-                          <th className="px-6 py-3 text-left">Funcionário</th>
-                          <th className="px-4 py-3 text-left">Curso</th>
-                          <th className="px-4 py-3 text-left">Status</th>
-                          <th className="px-4 py-3 text-right">Progresso</th>
-                          <th className="px-4 py-3 text-right">Score</th>
-                          <th className="px-4 py-3 text-left">Posição</th>
-                          <th className="px-4 py-3 text-left">Diagnóstico</th>
-                          <th className="px-6 py-3 text-left">Último commit</th>
+                          <th scope="col" className="px-6 py-3 text-left">Funcionário</th>
+                          <th scope="col" className="px-4 py-3 text-left">Curso</th>
+                          <th scope="col" className="px-4 py-3 text-left">Status</th>
+                          <th scope="col" className="px-4 py-3 text-right">Progresso</th>
+                          <th scope="col" className="px-4 py-3 text-right">Score</th>
+                          <th scope="col" className="px-4 py-3 text-left">Posição</th>
+                          <th scope="col" className="px-4 py-3 text-left">Diagnóstico</th>
+                          <th scope="col" className="px-6 py-3 text-left">Último commit</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-100 dark:divide-slate-800">

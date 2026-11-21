@@ -12,6 +12,7 @@ import {
   filterCompatibleChecks,
 } from '@/react-app/utils/checkCompatibility';
 import { isQualificationCheck } from '@/react-app/utils/isQualificationCheck';
+import { ModalOverlay } from '@/react-app/components/modals/ModalOverlay';
 
 interface TipoSessao {
   id: number;
@@ -690,8 +691,8 @@ export default function ModelosSessaoPage({ embedded = false, onBack }: ModelosS
       <div className="bg-white dark:bg-slate-900 rounded-lg border border-gray-200 dark:border-slate-700 p-4 space-y-4">
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">Dispositivo</label>
-            <select
+            <label htmlFor="index-dispositivo" className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">Dispositivo</label>
+            <select id="index-dispositivo" aria-label="Dispositivo"
               value={filtroTipoDispositivo || ''}
               onChange={(e) => setFiltroTipoDispositivo((e.target.value as TipoDispositivo) || null)}
               className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md text-sm bg-white dark:bg-slate-800 text-gray-900 dark:text-slate-100"
@@ -703,8 +704,8 @@ export default function ModelosSessaoPage({ embedded = false, onBack }: ModelosS
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">Filtrar por Tipo</label>
-            <select
+            <label htmlFor="index-filtrar-por-tipo" className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">Filtrar por Tipo</label>
+            <select id="index-filtrar-por-tipo" aria-label="Filtrar por Tipo"
               value={filtroTipoSessao || ''}
               onChange={(e) => setFiltroTipoSessao(e.target.value ? Number(e.target.value) : null)}
               className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md text-sm bg-white dark:bg-slate-800 text-gray-900 dark:text-slate-100"
@@ -719,10 +720,10 @@ export default function ModelosSessaoPage({ embedded = false, onBack }: ModelosS
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">
+            <label htmlFor="index-filtrar-por-equipamento" className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">
               Filtrar por Equipamento
             </label>
-            <select
+            <select id="index-filtrar-por-equipamento" aria-label="Filtrar por Equipamento"
               value={filtroModeloAeronave || ''}
               onChange={(e) => setFiltroModeloAeronave(e.target.value || null)}
               className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md text-sm bg-white dark:bg-slate-800 text-gray-900 dark:text-slate-100"
@@ -768,7 +769,7 @@ export default function ModelosSessaoPage({ embedded = false, onBack }: ModelosS
                   ? (sortDirection === 'asc' ? 'ascending' : 'descending')
                   : 'none';
                 return (
-                  <th
+                  <th scope="col"
                     key={field}
                     aria-sort={ariaSort}
                     className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-slate-400 uppercase"
@@ -794,7 +795,7 @@ export default function ModelosSessaoPage({ embedded = false, onBack }: ModelosS
                   </th>
                 );
               })}
-              <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 dark:text-slate-400 uppercase">
+              <th scope="col" className="px-4 py-3 text-center text-xs font-medium text-gray-500 dark:text-slate-400 uppercase">
                 Ações
               </th>
             </tr>
@@ -902,7 +903,7 @@ export default function ModelosSessaoPage({ embedded = false, onBack }: ModelosS
 
       {/* Modal Principal */}
       {modalAberto && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 animate-fade-in" onClick={() => setModalAberto(false)}>
+        <ModalOverlay className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 animate-fade-in" onClick={() => setModalAberto(false)}>
           <div className="bg-white dark:bg-slate-900 rounded-lg max-w-3xl w-full max-h-[90vh] overflow-y-auto animate-scale-in" onClick={(e) => e.stopPropagation()}>
             <div className="p-6 border-b border-gray-200 dark:border-slate-700 sticky top-0 bg-white dark:bg-slate-900">
               <h3 className="text-lg font-semibold text-gray-900 dark:text-slate-100">{modoEdicao ? 'Editar' : 'Novo'} Modelo</h3>
@@ -916,8 +917,8 @@ export default function ModelosSessaoPage({ embedded = false, onBack }: ModelosS
               )}
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">Código <span className="text-red-500">*</span></label>
-                  <Input
+                  <label htmlFor="index-codigo" className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">Código <span className="text-red-500">*</span></label>
+                  <Input id="index-codigo" aria-label="Código"
                     value={codigo}
                     onChange={(e) => setCodigo(e.target.value.toUpperCase())}
                     maxLength={20}
@@ -930,10 +931,10 @@ export default function ModelosSessaoPage({ embedded = false, onBack }: ModelosS
                   )}
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">
+                  <label htmlFor="index-duracao-min" className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">
                     Duração (min) <span className="text-red-500">*</span>
                   </label>
-                  <Input
+                  <Input id="index-duracao-min" aria-label="Duração (min)"
                     type="number"
                     value={duracaoEstimada}
                     onChange={(e) => setDuracaoEstimada(Number(e.target.value))}
@@ -942,8 +943,8 @@ export default function ModelosSessaoPage({ embedded = false, onBack }: ModelosS
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">Nome <span className="text-red-500">*</span></label>
-                <Input value={nome} onChange={(e) => setNome(e.target.value)} maxLength={200} />
+                <label htmlFor="index-nome" className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">Nome <span className="text-red-500">*</span></label>
+                <Input id="index-nome" aria-label="Nome" value={nome} onChange={(e) => setNome(e.target.value)} maxLength={200} />
               </div>
 
               {/* Tipo de dispositivo: Simulador ou Aeronave */}
@@ -973,10 +974,10 @@ export default function ModelosSessaoPage({ embedded = false, onBack }: ModelosS
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">
+                  <label htmlFor="index-tipo-de-sessao" className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">
                     Tipo de Sessão <span className="text-red-500">*</span>
                   </label>
-                  <select
+                  <select id="index-tipo-de-sessao" aria-label="Tipo de Sessão"
                     className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md bg-white dark:bg-slate-800 text-gray-900 dark:text-slate-100"
                     value={tipoSessaoId || ''}
                     onChange={(e) => setTipoSessaoId(Number(e.target.value))}
@@ -991,10 +992,10 @@ export default function ModelosSessaoPage({ embedded = false, onBack }: ModelosS
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">
+                  <label htmlFor="index-equipamento" className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">
                     Equipamento
                   </label>
-                  <select
+                  <select id="index-equipamento" aria-label="Equipamento"
                     className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md bg-white dark:bg-slate-800 text-gray-900 dark:text-slate-100"
                     value={tipoAeronave || ''}
                     onChange={(e) => setTipoAeronave(e.target.value || null)}
@@ -1010,8 +1011,8 @@ export default function ModelosSessaoPage({ embedded = false, onBack }: ModelosS
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">Descrição</label>
-                <textarea
+                <label htmlFor="index-descricao" className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">Descrição</label>
+                <textarea id="index-descricao" aria-label="Descrição"
                   className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md bg-white dark:bg-slate-800 text-gray-900 dark:text-slate-100"
                   value={descricao}
                   onChange={(e) => setDescricao(e.target.value)}
@@ -1042,10 +1043,10 @@ export default function ModelosSessaoPage({ embedded = false, onBack }: ModelosS
               {geraQualificacao && (
                 <div className="space-y-4 p-4 bg-green-50 dark:bg-green-500/10 border border-green-200 dark:border-green-500/30 rounded-lg">
                   <div>
-                    <label className="block text-sm font-semibold text-green-900 dark:text-green-300 mb-1">
+                    <label htmlFor="index-qualificacao-de-voo-gerada" className="block text-sm font-semibold text-green-900 dark:text-green-300 mb-1">
                       Qualificação de Voo Gerada
                     </label>
-                    <select
+                    <select id="index-qualificacao-de-voo-gerada" aria-label="Qualificação de Voo Gerada"
                       className="w-full px-3 py-2 border border-green-300 dark:border-green-500/30 rounded-md text-sm bg-white dark:bg-slate-800 text-gray-900 dark:text-slate-100"
                       value={qualificacaoTipoId || ''}
                       onChange={(e) =>
@@ -1197,21 +1198,21 @@ export default function ModelosSessaoPage({ embedded = false, onBack }: ModelosS
                           ))}
                         </div>
                         <div className="flex gap-1 shrink-0">
-                          <button
+                          <button aria-label="Recolher"
                             onClick={() => moverManobra(idx, 'up')}
                             disabled={idx === 0}
                             className="p-1 hover:bg-gray-200 dark:hover:bg-slate-700 rounded disabled:opacity-30"
                           >
                             <ChevronUp className="w-4 h-4" />
                           </button>
-                          <button
+                          <button aria-label="Expandir"
                             onClick={() => moverManobra(idx, 'down')}
                             disabled={idx === manobrasSelecionadas.length - 1}
                             className="p-1 hover:bg-gray-200 dark:hover:bg-slate-700 rounded disabled:opacity-30"
                           >
                             <ChevronDown className="w-4 h-4" />
                           </button>
-                          <button
+                          <button aria-label="Fechar"
                             onClick={() => removerManobra(m.manobra_id)}
                             className="p-1 hover:bg-red-100 dark:hover:bg-red-500/20 text-red-600 rounded"
                           >
@@ -1236,12 +1237,12 @@ export default function ModelosSessaoPage({ embedded = false, onBack }: ModelosS
               <Button onClick={salvar}>{modoEdicao ? 'Atualizar' : 'Criar'}</Button>
             </div>
           </div>
-        </div>
+        </ModalOverlay>
       )}
 
       {/* Modal Manobras */}
       {modalManobras && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60] p-4 animate-fade-in" onClick={() => setModalManobras(false)}>
+        <ModalOverlay className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60] p-4 animate-fade-in" onClick={() => setModalManobras(false)}>
           <div className="bg-white dark:bg-slate-900 rounded-lg max-w-2xl w-full max-h-[80vh] overflow-hidden flex flex-col animate-scale-in" onClick={(e) => e.stopPropagation()}>
             <div className="p-6 border-b border-gray-200 dark:border-slate-700">
               <h3 className="text-lg font-semibold text-gray-900 dark:text-slate-100">Adicionar Manobras</h3>
@@ -1284,7 +1285,7 @@ export default function ModelosSessaoPage({ embedded = false, onBack }: ModelosS
               </Button>
             </div>
           </div>
-        </div>
+        </ModalOverlay>
       )}
     </div>
   );

@@ -44,7 +44,7 @@ export const Toast: React.FC<ToastProps> = ({ message, type, onClose }) => {
     <div className={`${config.bg} ${config.border} border-l-4 text-white p-4 rounded-lg shadow-lg flex items-center gap-3 animate-slide-in`}>
       <Icon size={24} />
       <p className="flex-1">{message}</p>
-      <button
+      <button aria-label="Fechar"
         onClick={onClose}
         className="hover:bg-white/20 rounded p-1"
       >

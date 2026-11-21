@@ -17,6 +17,7 @@ import type { FuncionarioResumo } from '@/react-app/services/qualificacoes';
 import { showToast } from '../../../utils/toast';
 import { confirmDialog } from '@/react-app/utils/confirmDialog';
 import { SettingsSectionIntro } from '../components/SettingsSectionIntro';
+import { ModalOverlay } from '@/react-app/components/modals/ModalOverlay';
 
 type SigvoosStatus = 'PROCESSANDO' | 'SUCESSO' | 'ERRO' | string;
 type SigvoosOperationalStatus =
@@ -932,13 +933,13 @@ export default function IntegracoesEdApp() {
             <table className="min-w-full text-sm">
               <thead>
                 <tr className="border-b border-amber-200 text-left text-xs uppercase tracking-wide text-amber-700">
-                  <th className="px-3 py-2">Tripulante SIGVOOS</th>
-                  <th className="px-3 py-2">Identificador</th>
-                  <th className="px-3 py-2">Competência</th>
-                  <th className="px-3 py-2">Jornadas</th>
-                  <th className="px-3 py-2">Motivo</th>
-                  <th className="px-3 py-2">Atualizado</th>
-                  <th className="px-3 py-2">Ação</th>
+                  <th scope="col" className="px-3 py-2">Tripulante SIGVOOS</th>
+                  <th scope="col" className="px-3 py-2">Identificador</th>
+                  <th scope="col" className="px-3 py-2">Competência</th>
+                  <th scope="col" className="px-3 py-2">Jornadas</th>
+                  <th scope="col" className="px-3 py-2">Motivo</th>
+                  <th scope="col" className="px-3 py-2">Atualizado</th>
+                  <th scope="col" className="px-3 py-2">Ação</th>
                 </tr>
               </thead>
               <tbody>
@@ -1004,12 +1005,12 @@ export default function IntegracoesEdApp() {
             <table className="min-w-full text-sm">
               <thead>
                 <tr className="border-b border-slate-200 text-left text-xs uppercase tracking-wide text-slate-500">
-                  <th className="px-3 py-2">Tripulante SIGVOOS</th>
-                  <th className="px-3 py-2">Identificador</th>
-                  <th className="px-3 py-2">Jornadas perdidas</th>
-                  <th className="px-3 py-2">Competencias</th>
-                  <th className="px-3 py-2">Ultimo evento</th>
-                  <th className="px-3 py-2">Acao</th>
+                  <th scope="col" className="px-3 py-2">Tripulante SIGVOOS</th>
+                  <th scope="col" className="px-3 py-2">Identificador</th>
+                  <th scope="col" className="px-3 py-2">Jornadas perdidas</th>
+                  <th scope="col" className="px-3 py-2">Competencias</th>
+                  <th scope="col" className="px-3 py-2">Ultimo evento</th>
+                  <th scope="col" className="px-3 py-2">Acao</th>
                 </tr>
               </thead>
               <tbody>
@@ -1055,10 +1056,10 @@ export default function IntegracoesEdApp() {
               <table className="min-w-full text-sm">
                 <thead>
                   <tr className="border-b border-slate-200 text-left text-xs uppercase tracking-wide text-slate-500">
-                    <th className="px-3 py-2">SIGVOOS</th>
-                    <th className="px-3 py-2">Identificador</th>
-                    <th className="px-3 py-2">Funcionario</th>
-                    <th className="px-3 py-2">Atualizado</th>
+                    <th scope="col" className="px-3 py-2">SIGVOOS</th>
+                    <th scope="col" className="px-3 py-2">Identificador</th>
+                    <th scope="col" className="px-3 py-2">Funcionario</th>
+                    <th scope="col" className="px-3 py-2">Atualizado</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1095,13 +1096,13 @@ export default function IntegracoesEdApp() {
             <table className="min-w-full text-sm">
               <thead>
                 <tr className="border-b border-slate-200 text-left text-xs uppercase tracking-wide text-slate-500">
-                  <th className="px-3 py-2">Periodo</th>
-                  <th className="px-3 py-2">Status</th>
-                  <th className="px-3 py-2">Brutos</th>
-                  <th className="px-3 py-2">Importados</th>
-                  <th className="px-3 py-2">Erros</th>
-                  <th className="px-3 py-2">Criado em</th>
-                  <th className="px-3 py-2">Detalhe</th>
+                  <th scope="col" className="px-3 py-2">Periodo</th>
+                  <th scope="col" className="px-3 py-2">Status</th>
+                  <th scope="col" className="px-3 py-2">Brutos</th>
+                  <th scope="col" className="px-3 py-2">Importados</th>
+                  <th scope="col" className="px-3 py-2">Erros</th>
+                  <th scope="col" className="px-3 py-2">Criado em</th>
+                  <th scope="col" className="px-3 py-2">Detalhe</th>
                 </tr>
               </thead>
               <tbody>
@@ -1136,7 +1137,7 @@ export default function IntegracoesEdApp() {
       </div>
 
       {mappingTarget ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/45 p-4">
+        <ModalOverlay className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/45 p-4">
           <div className="w-full max-w-2xl rounded-3xl bg-white p-6 shadow-2xl">
             <div className="flex items-start justify-between gap-4">
               <div>
@@ -1151,7 +1152,7 @@ export default function IntegracoesEdApp() {
                   {mappingTarget.identificador_sigvoos || 'Sem identificador'}
                 </p>
               </div>
-              <button
+              <button aria-label="Fechar"
                 type="button"
                 onClick={() => {
                   if (savingMapping) return;
@@ -1214,7 +1215,7 @@ export default function IntegracoesEdApp() {
               </button>
             </div>
           </div>
-        </div>
+        </ModalOverlay>
       ) : null}
     </div>
   );

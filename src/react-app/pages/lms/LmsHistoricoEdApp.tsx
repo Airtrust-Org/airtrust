@@ -215,7 +215,7 @@ function LmsHistoricoEdAppContent({ canManage }: { canManage: boolean }) {
             <div className="flex flex-wrap items-center gap-3">
               <div className="relative min-w-[200px] max-w-sm flex-1">
                 <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
-                <input
+                <input aria-label="Buscar por funcionário ou curso..."
                   type="text"
                   value={q}
                   onChange={(e) => handleSearch(e.target.value)}
@@ -223,7 +223,7 @@ function LmsHistoricoEdAppContent({ canManage }: { canManage: boolean }) {
                   className="w-full rounded-lg border border-slate-200 bg-white py-2 pl-9 pr-8 text-sm text-slate-900 placeholder:text-slate-400 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:placeholder:text-slate-500"
                 />
                 {q && (
-                  <button
+                  <button aria-label="Fechar"
                     onClick={() => handleSearch('')}
                     className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
                   >
@@ -268,14 +268,14 @@ function LmsHistoricoEdAppContent({ canManage }: { canManage: boolean }) {
                   <table className="w-full text-sm">
                     <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500 dark:bg-slate-800 dark:text-slate-400">
                       <tr>
-                        <th className="px-6 py-3 text-left">Funcionário</th>
-                        <th className="px-4 py-3 text-left">Curso EdApp</th>
-                        <th className="px-4 py-3 text-center">Status</th>
-                        <th className="px-4 py-3 text-right">Progresso</th>
-                        <th className="px-4 py-3 text-right">Score</th>
-                        <th className="px-4 py-3 text-left">Qualificação</th>
-                        <th className="px-4 py-3 text-left">Conclusão</th>
-                        <th className="px-4 py-3 text-left">Vínculo</th>
+                        <th scope="col" className="px-6 py-3 text-left">Funcionário</th>
+                        <th scope="col" className="px-4 py-3 text-left">Curso EdApp</th>
+                        <th scope="col" className="px-4 py-3 text-center">Status</th>
+                        <th scope="col" className="px-4 py-3 text-right">Progresso</th>
+                        <th scope="col" className="px-4 py-3 text-right">Score</th>
+                        <th scope="col" className="px-4 py-3 text-left">Qualificação</th>
+                        <th scope="col" className="px-4 py-3 text-left">Conclusão</th>
+                        <th scope="col" className="px-4 py-3 text-left">Vínculo</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
@@ -352,7 +352,7 @@ function LmsHistoricoEdAppContent({ canManage }: { canManage: boolean }) {
                                   {row.qualificacao_codigo}
                                 </span>
                                 {row.qualificacao_historico_id && (
-                                  <p className="mt-0.5 text-xs text-emerald-600">✓ Gerada</p>
+                                  <p className="mt-0.5 text-xs text-emerald-600"><span aria-hidden="true">✓</span> Gerada</p>
                                 )}
                               </div>
                             ) : (

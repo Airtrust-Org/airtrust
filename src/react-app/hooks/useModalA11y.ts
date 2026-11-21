@@ -76,6 +76,16 @@ function focusInitialElement(dialog: HTMLElement) {
     return;
   }
 
+  // Preferir o primeiro campo de formulário: o botão "Fechar" costuma ser o primeiro
+  // foco da ordem do DOM, mas o usuário abriu o diálogo para preencher/ler o conteúdo.
+  const field = dialog.querySelector<HTMLElement>(
+    'input:not([disabled]):not([type="hidden"]):not([type="checkbox"]):not([type="radio"]), select:not([disabled]), textarea:not([disabled])',
+  );
+  if (field) {
+    field.focus();
+    return;
+  }
+
   const body = dialog.querySelector<HTMLElement>('[data-modal-body]');
   const inBody = body ? getFocusableElements(body)[0] : undefined;
   const target = inBody ?? getFocusableElements(dialog)[0];

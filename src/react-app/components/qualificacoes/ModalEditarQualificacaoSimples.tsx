@@ -3,6 +3,7 @@ import { X } from 'lucide-react';
 import { API_BASE_URL, getAccessToken } from '@/react-app/config/api';
 import { showToast } from '@/react-app/utils/toast';
 import { tryAddCalendarMonthsClamped } from '@/shared/utils/validade-meses';
+import { ModalOverlay } from '@/react-app/components/modals/ModalOverlay';
 
 type HistoricoQualificacao = {
   id: number;
@@ -129,12 +130,12 @@ export default function ModalEditarQualificacaoSimples({
   if (!aberto || !registro) return null;
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 backdrop-blur-sm">
+    <ModalOverlay className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 backdrop-blur-sm">
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl mx-4 max-h-[90vh] overflow-auto">
         {/* Header */}
         <div className="flex items-center justify-between p-6 border-b border-gray-200">
           <h2 className="text-2xl font-semibold text-gray-900">Editar Qualificação</h2>
-          <button onClick={onFechar} className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
+          <button aria-label="Fechar" type="button" onClick={onFechar} className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
             <X className="w-5 h-5" />
           </button>
         </div>
@@ -168,10 +169,10 @@ export default function ModalEditarQualificacaoSimples({
 
           {/* Data de Realização - Campo GRANDE e destacado */}
           <div>
-            <label className="block text-sm font-semibold text-gray-900 mb-2">
+            <label htmlFor="modaleditarqualificacaosimples-data-de-realizacao" className="block text-sm font-semibold text-gray-900 mb-2">
               Data de Realização *
             </label>
-            <input
+            <input id="modaleditarqualificacaosimples-data-de-realizacao" aria-label="Data de Realização"
               type="date"
               value={dataRealizacao}
               onChange={(e) => setDataRealizacao(e.target.value)}
@@ -184,7 +185,7 @@ export default function ModalEditarQualificacaoSimples({
           {dataVencimentoPreview && (
             <div className="bg-green-50 border-2 border-green-200 rounded-xl p-4">
               <h3 className="font-semibold text-green-900 mb-2">
-                📅 Vencimento Calculado Automaticamente
+                <span aria-hidden="true">📅</span> Vencimento Calculado Automaticamente
               </h3>
               <p className="text-2xl font-bold text-green-700">
                 {new Date(dataVencimentoPreview + 'T00:00:00').toLocaleDateString('pt-BR', {
@@ -201,8 +202,8 @@ export default function ModalEditarQualificacaoSimples({
 
           {/* Observações */}
           <div>
-            <label className="block text-sm font-semibold text-gray-900 mb-2">Observações</label>
-            <textarea
+            <label htmlFor="modaleditarqualificacaosimples-observacoes" className="block text-sm font-semibold text-gray-900 mb-2">Observações</label>
+            <textarea id="modaleditarqualificacaosimples-observacoes" aria-label="Observações"
               value={observacoes}
               onChange={(e) => setObservacoes(e.target.value)}
               rows={4}
@@ -231,6 +232,6 @@ export default function ModalEditarQualificacaoSimples({
           </div>
         </form>
       </div>
-    </div>
+    </ModalOverlay>
   );
 }

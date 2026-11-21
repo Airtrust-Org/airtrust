@@ -203,7 +203,7 @@ export const InputDataBrasil: React.FC<InputDataBrasilProps> = ({
           Formato brasileiro: dd/mm/aaaa
           {showToday && (
             <span className="ml-4">
-              💡 Clique em "Hoje" para preencher automaticamente
+              <span aria-hidden="true">💡</span> Clique em "Hoje" para preencher automaticamente
             </span>
           )}
         </p>

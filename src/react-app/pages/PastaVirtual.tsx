@@ -807,19 +807,19 @@ export default function PastaVirtual() {
                         <table className="w-full text-sm">
                           <thead>
                             <tr className="border-b">
-                              <th className="text-left py-3 px-4 font-medium text-gray-600">
+                              <th scope="col" className="text-left py-3 px-4 font-medium text-gray-600">
                                 Manobra
                               </th>
-                              <th className="text-center py-3 px-4 font-medium text-gray-600">
+                              <th scope="col" className="text-center py-3 px-4 font-medium text-gray-600">
                                 Avaliações
                               </th>
-                              <th className="text-center py-3 px-4 font-medium text-gray-600">
+                              <th scope="col" className="text-center py-3 px-4 font-medium text-gray-600">
                                 Média
                               </th>
-                              <th className="text-center py-3 px-4 font-medium text-gray-600">
+                              <th scope="col" className="text-center py-3 px-4 font-medium text-gray-600">
                                 Melhor
                               </th>
-                              <th className="text-center py-3 px-4 font-medium text-gray-600">
+                              <th scope="col" className="text-center py-3 px-4 font-medium text-gray-600">
                                 Pior
                               </th>
                             </tr>
@@ -873,13 +873,13 @@ export default function PastaVirtual() {
                         <table className="w-full text-sm">
                           <thead>
                             <tr className="border-b">
-                              <th className="text-left py-3 px-4 font-medium text-gray-600">
+                              <th scope="col" className="text-left py-3 px-4 font-medium text-gray-600">
                                 Data
                               </th>
-                              <th className="text-center py-3 px-4 font-medium text-gray-600">
+                              <th scope="col" className="text-center py-3 px-4 font-medium text-gray-600">
                                 Média da Sessão
                               </th>
-                              <th className="text-center py-3 px-4 font-medium text-gray-600">
+                              <th scope="col" className="text-center py-3 px-4 font-medium text-gray-600">
                                 Manobras Avaliadas
                               </th>
                             </tr>

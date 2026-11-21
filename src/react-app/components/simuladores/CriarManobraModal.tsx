@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { X, Save, AlertCircle } from 'lucide-react';
+import { ModalOverlay } from '@/react-app/components/modals/ModalOverlay';
 
 interface CriarManobraModalProps {
   isOpen: boolean;
@@ -122,7 +123,7 @@ const CriarManobraModal: React.FC<CriarManobraModalProps> = ({
   if (!isOpen) return null;
 
   return (
-    <div 
+    <ModalOverlay 
       className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
       onClick={handleBackdropClick}
     >
@@ -135,7 +136,7 @@ const CriarManobraModal: React.FC<CriarManobraModalProps> = ({
           <h2 className="text-xl font-semibold text-gray-900">
             {manobraEdit ? 'Editar Manobra' : 'Criar Nova Manobra'}
           </h2>
-          <button
+          <button aria-label="Fechar" type="button"
             onClick={onClose}
             className="text-gray-400 hover:text-gray-600 transition-colors"
             disabled={loading}
@@ -156,10 +157,10 @@ const CriarManobraModal: React.FC<CriarManobraModalProps> = ({
 
           {/* CÓDIGO DA MANOBRA */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label htmlFor="criarmanobramodal-codigo-da-manobra" className="block text-sm font-medium text-gray-700 mb-1">
               Código da Manobra *
             </label>
-            <input
+            <input id="criarmanobramodal-codigo-da-manobra" aria-label="Código da Manobra"
               ref={codigoRef}
               type="text"
               value={formData.codigo}
@@ -189,10 +190,10 @@ const CriarManobraModal: React.FC<CriarManobraModalProps> = ({
 
           {/* NOME DA MANOBRA */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label htmlFor="criarmanobramodal-nome-da-manobra" className="block text-sm font-medium text-gray-700 mb-1">
               Nome da Manobra *
             </label>
-            <input
+            <input id="criarmanobramodal-nome-da-manobra" aria-label="Nome da Manobra"
               type="text"
               value={formData.nome}
               onChange={(e) => handleInputChange('nome', e.target.value)}
@@ -216,10 +217,10 @@ const CriarManobraModal: React.FC<CriarManobraModalProps> = ({
 
           {/* REFERÊNCIA QRH */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label htmlFor="criarmanobramodal-referencia-no-qrh" className="block text-sm font-medium text-gray-700 mb-1">
               Referência no QRH *
             </label>
-            <input
+            <input id="criarmanobramodal-referencia-no-qrh" aria-label="Referência no QRH"
               type="text"
               value={formData.referencia_qrh}
               onChange={(e) => handleInputChange('referencia_qrh', e.target.value)}
@@ -263,7 +264,7 @@ const CriarManobraModal: React.FC<CriarManobraModalProps> = ({
           </div>
         </form>
       </div>
-    </div>
+    </ModalOverlay>
   );
 };
 

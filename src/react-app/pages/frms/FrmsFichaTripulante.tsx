@@ -44,6 +44,7 @@ import {
   formatSnapshotSource,
 } from './frmsPresentation';
 import { localTodayIso, resolveCalendarFortnightRange, resolveFrmsOperationalDate } from './frmsOperationalDate';
+import { ModalOverlay } from '@/react-app/components/modals/ModalOverlay';
 
 const FrmsEffectivenessTimeline = lazy(() => import('./components/FrmsEffectivenessTimeline'));
 
@@ -488,9 +489,7 @@ export default function FrmsFichaTripulante() {
     });
 
     // Usar window.confirm direto para evitar qualquer problema com confirmDialog
-    const confirmar = window.confirm(
-      `Apagar TODAS as ${jornadas.length} jornada(s) de ${mesLabel} para ${nomeTrip}?\n\nEsta ação não pode ser desfeita.`,
-    );
+    const confirmar = (await confirmDialog(`Apagar TODAS as ${jornadas.length} jornada(s) de ${mesLabel} para ${nomeTrip}?\n\nEsta ação não pode ser desfeita.`, { confirmText: 'Apagar' }));
     if (!confirmar) return;
 
     // Capturar lista atual antes de qualquer mutação
@@ -619,7 +618,7 @@ export default function FrmsFichaTripulante() {
         {/* Resumo acionável do cenário de hoje. */}
         <section className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-5">
           <div className="rounded-xl border border-slate-200 bg-white p-4">
-            <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Situação de hoje</p>
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Situação de hoje</p>
             <p className="mt-2 text-lg font-bold text-slate-900">
               {todayFortnightSnapshotItem?.snapshot_status === 'OK'
                 ? 'OK'
@@ -635,7 +634,7 @@ export default function FrmsFichaTripulante() {
           </div>
 
           <div className="rounded-xl border border-slate-200 bg-white p-4">
-            <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Atividade de hoje</p>
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Atividade de hoje</p>
             {todayFortnightSnapshotItem?.teve_atividade_frms ? (
               <>
                 <p className="mt-2 text-lg font-bold text-slate-900">
@@ -670,7 +669,7 @@ export default function FrmsFichaTripulante() {
           </div>
 
           <div className="rounded-xl border border-slate-200 bg-white p-4">
-            <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Sono / KSS</p>
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Sono / KSS</p>
             <p className="mt-2 text-lg font-bold text-slate-900">
               {todayFortnightSnapshotItem?.horas_sono != null
                 ? `${Number(todayFortnightSnapshotItem.horas_sono).toFixed(1)} h`
@@ -683,7 +682,7 @@ export default function FrmsFichaTripulante() {
           </div>
 
           <div className="rounded-xl border border-slate-200 bg-white p-4">
-            <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Crédito de recuperação calculado</p>
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Crédito de recuperação calculado</p>
             <p className="mt-2 text-lg font-bold text-emerald-700">
               {formatRecoveryCredit(todayFortnightSnapshotItem?.recovery_credit_points)}
             </p>
@@ -695,7 +694,7 @@ export default function FrmsFichaTripulante() {
           </div>
 
           <div className="rounded-xl border border-slate-200 bg-white p-4">
-            <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">HV mês calendário</p>
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">HV mês calendário</p>
             <p className="mt-2 text-lg font-bold text-slate-900">
               {formatMin(rolling?.hv_mes_calendario_min)}
             </p>
@@ -715,14 +714,14 @@ export default function FrmsFichaTripulante() {
                 Carga observada × recuperação confirmada. Este bloco explica os dados usados; não recalcula a efetividade.
               </p>
             </div>
-            <span className="rounded-md border border-slate-200 bg-slate-50 px-2 py-1 text-[10px] font-medium text-slate-600">
+            <span className="rounded-md border border-slate-200 bg-slate-50 px-2 py-1 text-xs font-medium text-slate-600">
               {todayFortnightSnapshotItem?.data_operacional || focusDate}
             </span>
           </div>
 
           <div className="mt-3 grid gap-3 lg:grid-cols-3">
             <div className="rounded-xl border border-amber-100 bg-amber-50/40 p-3">
-              <p className="text-[11px] font-semibold uppercase tracking-wide text-amber-800">Carga observada</p>
+              <p className="text-xs font-semibold uppercase tracking-wide text-amber-800">Carga observada</p>
               <div className="mt-2 space-y-1 text-xs text-slate-700">
                 <p>Atividade: <strong>{todayFortnightSnapshotItem?.teve_atividade_frms ? formatMin(todayFortnightSnapshotItem.atividade_frms_minutos ?? todayFortnightSnapshotItem.duracao_jornada_minutos) : 'sem atividade confirmada'}</strong></p>
                 <p>HV real: <strong>{formatMin(todayFortnightSnapshotItem?.teve_jornada ? todayFortnightSnapshotItem.horas_voo_minutos : null)}</strong></p>
@@ -744,18 +743,18 @@ export default function FrmsFichaTripulante() {
             </div>
 
             <div className="rounded-xl border border-emerald-100 bg-emerald-50/40 p-3">
-              <p className="text-[11px] font-semibold uppercase tracking-wide text-emerald-800">Evidências de sono e crédito calculado</p>
+              <p className="text-xs font-semibold uppercase tracking-wide text-emerald-800">Evidências de sono e crédito calculado</p>
               <div className="mt-2 space-y-1 text-xs text-slate-700">
                 <p>Sono (conforme fonte): <strong>{todayFortnightSnapshotItem?.horas_sono == null ? 'não informado' : `${Number(todayFortnightSnapshotItem.horas_sono).toFixed(1)} h`}</strong></p>
                 <p>KSS: <strong>{todayFortnightSnapshotItem?.kss_score ?? 'não informado'}</strong></p>
                 <p>Crédito calculado: <strong className="text-emerald-800">{formatRecoveryCredit(todayFortnightSnapshotItem?.recovery_credit_points)}</strong></p>
                 <p>Atividade: <strong>{formatRecoveryActivityType(todayFortnightSnapshotItem?.recovery_activity_type) || formatRecoveryState(todayFortnightSnapshotItem?.recovery_state) || 'sem crédito ou estado informado'}</strong></p>
               </div>
-              <p className="mt-2 text-[11px] text-slate-600">Crédito calculado não comprova sono efetivo nem recuperação fisiológica.</p>
+              <p className="mt-2 text-xs text-slate-600">Crédito calculado não comprova sono efetivo nem recuperação fisiológica.</p>
             </div>
 
             <div className="rounded-xl border border-sky-100 bg-sky-50/40 p-3">
-              <p className="text-[11px] font-semibold uppercase tracking-wide text-sky-800">Resultado e rastreabilidade</p>
+              <p className="text-xs font-semibold uppercase tracking-wide text-sky-800">Resultado e rastreabilidade</p>
               <div className="mt-2 space-y-1 text-xs text-slate-700">
                 <p>Efetividade: <strong>{todayFortnightSnapshotItem?.effectiveness_pct == null ? 'indisponível' : `${Number(todayFortnightSnapshotItem.effectiveness_pct).toFixed(1)}%`}</strong></p>
                 <p>Check-in: <strong>{formatCheckinStatus(todayFortnightSnapshotItem?.checkin_status)}{todayFortnightSnapshotItem?.checkin_horario ? ` às ${formatFrmsCheckinTime(todayFortnightSnapshotItem.checkin_submitted_at) ?? 'horário local não confirmado'}` : ''}</strong></p>
@@ -793,7 +792,7 @@ export default function FrmsFichaTripulante() {
               <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wider">
                 Jornadas de voo / fonte operacional
               </h3>
-              <span className="text-[11px] font-normal normal-case tracking-normal text-slate-500">
+              <span className="text-xs font-normal normal-case tracking-normal text-slate-500">
                 Atividades sem voo aparecem no contexto operacional do período acima.
               </span>
               {jornadas.length > 0 && (
@@ -835,37 +834,37 @@ export default function FrmsFichaTripulante() {
             <table className="w-full text-left text-sm">
               <thead>
                 <tr className="border-b border-gray-100 bg-gray-50/50">
-                  <th className="px-4 py-2.5 text-xs font-semibold uppercase text-gray-500">
+                  <th scope="col" className="px-4 py-2.5 text-xs font-semibold uppercase text-gray-500">
                     Data
                   </th>
-                  <th className="px-4 py-2.5 text-xs font-semibold uppercase text-gray-500">
+                  <th scope="col" className="px-4 py-2.5 text-xs font-semibold uppercase text-gray-500">
                     Status
                   </th>
-                  <th className="px-4 py-2.5 text-xs font-semibold uppercase text-gray-500">
+                  <th scope="col" className="px-4 py-2.5 text-xs font-semibold uppercase text-gray-500">
                     Fonte
                   </th>
-                  <th className="px-4 py-2.5 text-xs font-semibold uppercase text-gray-500">
+                  <th scope="col" className="px-4 py-2.5 text-xs font-semibold uppercase text-gray-500">
                     Apresentação
                   </th>
-                  <th className="px-4 py-2.5 text-xs font-semibold uppercase text-gray-500">
+                  <th scope="col" className="px-4 py-2.5 text-xs font-semibold uppercase text-gray-500">
                     Encerramento
                   </th>
-                  <th className="px-4 py-2.5 text-xs font-semibold uppercase text-gray-500 text-right">
+                  <th scope="col" className="px-4 py-2.5 text-xs font-semibold uppercase text-gray-500 text-right">
                     Jornada
                   </th>
-                  <th className="px-4 py-2.5 text-xs font-semibold uppercase text-gray-500 text-right">
+                  <th scope="col" className="px-4 py-2.5 text-xs font-semibold uppercase text-gray-500 text-right">
                     Horas de Voo
                   </th>
-                  <th className="px-4 py-2.5 text-xs font-semibold uppercase text-gray-500">
+                  <th scope="col" className="px-4 py-2.5 text-xs font-semibold uppercase text-gray-500">
                     Alertas do Dia
                   </th>
-                  <th className="px-4 py-2.5 text-xs font-semibold uppercase text-gray-500 text-right">
+                  <th scope="col" className="px-4 py-2.5 text-xs font-semibold uppercase text-gray-500 text-right">
                     FAT.JORNADA% dia
                   </th>
-                  <th className="px-4 py-2.5 text-xs font-semibold uppercase text-gray-500 text-right">
+                  <th scope="col" className="px-4 py-2.5 text-xs font-semibold uppercase text-gray-500 text-right">
                     FAT.HV% dia
                   </th>
-                  <th className="px-4 py-2.5 text-xs font-semibold uppercase text-gray-500 text-center">
+                  <th scope="col" className="px-4 py-2.5 text-xs font-semibold uppercase text-gray-500 text-center">
                     Ações
                   </th>
                 </tr>
@@ -915,13 +914,13 @@ export default function FrmsFichaTripulante() {
                       </td>
                       <td className="px-4 py-2.5 text-gray-600 tabular-nums">
                         <div>{j.hora_apresentacao || '—'}</div>
-                        <div className={`mt-0.5 text-[10px] font-semibold ${presentation.boundarySourceClass}`}>
+                        <div className={`mt-0.5 text-xs font-semibold ${presentation.boundarySourceClass}`}>
                           {presentation.boundarySourceLabel}
                         </div>
                       </td>
                       <td className="px-4 py-2.5 text-gray-600 tabular-nums">
                         <div>{j.hora_termino || (j.data === actualTodayIso ? 'Em andamento' : '—')}</div>
-                        <div className={`mt-0.5 text-[10px] font-semibold ${presentation.boundarySourceClass}`}>
+                        <div className={`mt-0.5 text-xs font-semibold ${presentation.boundarySourceClass}`}>
                           {j.data === actualTodayIso && !j.hora_termino
                             ? 'Término ainda não disponível'
                             : presentation.boundarySourceLabel}
@@ -1063,7 +1062,7 @@ export default function FrmsFichaTripulante() {
         )}
 
         {selectedExplanationDate && id && (
-          <div className="fixed inset-0 z-modal flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
+          <ModalOverlay className="fixed inset-0 z-modal flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
             <div className="w-full max-w-5xl max-h-[90vh] overflow-y-auto rounded-[28px] bg-white shadow-2xl">
               <div className="sticky top-0 z-10 flex items-start justify-between gap-4 border-b border-slate-200 bg-white/95 px-5 py-4 backdrop-blur">
                 <div>
@@ -1073,7 +1072,7 @@ export default function FrmsFichaTripulante() {
                     {selectedExplanationDate.slice(5, 7)}/{selectedExplanationDate.slice(0, 4)}
                   </p>
                 </div>
-                <button
+                <button aria-label="Fechar"
                   type="button"
                   onClick={() => setSelectedExplanationDate(null)}
                   className="rounded-xl border border-slate-200 p-2 text-slate-500 hover:bg-slate-50 hover:text-slate-700"
@@ -1092,7 +1091,7 @@ export default function FrmsFichaTripulante() {
                 />
               </div>
             </div>
-          </div>
+          </ModalOverlay>
         )}
       </div>
     </AppLayout>

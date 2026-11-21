@@ -167,9 +167,9 @@ export default function FrmsHistoricoFira() {
         {/* Filtros */}
         <div className="mb-6 flex flex-wrap items-end gap-3">
           <div>
-            <label className="mb-1 block text-xs font-medium text-gray-500">Status</label>
+            <label htmlFor="frmshistoricofira-status" className="mb-1 block text-xs font-medium text-gray-500">Status</label>
             <div className="relative">
-              <select
+              <select id="frmshistoricofira-status" aria-label="Status"
                 value={filtroStatus}
                 onChange={(e) => {
                   setFiltroStatus(e.target.value);
@@ -187,9 +187,9 @@ export default function FrmsHistoricoFira() {
             </div>
           </div>
           <div>
-            <label className="mb-1 block text-xs font-medium text-gray-500">Ano</label>
+            <label htmlFor="frmshistoricofira-ano" className="mb-1 block text-xs font-medium text-gray-500">Ano</label>
             <div className="relative">
-              <select
+              <select id="frmshistoricofira-ano" aria-label="Ano"
                 value={filtroAno}
                 onChange={(e) => {
                   setFiltroAno(e.target.value);
@@ -208,9 +208,9 @@ export default function FrmsHistoricoFira() {
             </div>
           </div>
           <div>
-            <label className="mb-1 block text-xs font-medium text-gray-500">Mês</label>
+            <label htmlFor="frmshistoricofira-mes" className="mb-1 block text-xs font-medium text-gray-500">Mês</label>
             <div className="relative">
-              <select
+              <select id="frmshistoricofira-mes" aria-label="Mês"
                 value={filtroMes}
                 onChange={(e) => {
                   setFiltroMes(e.target.value);
@@ -264,19 +264,19 @@ export default function FrmsHistoricoFira() {
               />
             </div>
           ) : (
-            <table className="w-full text-sm">
+            <div className="overflow-x-auto"><table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-gray-100 bg-gray-50 text-xs uppercase tracking-wider text-gray-500">
-                  <th className="py-3 pl-5 text-left">Aeronauta</th>
-                  <th className="py-3 text-left">CANAC</th>
-                  <th className="py-3 text-left">Período</th>
-                  <th className="py-3 text-left">Status</th>
-                  <th className="py-3 text-right pr-3">Imp.</th>
-                  <th className="py-3 text-right pr-3">Subst.</th>
-                  <th className="py-3 text-right pr-3">Erros</th>
-                  <th className="py-3 text-left">Operador</th>
-                  <th className="py-3 text-left">Data</th>
-                  <th className="py-3 pr-5 text-right">Ações</th>
+                  <th scope="col" className="py-3 pl-5 text-left">Aeronauta</th>
+                  <th scope="col" className="py-3 text-left">CANAC</th>
+                  <th scope="col" className="py-3 text-left">Período</th>
+                  <th scope="col" className="py-3 text-left">Status</th>
+                  <th scope="col" className="py-3 text-right pr-3">Imp.</th>
+                  <th scope="col" className="py-3 text-right pr-3">Subst.</th>
+                  <th scope="col" className="py-3 text-right pr-3">Erros</th>
+                  <th scope="col" className="py-3 text-left">Operador</th>
+                  <th scope="col" className="py-3 text-left">Data</th>
+                  <th scope="col" className="py-3 pr-5 text-right">Ações</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50">
@@ -364,7 +364,7 @@ export default function FrmsHistoricoFira() {
                   );
                 })}
               </tbody>
-            </table>
+            </table></div>
           )}
         </div>
 
@@ -375,14 +375,14 @@ export default function FrmsHistoricoFira() {
               {total} registro{total !== 1 ? 's' : ''} · página {page} de {totalPages}
             </span>
             <div className="flex items-center gap-2">
-              <button
+              <button aria-label="Anterior"
                 disabled={page <= 1}
                 onClick={() => setPage((p) => p - 1)}
                 className="flex h-8 w-8 items-center justify-center rounded-lg border border-gray-200 hover:bg-gray-50 disabled:opacity-40"
               >
                 <ChevronLeft className="h-4 w-4" />
               </button>
-              <button
+              <button aria-label="Próximo"
                 disabled={page >= totalPages}
                 onClick={() => setPage((p) => p + 1)}
                 className="flex h-8 w-8 items-center justify-center rounded-lg border border-gray-200 hover:bg-gray-50 disabled:opacity-40"

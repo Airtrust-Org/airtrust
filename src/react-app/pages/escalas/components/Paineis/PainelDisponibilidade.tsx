@@ -87,7 +87,7 @@ export default function PainelDisponibilidade({
           <CalendarCheck className="w-5 h-5 text-slate-500" />
           <div>
             <h3 className="text-sm font-semibold text-gray-800">Prontidao Operacional</h3>
-            <p className="text-[11px] text-gray-500">
+            <p className="text-xs text-gray-500">
               {aeronaveSelecionada
                 ? `${aeronaveSelecionada.modelo}${aeronaveSelecionada.prefixo ? ` • ${aeronaveSelecionada.prefixo}` : ''}`
                 : `Mes ${String(mes).padStart(2, '0')}/${ano}`}
@@ -128,7 +128,7 @@ export default function PainelDisponibilidade({
             <ShieldAlert className="w-4 h-4 text-red-600 flex-shrink-0 mt-0.5" />
             <div className="flex-1 min-w-0">
               <p className="text-xs font-medium text-gray-800 truncate">{item.nome}</p>
-              <p className="text-[10px] text-red-600 truncate">
+              <p className="text-xs text-red-600 truncate">
                 {formatarStatus(item.status_operacional)}
               </p>
             </div>
@@ -143,7 +143,7 @@ export default function PainelDisponibilidade({
             <AlertTriangle className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
             <div className="flex-1 min-w-0">
               <p className="text-xs font-medium text-gray-800 truncate">{item.nome}</p>
-              <p className="text-[10px] text-amber-700 truncate">
+              <p className="text-xs text-amber-700 truncate">
                 {formatarStatus(item.status_operacional)}
                 {item.frms_score !== null
                   ? ` • Indicador FRMS legado ${item.frms_score}`
@@ -158,7 +158,7 @@ export default function PainelDisponibilidade({
             <ShieldCheck className="w-4 h-4 text-emerald-600 flex-shrink-0 mt-0.5" />
             <div className="flex-1 min-w-0">
               <p className="text-xs font-medium text-gray-700 truncate">{item.nome}</p>
-              <p className="text-[10px] text-gray-500 truncate">
+              <p className="text-xs text-gray-500 truncate">
                 {item.habilitacoes.map((habilitacao) => habilitacao.modelo_codigo).join(', ') ||
                   'Sem habilitacao mapeada'}
               </p>

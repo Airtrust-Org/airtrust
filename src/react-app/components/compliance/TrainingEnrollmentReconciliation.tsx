@@ -504,7 +504,7 @@ export function TrainingEnrollmentReconciliation({ setorId, funcaoId }: Props) {
                     sort={gapSort}
                     onSort={(key) => setGapSort((current) => nextComplianceTableSort(current, key))}
                   />
-                  <th className="px-3 py-3" />
+                  <th scope="col" className="px-3 py-3" />
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -702,7 +702,7 @@ export function TrainingEnrollmentReconciliation({ setorId, funcaoId }: Props) {
                       setReviewSort((current) => nextComplianceTableSort(current, key))
                     }
                   />
-                  <th className="px-3 py-3" />
+                  <th scope="col" className="px-3 py-3" />
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">

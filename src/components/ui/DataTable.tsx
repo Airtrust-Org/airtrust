@@ -641,7 +641,7 @@ export function DataTable<T extends { id?: string | number }>({
           <thead className="sticky top-0 z-20 border-b border-slate-200 bg-slate-50 shadow-[0_1px_0_0_rgba(148,163,184,0.25)]">
             <tr>
               {visibleColumns.map((column) => (
-                <th
+                <th scope="col"
                   key={column.id}
                   className={`relative px-4 py-3 text-xs font-semibold uppercase tracking-wider text-slate-600 whitespace-nowrap ${
                     column.sortable ? 'cursor-pointer select-none hover:bg-slate-100' : ''
@@ -659,7 +659,7 @@ export function DataTable<T extends { id?: string | number }>({
                 </th>
               ))}
               {actions && (
-                <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wider text-slate-600 text-right whitespace-nowrap">
+                <th scope="col" className="px-4 py-3 text-xs font-semibold uppercase tracking-wider text-slate-600 text-right whitespace-nowrap">
                   Ações
                 </th>
               )}
@@ -675,7 +675,7 @@ export function DataTable<T extends { id?: string | number }>({
                 if (!row) return null;
 
                 return (
-                  <tr
+                  <tr tabIndex={0} onKeyDown={(e) => { if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); e.currentTarget.click(); } }}
                     key={row.id || virtualRow.index}
                     className={`absolute left-0 transition-colors hover:bg-slate-50 ${
                       onRowClick ? 'cursor-pointer' : ''
@@ -717,7 +717,7 @@ export function DataTable<T extends { id?: string | number }>({
           ) : (
             <tbody className="divide-y divide-slate-200 bg-white">
               {displayData.map((row, index) => (
-                <tr
+                <tr tabIndex={0} onKeyDown={(e) => { if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); e.currentTarget.click(); } }}
                   key={row.id || index}
                   className={`transition-colors hover:bg-slate-50 ${
                     onRowClick ? 'cursor-pointer' : ''

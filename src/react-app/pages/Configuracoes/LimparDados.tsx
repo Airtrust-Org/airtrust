@@ -6,6 +6,7 @@ import { apiJson, frontendErrorMessage } from '@/react-app/lib/api-contract';
 import { Trash2, AlertTriangle, Shield, X } from 'lucide-react';
 import { useLanguage } from '@/react-app/i18n/useLanguage';
 import { SettingsSectionIntro } from './components/SettingsSectionIntro';
+import { ModalOverlay } from '@/react-app/components/modals/ModalOverlay';
 
 interface Contadores {
   funcionarios: number;
@@ -274,14 +275,14 @@ export default function LimparDados() {
 
       {/* Modal de Confirmação */}
       {moduloSelecionado && moduloAtual && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/55 p-4 backdrop-blur-sm">
+        <ModalOverlay className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/55 p-4 backdrop-blur-sm">
           <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl">
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-2xl font-bold text-red-600 flex items-center gap-2">
                 <AlertTriangle className="h-6 w-6" />
                 {t('settings.danger.clean.modal.title')}
               </h2>
-              <button
+              <button aria-label="Fechar"
                 onClick={fecharModal}
                 disabled={processando}
                 className="text-gray-500 hover:text-gray-700"
@@ -362,7 +363,7 @@ export default function LimparDados() {
               </div>
             </div>
           </div>
-        </div>
+        </ModalOverlay>
       )}
     </div>
   );

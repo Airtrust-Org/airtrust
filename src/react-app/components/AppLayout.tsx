@@ -510,7 +510,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
                     />
                   </div>
                 ) : (
-                  <div className="flex h-6 w-6 items-center justify-center rounded-full bg-slate-200 text-[10px] font-semibold text-slate-700 dark:bg-slate-800 dark:text-slate-200">
+                  <div className="flex h-6 w-6 items-center justify-center rounded-full bg-slate-200 text-xs font-semibold text-slate-700 dark:bg-slate-800 dark:text-slate-200">
                     <span data-no-auto-i18n="true">{getEmpresaInitials(empresaAtual.nome)}</span>
                   </div>
                 )}
@@ -578,12 +578,12 @@ export default function AppLayout({ children }: AppLayoutProps) {
                   {user?.nome?.split(' ')[0] || t('layout.user.default')}
                 </span>
                 {user?.role && (
-                  <span className="mt-0.5 text-[10px] capitalize leading-none text-slate-400 dark:text-slate-500">
+                  <span className="mt-0.5 text-xs capitalize leading-none text-slate-400 dark:text-slate-500">
                     {user.role.toLowerCase()}
                   </span>
                 )}
               </div>
-              <div
+              <div role="button" tabIndex={0} onKeyDown={(e) => { if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); e.currentTarget.click(); } }}
                 className="flex h-9 w-9 cursor-pointer items-center justify-center rounded-full bg-slate-200 text-sm font-bold text-slate-600 transition-colors hover:bg-slate-300 dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700"
                 title={`${user?.nome || t('layout.user.default')} — Clique para sair`}
                 onClick={logout}
@@ -858,7 +858,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
                           />
                         </div>
                       ) : (
-                        <div className="flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 bg-slate-100 text-[10px] font-semibold text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200">
+                        <div className="flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 bg-slate-100 text-xs font-semibold text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200">
                           {getEmpresaInitials(empresaAtual.nome)}
                         </div>
                       )}

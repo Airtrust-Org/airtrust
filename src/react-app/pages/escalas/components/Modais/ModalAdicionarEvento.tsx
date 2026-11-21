@@ -138,7 +138,7 @@ export default function ModalAdicionarEvento({
                   type="button"
                   onClick={() => setTipoEvento(tipo)}
                   className={[
-                    'flex flex-col items-center gap-1 p-2 rounded-md border text-[10px] font-medium transition-all',
+                    'flex flex-col items-center gap-1 p-2 rounded-md border text-xs font-medium transition-all',
                     ativo
                       ? 'text-white border-transparent shadow-sm'
                       : 'border-slate-200 text-slate-600 hover:bg-slate-50',
@@ -155,10 +155,10 @@ export default function ModalAdicionarEvento({
         {/* Período */}
         <div className="grid grid-cols-2 gap-4">
           <div>
-            <label className="block text-xs font-semibold text-slate-700 mb-1.5">
+            <label htmlFor="modaladicionarevento-data-inicio" className="block text-xs font-semibold text-slate-700 mb-1.5">
               Data Início *
             </label>
-            <input
+            <input id="modaladicionarevento-data-inicio" aria-label="Data Início"
               type="date"
               value={dataInicio}
               onChange={(e) => {
@@ -169,8 +169,8 @@ export default function ModalAdicionarEvento({
             />
           </div>
           <div>
-            <label className="block text-xs font-semibold text-slate-700 mb-1.5">Data Fim *</label>
-            <input
+            <label htmlFor="modaladicionarevento-data-fim" className="block text-xs font-semibold text-slate-700 mb-1.5">Data Fim *</label>
+            <input id="modaladicionarevento-data-fim" aria-label="Data Fim"
               type="date"
               value={dataFim}
               onChange={(e) => setDataFim(e.target.value)}
@@ -205,10 +205,10 @@ export default function ModalAdicionarEvento({
         {/* Local + Aeronave */}
         <div className="grid grid-cols-2 gap-4">
           <div>
-            <label className="block text-xs font-semibold text-slate-700 mb-1.5">
+            <label htmlFor="modaladicionarevento-local-opcional" className="block text-xs font-semibold text-slate-700 mb-1.5">
               Local (opcional)
             </label>
-            <input
+            <input id="modaladicionarevento-local-opcional" aria-label="Local (opcional)"
               type="text"
               value={local}
               onChange={(e) => setLocal(e.target.value)}
@@ -216,10 +216,10 @@ export default function ModalAdicionarEvento({
             />
           </div>
           <div>
-            <label className="block text-xs font-semibold text-slate-700 mb-1.5">
+            <label htmlFor="modaladicionarevento-aeronave-opcional" className="block text-xs font-semibold text-slate-700 mb-1.5">
               Aeronave (opcional)
             </label>
-            <input
+            <input id="modaladicionarevento-aeronave-opcional" aria-label="Aeronave (opcional)"
               type="text"
               value={aeronave}
               onChange={(e) => setAeronave(e.target.value)}
@@ -231,8 +231,8 @@ export default function ModalAdicionarEvento({
         {/* INT-05: Simulador selector (when type is treinamento_simulador) */}
         {tipoEvento === 'treinamento_simulador' && simuladores.length > 0 && (
           <div>
-            <label className="block text-xs font-semibold text-slate-700 mb-1.5">Simulador</label>
-            <select
+            <label htmlFor="modaladicionarevento-simulador" className="block text-xs font-semibold text-slate-700 mb-1.5">Simulador</label>
+            <select id="modaladicionarevento-simulador" aria-label="Simulador"
               value={simuladorId}
               onChange={(e) => setSimuladorId(e.target.value)}
               className={INP}
@@ -249,10 +249,10 @@ export default function ModalAdicionarEvento({
 
         {/* Observações */}
         <div>
-          <label className="block text-xs font-semibold text-slate-700 mb-1.5">
+          <label htmlFor="modaladicionarevento-observacoes-opcional" className="block text-xs font-semibold text-slate-700 mb-1.5">
             Observações (opcional)
           </label>
-          <textarea
+          <textarea id="modaladicionarevento-observacoes-opcional" aria-label="Observações (opcional)"
             value={observacoes}
             onChange={(e) => setObservacoes(e.target.value)}
             rows={2}

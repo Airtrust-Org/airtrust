@@ -62,7 +62,7 @@ export default function AbaHistorico({ funcionarioId }: any) {
 
   return (
     <div className="bg-white rounded-lg border p-6">
-      <h3 className="text-lg font-semibold mb-6">📜 Timeline de Eventos</h3>
+      <h3 className="text-lg font-semibold mb-6"><span aria-hidden="true">📜</span> Timeline de Eventos</h3>
 
       <div className="relative">
         {/* Linha vertical */}

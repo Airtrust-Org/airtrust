@@ -16,6 +16,7 @@ import {
   buildFichaAvaliacaoScaleHtml,
   getFichaAvaliacaoScaleCss,
 } from '@/react-app/lib/simuladores/avaliacaoScale';
+import { ModalOverlay } from '@/react-app/components/modals/ModalOverlay';
 
 interface PDFData {
   ficha: any;
@@ -341,10 +342,10 @@ export const PDFGeneratorNativo: React.FC<PDFGeneratorProps> = ({ fichaUuid, onP
         <table class="manobras-table">
             <thead>
                 <tr>
-                    <th style="width: 50%;">MANOBRA / PROCEDIMENTO</th>
-                    <th style="width: 15%;">NOTA</th>
-                    <th style="width: 15%;">STATUS</th>
-                    <th style="width: 20%;">OBSERVAÇÕES</th>
+                    <th scope="col" style="width: 50%;">MANOBRA / PROCEDIMENTO</th>
+                    <th scope="col" style="width: 15%;">NOTA</th>
+                    <th scope="col" style="width: 15%;">STATUS</th>
+                    <th scope="col" style="width: 20%;">OBSERVAÇÕES</th>
                 </tr>
             </thead>
             <tbody>
@@ -495,11 +496,11 @@ export const PDFGeneratorNativo: React.FC<PDFGeneratorProps> = ({ fichaUuid, onP
             
             instrucoesModal.innerHTML = DOMPurify.sanitize(`
               <h3 style="color: #dc2626; margin-bottom: 15px; font-size: 18px;">
-                ✅ PDF Gerado com Sucesso!
+                <span aria-hidden="true">✅</span> PDF Gerado com Sucesso!
               </h3>
               <div style="background: #f3f4f6; padding: 15px; border-radius: 8px; margin-bottom: 15px;">
                 <p style="margin-bottom: 10px; font-weight: bold;">
-                  📄 Como salvar o PDF:
+                  <span aria-hidden="true">📄</span> Como salvar o PDF:
                 </p>
                 <ol style="text-align: left; line-height: 1.6; margin-left: 20px;">
                   <li>Na janela que abriu, vá em <strong>"Destino"</strong></li>
@@ -517,7 +518,7 @@ export const PDFGeneratorNativo: React.FC<PDFGeneratorProps> = ({ fichaUuid, onP
                 cursor: pointer;
                 font-size: 14px;
                 font-weight: bold;
-              ">Entendi ✓</button>
+              ">Entendi <span aria-hidden="true">✓</span></button>
             `);
             
             document.body.appendChild(instrucoesModal);
@@ -567,7 +568,7 @@ export const PDFGeneratorNativo: React.FC<PDFGeneratorProps> = ({ fichaUuid, onP
       </div>
 
       {showPreview && pdfData && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+        <ModalOverlay className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg max-w-4xl max-h-[90vh] overflow-auto p-6">
             <div className="flex justify-between items-center mb-4">
               <h3 className="text-lg font-bold">Preview da Ficha</h3>
@@ -585,7 +586,7 @@ export const PDFGeneratorNativo: React.FC<PDFGeneratorProps> = ({ fichaUuid, onP
               style={{ transform: 'scale(0.8)', transformOrigin: 'top left' }}
             />
           </div>
-        </div>
+        </ModalOverlay>
       )}
     </div>
   );

@@ -3,6 +3,7 @@ import { toast } from 'sonner';
 
 import { API_BASE_URL } from '@/react-app/config/api';
 import { X } from 'lucide-react';
+import { ModalOverlay } from '@/react-app/components/modals/ModalOverlay';
 
 interface Props {
   isOpen: boolean;
@@ -62,21 +63,21 @@ export function ModalNovaCategoria({ isOpen, onClose, onSave, categoria }: Props
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-modal">
+    <ModalOverlay className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-modal">
       <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
         <div className="flex justify-between items-center p-6 border-b">
           <h2 className="text-xl font-bold">
             {categoria?.id ? 'Editar Categoria' : 'Nova Categoria'}
           </h2>
-          <button onClick={onClose} className="text-gray-500 hover:text-gray-700">
+          <button aria-label="Fechar" type="button" onClick={onClose} className="text-gray-500 hover:text-gray-700">
             <X className="h-5 w-5" />
           </button>
         </div>
 
         <form onSubmit={handleSubmit} className="p-6 space-y-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Nome *</label>
-            <input
+            <label htmlFor="modalnovacategoria-nome" className="block text-sm font-medium text-gray-700 mb-1">Nome *</label>
+            <input id="modalnovacategoria-nome" aria-label="Nome"
               type="text"
               value={form.nome}
               onChange={(e) => setForm({ ...form, nome: e.target.value })}
@@ -86,8 +87,8 @@ export function ModalNovaCategoria({ isOpen, onClose, onSave, categoria }: Props
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Código *</label>
-            <input
+            <label htmlFor="modalnovacategoria-codigo" className="block text-sm font-medium text-gray-700 mb-1">Código *</label>
+            <input id="modalnovacategoria-codigo" aria-label="Código"
               type="text"
               value={form.codigo}
               onChange={(e) => setForm({ ...form, codigo: e.target.value })}
@@ -97,8 +98,8 @@ export function ModalNovaCategoria({ isOpen, onClose, onSave, categoria }: Props
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Descrição</label>
-            <textarea
+            <label htmlFor="modalnovacategoria-descricao" className="block text-sm font-medium text-gray-700 mb-1">Descrição</label>
+            <textarea id="modalnovacategoria-descricao" aria-label="Descrição"
               value={form.descricao}
               onChange={(e) => setForm({ ...form, descricao: e.target.value })}
               rows={3}
@@ -107,9 +108,9 @@ export function ModalNovaCategoria({ isOpen, onClose, onSave, categoria }: Props
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Cor</label>
+            <label htmlFor="modalnovacategoria-cor" className="block text-sm font-medium text-gray-700 mb-1">Cor</label>
             <div className="flex gap-2">
-              <input
+              <input id="modalnovacategoria-cor" aria-label="Cor"
                 type="color"
                 value={form.cor}
                 onChange={(e) => setForm({ ...form, cor: e.target.value })}
@@ -155,6 +156,6 @@ export function ModalNovaCategoria({ isOpen, onClose, onSave, categoria }: Props
           </div>
         </form>
       </div>
-    </div>
+    </ModalOverlay>
   );
 }

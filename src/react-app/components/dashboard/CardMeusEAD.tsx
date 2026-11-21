@@ -420,7 +420,7 @@ export function CardMeusEAD({ showOpenPageLink = true }: { showOpenPageLink?: bo
                 >
                   <Icon className="h-4 w-4 shrink-0" aria-hidden="true" />
                   <span className="leading-tight">{label}</span>
-                  <span className={`rounded-full px-1.5 py-0.5 text-[11px] tabular-nums ${
+                  <span className={`rounded-full px-1.5 py-0.5 text-xs tabular-nums ${
                     abaAtiva === id ? 'bg-sky-100 text-sky-800 dark:bg-sky-900/50 dark:text-sky-200' : 'bg-slate-200 text-slate-600 dark:bg-slate-600 dark:text-slate-100'
                   }`}>{count}</span>
                 </button>

@@ -325,7 +325,7 @@ export const GlobalTable: React.FC<GlobalTableProps> = ({
           <thead>
             <tr className="border-b border-neutral-200 bg-neutral-50">
               {columns.map((column) => (
-                <th
+                <th scope="col"
                   key={column.key}
                   className={`px-6 py-3 text-left text-xs font-semibold text-neutral-700 uppercase tracking-wider whitespace-nowrap ${
                     column.sortable ? 'hover:bg-neutral-100 transition-colors' : ''
@@ -365,7 +365,7 @@ export const GlobalTable: React.FC<GlobalTableProps> = ({
               const rowStyles = rowStatus ? statusStyles[rowStyleKey] : null;
 
               return (
-                <tr
+                <tr tabIndex={0} onKeyDown={(e) => { if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); e.currentTarget.click(); } }}
                   key={`${String(item[idKey] || index)}`}
                   className={`hover:bg-neutral-50 transition-colors ${
                     rowStyles ? `${rowStyles.background} ${rowStyles.border}` : ''

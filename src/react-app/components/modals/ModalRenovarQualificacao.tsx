@@ -4,6 +4,7 @@ import { parseISO, format, isValid } from 'date-fns';
 import { API_BASE_URL, getAccessToken } from '@/react-app/config/api';
 import { converterParaFormatoHTML, getDataHojeHTML, validarData } from '@/react-app/utils/dateUtils';
 import { emitirEventoModulo } from '@/react-app/lib/moduloBus';
+import { ModalOverlay } from '@/react-app/components/modals/ModalOverlay';
 
 interface ModalRenovarQualificacaoProps {
   isOpen: boolean;
@@ -157,7 +158,7 @@ export function ModalRenovarQualificacao({
   };
 
   return (
-    <div className="fixed inset-0 z-modal flex items-center justify-center bg-black/50 p-4">
+    <ModalOverlay className="fixed inset-0 z-modal flex items-center justify-center bg-black/50 p-4">
       <div className="bg-white rounded-lg shadow-xl w-full max-w-md max-h-[calc(100dvh-2rem)] overflow-hidden flex flex-col">
         <div className="flex items-center justify-between p-6 border-b flex-shrink-0">
           <div className="flex items-center gap-3">
@@ -208,12 +209,12 @@ export function ModalRenovarQualificacao({
             </div>
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
+            <label htmlFor="modalrenovarqualificacao-nova-data-de-conclusao-realizacao" className="block text-sm font-medium text-gray-700 mb-2">
               Nova Data de Conclusão/Realização *
             </label>
             <div className="relative">
               <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-              <input
+              <input id="modalrenovarqualificacao-nova-data-de-conclusao-realizacao" aria-label="Nova Data de Conclusão/Realização"
                 type="date"
                 value={inputNovaDataConclusao}
                 onChange={(e) => setNovaDataConclusao(converterParaFormatoHTML(e.target.value))}
@@ -236,8 +237,8 @@ export function ModalRenovarQualificacao({
             </p>
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Observações</label>
-            <textarea
+            <label htmlFor="modalrenovarqualificacao-observacoes" className="block text-sm font-medium text-gray-700 mb-2">Observações</label>
+            <textarea id="modalrenovarqualificacao-observacoes" aria-label="Observações"
               value={observacao}
               onChange={(e) => setObservacao(e.target.value)}
               disabled={salvando}
@@ -276,6 +277,6 @@ export function ModalRenovarQualificacao({
           </div>
         </div>
       </div>
-    </div>
+    </ModalOverlay>
   );
 }

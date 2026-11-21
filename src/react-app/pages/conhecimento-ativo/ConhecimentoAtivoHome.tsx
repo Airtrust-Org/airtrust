@@ -325,7 +325,7 @@ export default function ConhecimentoAtivoHome() {
                             <h4 className="text-sm font-semibold text-slate-900">
                               Revisão inteligente
                             </h4>
-                            <span className="rounded-full bg-indigo-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-indigo-700">
+                            <span className="rounded-full bg-indigo-100 px-2 py-0.5 text-xs font-semibold uppercase tracking-wide text-indigo-700">
                               diversos sistemas
                             </span>
                           </div>
@@ -425,7 +425,7 @@ export default function ConhecimentoAtivoHome() {
                                       {topico.nome}
                                     </h4>
                                     {index === 0 && topico.prioridade_revisao > 0 ? (
-                                      <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-semibold text-amber-700">
+                                      <span className="rounded-full bg-amber-50 px-2 py-0.5 text-xs font-semibold text-amber-700">
                                         maior prioridade
                                       </span>
                                     ) : null}
@@ -448,7 +448,7 @@ export default function ConhecimentoAtivoHome() {
                                   style={{ width: `${cobertura}%` }}
                                 />
                               </div>
-                              <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-slate-500">
+                              <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-500">
                                 <span>
                                   {topico.retencao_media == null
                                     ? 'retenção: sem histórico'

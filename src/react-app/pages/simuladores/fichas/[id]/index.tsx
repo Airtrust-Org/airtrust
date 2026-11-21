@@ -20,7 +20,7 @@ import { toast } from 'sonner';
 import { useParams, useSearchParams, useNavigate } from 'react-router-dom';
 import { API_BASE_URL, getAccessToken } from '@/react-app/config/api';
 import { appFetch } from '@/react-app/lib/app-fetch';
-import { confirmDialog } from '@/react-app/utils/confirmDialog';
+import { confirmDialog, showAlertDialog } from '@/react-app/utils/confirmDialog';
 import { useAuth } from '@/react-app/hooks/useAuth';
 import {
   deveGerarQualificacaoAoAssinar,
@@ -61,6 +61,7 @@ import AssinaturaModal from '@/react-app/components/AssinaturaModal';
 import ModalNotechsReferencia from '../components/ModalNotechsReferencia';
 import { NOTECHS_ORDEM_BASE, splitManobrasNotechs } from '../../../../lib/simuladores/notechs';
 import { NOTECHS_SCORE_OPTIONS, notechsHistoryIdentity } from '@/shared/simuladores/notechs-scoring';
+import { ModalOverlay } from '@/react-app/components/modals/ModalOverlay';
 
 interface ManobraAvaliacao {
   id: number;
@@ -630,9 +631,7 @@ export default function FichaDetalhe() {
         .slice(0, 8)
         .map((manobra) => `${manobra.ordem} - ${manobra.nome || manobra.descricao}`)
         .join('\n');
-      window.alert(
-        `Preencha todas as manobras com uma nota ou NR antes de salvar.\n\nFaltando:\n${mensagem}${manobrasPendentes.length > 8 ? '\n...' : ''}`,
-      );
+      showAlertDialog(`Preencha todas as manobras com uma nota ou NR antes de salvar.\n\nFaltando:\n${mensagem}${manobrasPendentes.length > 8 ? '\n...' : ''}`);
       toast.error('Há manobras sem avaliação. Preencha com nota ou NR antes de salvar.');
       return;
     }
@@ -680,9 +679,7 @@ export default function FichaDetalhe() {
                 `${manobra.ordem} - ${manobra.descricao}`,
             )
             .join('\n');
-          window.alert(
-            `Preencha todas as manobras com uma nota ou NR antes de salvar.\n\nFaltando:\n${mensagem}${missingManobras.length > 8 ? '\n...' : ''}`,
-          );
+          showAlertDialog(`Preencha todas as manobras com uma nota ou NR antes de salvar.\n\nFaltando:\n${mensagem}${missingManobras.length > 8 ? '\n...' : ''}`);
         }
         toast.error(error?.error || 'Erro ao salvar ficha');
       }
@@ -1480,7 +1477,7 @@ export default function FichaDetalhe() {
                             : ''}
                         </span>
                         {confirmed && (
-                          <span className="ml-auto inline-flex items-center rounded border border-slate-200 bg-slate-50 px-2 py-0.5 text-[11px] font-medium text-slate-600">
+                          <span className="ml-auto inline-flex items-center rounded border border-slate-200 bg-slate-50 px-2 py-0.5 text-xs font-medium text-slate-600">
                             Evidência imutável
                           </span>
                         )}
@@ -1780,7 +1777,7 @@ export default function FichaDetalhe() {
                             </div>
                             {!specialDefinition?.hideTripulanteBadge ? (
                               <span
-                                className={`shrink-0 text-[10px] font-bold px-1.5 py-0.5 rounded border ${
+                                className={`shrink-0 text-xs font-bold px-1.5 py-0.5 rounded border ${
                                   manobra.tripulante === 'A'
                                     ? 'bg-blue-100 text-blue-700 border-blue-300'
                                     : manobra.tripulante === 'B'
@@ -1850,7 +1847,7 @@ export default function FichaDetalhe() {
                           ) : null}
                         </div>
                         <span
-                          className={`shrink-0 text-[10px] font-bold px-1.5 py-0.5 rounded border ${
+                          className={`shrink-0 text-xs font-bold px-1.5 py-0.5 rounded border ${
                             manobra.tripulante === 'A'
                               ? 'bg-blue-100 text-blue-700 border-blue-300'
                               : manobra.tripulante === 'B'
@@ -1918,7 +1915,7 @@ export default function FichaDetalhe() {
                           ) : null}
                         </div>
                         <span
-                          className={`shrink-0 text-[10px] font-bold px-1.5 py-0.5 rounded border ${
+                          className={`shrink-0 text-xs font-bold px-1.5 py-0.5 rounded border ${
                             manobra.tripulante === 'A'
                               ? 'bg-blue-100 text-blue-700 border-blue-300'
                               : manobra.tripulante === 'B'
@@ -2099,7 +2096,7 @@ export default function FichaDetalhe() {
               {/* Observações Gerais */}
               <h3 className="text-lg font-bold text-slate-900 mb-3">Observações Gerais</h3>
               {isEditMode ? (
-                <textarea
+                <textarea aria-label="Adicione observações sobre a sessão de simulador..."
                   value={ficha.observacoes_gerais || ''}
                   onChange={(e) => setFicha({ ...ficha, observacoes_gerais: e.target.value })}
                   rows={4}
@@ -2197,7 +2194,7 @@ export default function FichaDetalhe() {
                                   </p>
                                   <div className="mt-2 grid gap-2 md:grid-cols-2">
                                     <div className="rounded border border-rose-100 bg-rose-50 p-2">
-                                      <p className="mb-1 text-[11px] font-semibold text-rose-700">
+                                      <p className="mb-1 text-xs font-semibold text-rose-700">
                                         Antes
                                       </p>
                                       <p className="whitespace-pre-wrap text-xs text-slate-700">
@@ -2205,7 +2202,7 @@ export default function FichaDetalhe() {
                                       </p>
                                     </div>
                                     <div className="rounded border border-emerald-100 bg-emerald-50 p-2">
-                                      <p className="mb-1 text-[11px] font-semibold text-emerald-700">
+                                      <p className="mb-1 text-xs font-semibold text-emerald-700">
                                         Depois
                                       </p>
                                       <p className="whitespace-pre-wrap text-xs text-slate-700">
@@ -2259,7 +2256,7 @@ export default function FichaDetalhe() {
 
                             {usuarioGestor && pendente && (
                               <div className="mt-4 border-t border-slate-200 pt-4">
-                                <textarea
+                                <textarea aria-label="Observações da decisão (opcional)"
                                   value={decisaoEdicao[edicao.id] || ''}
                                   onChange={(event) =>
                                     setDecisaoEdicao((prev) => ({
@@ -2335,7 +2332,7 @@ export default function FichaDetalhe() {
                               className="h-full w-full object-contain"
                             />
                           ) : (
-                            <span className="text-xs text-slate-500">✓ Assinado digitalmente</span>
+                            <span className="text-xs text-slate-500"><span aria-hidden="true">✓</span> Assinado digitalmente</span>
                           )}
                         </div>
                         <p className="text-xs text-slate-600">
@@ -2393,7 +2390,7 @@ export default function FichaDetalhe() {
                               className="h-full w-full object-contain"
                             />
                           ) : (
-                            <span className="text-xs text-slate-500">✓ Assinado digitalmente</span>
+                            <span className="text-xs text-slate-500"><span aria-hidden="true">✓</span> Assinado digitalmente</span>
                           )}
                         </div>
                         <p className="text-xs text-slate-600">
@@ -2537,7 +2534,7 @@ export default function FichaDetalhe() {
                             onChange={() => setAprovadoInline(true)}
                             className="w-4 h-4 text-green-600 border-slate-300 focus:ring-green-500"
                           />
-                          <span className="text-sm font-medium text-green-700">✓ APROVADA</span>
+                          <span className="text-sm font-medium text-green-700"><span aria-hidden="true">✓</span> APROVADA</span>
                         </label>
                         <label className="flex items-center gap-2 cursor-pointer">
                           <input
@@ -2547,7 +2544,7 @@ export default function FichaDetalhe() {
                             onChange={() => setAprovadoInline(false)}
                             className="w-4 h-4 text-red-600 border-slate-300 focus:ring-red-500"
                           />
-                          <span className="text-sm font-medium text-red-700">✗ NÃO APROVADA</span>
+                          <span className="text-sm font-medium text-red-700"><span aria-hidden="true">✗</span> NÃO APROVADA</span>
                         </label>
                       </div>
                     </div>
@@ -2599,7 +2596,7 @@ export default function FichaDetalhe() {
                                   className="w-4 h-4 text-green-600 border-slate-300 focus:ring-green-500"
                                 />
                                 <span className="text-sm font-medium text-green-700">
-                                  ✓ Aprovado
+                                  <span aria-hidden="true">✓</span> Aprovado
                                 </span>
                               </label>
 
@@ -2620,12 +2617,12 @@ export default function FichaDetalhe() {
                                   className="w-4 h-4 text-red-600 border-slate-300 focus:ring-red-500"
                                 />
                                 <span className="text-sm font-medium text-red-700">
-                                  ✗ Reprovado
+                                  <span aria-hidden="true">✗</span> Reprovado
                                 </span>
                               </label>
                             </div>
 
-                            <textarea
+                            <textarea aria-label="Observações sobre este check (opcional)"
                               value={checksResultados[check.id]?.observacoes ?? ''}
                               onChange={(e) =>
                                 setChecksResultados((prev) => ({
@@ -2952,7 +2949,7 @@ export default function FichaDetalhe() {
         )}
 
         {modalSolicitarEdicao && ficha && (
-          <div className="fixed inset-0 z-modal flex items-center justify-center bg-slate-900/50 p-4">
+          <ModalOverlay className="fixed inset-0 z-modal flex items-center justify-center bg-slate-900/50 p-4">
             <div className="max-h-[90vh] w-full max-w-5xl overflow-hidden rounded-2xl bg-white shadow-2xl">
               <div className="border-b border-slate-200 px-6 py-4">
                 <div className="flex items-start justify-between gap-4">
@@ -2965,7 +2962,7 @@ export default function FichaDetalhe() {
                       assinaturas não serão alterados.
                     </p>
                   </div>
-                  <button
+                  <button aria-label="Fechar"
                     onClick={() => setModalSolicitarEdicao(false)}
                     disabled={enviandoEdicao}
                     className="rounded-lg p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
@@ -2982,10 +2979,10 @@ export default function FichaDetalhe() {
                 </div>
 
                 <div className="mb-5">
-                  <label className="mb-2 block text-sm font-semibold text-slate-900">
+                  <label htmlFor="index-motivo-da-solicitacao" className="mb-2 block text-sm font-semibold text-slate-900">
                     Motivo da solicitação
                   </label>
-                  <textarea
+                  <textarea id="index-motivo-da-solicitacao" aria-label="Motivo da solicitação"
                     value={motivoEdicao}
                     onChange={(event) => setMotivoEdicao(event.target.value)}
                     rows={3}
@@ -2995,10 +2992,10 @@ export default function FichaDetalhe() {
                 </div>
 
                 <div className="mb-5">
-                  <label className="mb-2 block text-sm font-semibold text-slate-900">
+                  <label htmlFor="index-observacoes-gerais" className="mb-2 block text-sm font-semibold text-slate-900">
                     Observações gerais
                   </label>
-                  <textarea
+                  <textarea id="index-observacoes-gerais" aria-label="Observações gerais"
                     value={observacoesGeraisEdicao}
                     onChange={(event) => setObservacoesGeraisEdicao(event.target.value)}
                     rows={4}
@@ -3026,7 +3023,7 @@ export default function FichaDetalhe() {
                             {manobra.tripulante || 'AB'}
                           </span>
                         </div>
-                        <textarea
+                        <textarea aria-label="Observações desta manobra"
                           value={observacoesManobrasEdicao[manobra.id] || ''}
                           onChange={(event) =>
                             setObservacoesManobrasEdicao((prev) => ({
@@ -3062,7 +3059,7 @@ export default function FichaDetalhe() {
                 </button>
               </div>
             </div>
-          </div>
+          </ModalOverlay>
         )}
 
         {/* Modal de Assinatura */}
@@ -3126,7 +3123,7 @@ export default function FichaDetalhe() {
                           }}
                           className="w-4 h-4 text-green-600 border-slate-300 focus:ring-green-500"
                         />
-                        <span className="text-sm font-medium text-green-700">✓ Aprovado</span>
+                        <span className="text-sm font-medium text-green-700"><span aria-hidden="true">✓</span> Aprovado</span>
                       </label>
 
                       <label className="flex items-center gap-2 cursor-pointer">
@@ -3146,12 +3143,12 @@ export default function FichaDetalhe() {
                           }}
                           className="w-4 h-4 text-red-600 border-slate-300 focus:ring-red-500"
                         />
-                        <span className="text-sm font-medium text-red-700">✗ Reprovado</span>
+                        <span className="text-sm font-medium text-red-700"><span aria-hidden="true">✗</span> Reprovado</span>
                       </label>
                     </div>
 
                     {/* Campo de Observações */}
-                    <textarea
+                    <textarea aria-label="Observações sobre este check (opcional)"
                       value={checksResultados[check.id]?.observacoes ?? ''}
                       onChange={(e) =>
                         setChecksResultados((prev) => ({

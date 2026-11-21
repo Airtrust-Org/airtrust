@@ -20,6 +20,7 @@ import { usePermissions } from '@/react-app/hooks/usePermissions';
 import { apiClient } from '@/react-app/services/apiClient';
 import ControleVoosPageShell from './components/ControleVoosPageShell';
 import ControleVoosPageHeader from './components/ControleVoosPageHeader';
+import { confirmDialog } from '@/react-app/utils/confirmDialog';
 
 type CatalogName = 'pontos' | 'aeroportos' | 'tipos' | 'naturezas' | 'motivos' | 'empresas-abastecimento' | 'contratos' | 'funcoes-bordo' | 'justificativas';
 type CatalogItem = {
@@ -278,7 +279,7 @@ export default function ControleVoosTabelas() {
   async function deleteFlightType(item: CatalogItem) {
     if (!canManage || activeCatalog !== 'tipos') return;
     const label = item.nome || item.codigo || `#${item.id}`;
-    if (!window.confirm(`Excluir o tipo de voo "${label}"? Esta ação só será permitida se ele não estiver em uso por nenhum voo.`)) return;
+    if (!(await confirmDialog(`Excluir o tipo de voo "${label}"? Esta ação só será permitida se ele não estiver em uso por nenhum voo.`, { confirmText: 'Excluir' }))) return;
     setError(null);
     try {
       await apiClient.delete(`/controle-voos/catalogos/tipos/${item.id}`);
@@ -383,7 +384,7 @@ export default function ControleVoosTabelas() {
 
             {activeCatalog === 'pontos' && !loading && (
               <div className="border-b border-slate-200 px-4 py-3 dark:border-slate-700">
-                <input
+                <input aria-label="Buscar por código, código ICAO, local ou tipo"
                   value={pontoSearch}
                   onChange={(event) => setPontoSearch(event.target.value)}
                   placeholder="Buscar por código, código ICAO, local ou tipo"
@@ -404,7 +405,7 @@ export default function ControleVoosTabelas() {
             )}
             {activeCatalog === 'justificativas' && !loading && (
               <div className="border-b border-slate-200 px-4 py-3 dark:border-slate-700">
-                <input
+                <input aria-label="Buscar por código, motivo, categoria ou palavra da descrição"
                   type="search"
                   value={justificationSearch}
                   onChange={(event) => setJustificationSearch(event.target.value)}
@@ -429,20 +430,20 @@ export default function ControleVoosTabelas() {
                 <table className="w-full min-w-[760px] text-sm">
                   <thead className="bg-slate-50 dark:bg-slate-800/70">
                     <tr>
-                      <th className="px-4 py-3 text-left font-medium text-slate-600 dark:text-slate-300">{activeCatalog === 'pontos' ? 'Código' : activeCatalog === 'aeroportos' ? 'Aeródromo' : 'Código'}</th>
+                      <th scope="col" className="px-4 py-3 text-left font-medium text-slate-600 dark:text-slate-300">{activeCatalog === 'pontos' ? 'Código' : activeCatalog === 'aeroportos' ? 'Aeródromo' : 'Código'}</th>
                       {activeCatalog === 'aeroportos' && (
-                        <th className="px-4 py-3 text-left font-medium text-slate-600 dark:text-slate-300">ICAO / IATA</th>
+                        <th scope="col" className="px-4 py-3 text-left font-medium text-slate-600 dark:text-slate-300">ICAO / IATA</th>
                       )}
                       {activeCatalog === 'pontos' && (
-                        <th className="px-4 py-3 text-left font-medium text-slate-600 dark:text-slate-300">Código ICAO</th>
+                        <th scope="col" className="px-4 py-3 text-left font-medium text-slate-600 dark:text-slate-300">Código ICAO</th>
                       )}
                       {activeCatalog === 'pontos' && (
-                        <th className="px-4 py-3 text-left font-medium text-slate-600 dark:text-slate-300">Coordenadas / elevação</th>
+                        <th scope="col" className="px-4 py-3 text-left font-medium text-slate-600 dark:text-slate-300">Coordenadas / elevação</th>
                       )}
-                      <th className="px-4 py-3 text-left font-medium text-slate-600 dark:text-slate-300">{activeCatalog === 'pontos' ? 'Local' : 'Nome'}</th>
-                      <th className="px-4 py-3 text-left font-medium text-slate-600 dark:text-slate-300">{activeCatalog === 'justificativas' ? 'Categoria' : activeCatalog === 'pontos' ? 'Tipo' : 'Tipo / Localidade'}</th>
-                      <th className="px-4 py-3 text-left font-medium text-slate-600 dark:text-slate-300">Status</th>
-                      {canManage && activeCatalog !== 'pontos' && <th className="px-4 py-3 text-right font-medium text-slate-600 dark:text-slate-300">Ações</th>}
+                      <th scope="col" className="px-4 py-3 text-left font-medium text-slate-600 dark:text-slate-300">{activeCatalog === 'pontos' ? 'Local' : 'Nome'}</th>
+                      <th scope="col" className="px-4 py-3 text-left font-medium text-slate-600 dark:text-slate-300">{activeCatalog === 'justificativas' ? 'Categoria' : activeCatalog === 'pontos' ? 'Tipo' : 'Tipo / Localidade'}</th>
+                      <th scope="col" className="px-4 py-3 text-left font-medium text-slate-600 dark:text-slate-300">Status</th>
+                      {canManage && activeCatalog !== 'pontos' && <th scope="col" className="px-4 py-3 text-right font-medium text-slate-600 dark:text-slate-300">Ações</th>}
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 dark:divide-slate-800">

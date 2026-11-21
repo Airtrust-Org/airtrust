@@ -53,6 +53,8 @@ function SortableItem({ manobra }: { manobra: Manobra }) {
       }`}
     >
       <button
+        type="button"
+        aria-label="Reordenar manobra (arraste ou use as setas do teclado)"
         {...attributes}
         {...listeners}
         className="cursor-grab active:cursor-grabbing touch-none"
@@ -281,7 +283,7 @@ export default function ReordenarManobras({ modeloId, modeloNome }: ReordenarMan
       {hasChanges && (
         <div className="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
           <p className="text-sm text-yellow-800">
-            ⚠️ Você tem alterações não salvas. Clique em "Salvar Alterações" para confirmar.
+            <span aria-hidden="true">⚠️</span> Você tem alterações não salvas. Clique em "Salvar Alterações" para confirmar.
           </p>
         </div>
       )}

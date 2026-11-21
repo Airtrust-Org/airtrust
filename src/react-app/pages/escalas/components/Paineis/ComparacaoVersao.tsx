@@ -7,6 +7,7 @@
 import { useMemo } from 'react';
 import { ArrowLeftRight, X, History, Plus, Minus, CheckCircle } from 'lucide-react';
 import type { EscalaEvento, EscalaTripulacao } from '../../hooks/queries/useEscalasQuery';
+import { ModalOverlay } from '@/react-app/components/modals/ModalOverlay';
 
 /** Format ISO date (YYYY-MM-DD) to DD/MM/YYYY */
 function fmtDate(iso: string | undefined): string {
@@ -69,7 +70,7 @@ export default function ComparacaoVersao({
   }, [eventos, tripulacoes, snapshot]);
 
   return (
-    <div className="fixed inset-0 z-modal bg-black/40 flex items-center justify-center p-4">
+    <ModalOverlay className="fixed inset-0 z-modal bg-black/40 flex items-center justify-center p-4">
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[80vh] flex flex-col overflow-hidden">
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
           <div className="flex items-center gap-3">
@@ -87,7 +88,7 @@ export default function ComparacaoVersao({
               </p>
             </div>
           </div>
-          <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-lg">
+          <button aria-label="Fechar" onClick={onClose} className="p-2 hover:bg-gray-100 rounded-lg">
             <X className="w-5 h-5 text-gray-500" />
           </button>
         </div>
@@ -214,6 +215,6 @@ export default function ComparacaoVersao({
           )}
         </div>
       </div>
-    </div>
+    </ModalOverlay>
   );
 }

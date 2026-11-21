@@ -10,6 +10,7 @@ import {ExamPageHeader,examPage,examCard,examInput,examPrimary,examSecondary} fr
 import { useLmsCurso } from '../../../hooks/useLms';
 import { fetchWithAuth } from '../../../config/api';
 import QuestionBankAdmin from './QuestionBankAdmin';
+import { confirmDialog } from '@/react-app/utils/confirmDialog';
 
 type Edition = {
   packageSha256:string;packageVersion:string;status:string;uploadedAt:string;
@@ -140,13 +141,13 @@ export default function LmsExamAdmin():React.ReactElement {
     return()=>{active=false;};
   },[base,validId,packageSha]);
 
-  function goStep(next:1|2|3|4){
-    if(step===2&&bankDirty&&!window.confirm('Há alterações não salvas no banco. Deseja descartá-las?'))return;
+  async function goStep(next:1|2|3|4){
+    if(step===2&&bankDirty&&!(await confirmDialog('Há alterações não salvas no banco. Deseja descartá-las?')))return;
     setStep(next);
   }
-  function changePackage(value:string){
+  async function changePackage(value:string){
     if((bankDirty||Object.keys(selected).length>0||confirmed)&&
-      !window.confirm('Trocar a edição descarta a seleção atual de questões e critérios. Continuar?'))return;
+      !(await confirmDialog('Trocar a edição descarta a seleção atual de questões e critérios. Continuar?')))return;
     setSelected({});setMinimums({});setQuantity({BASICA:'0',INTERMEDIARIA:'0',AVANCADA:'0'});
     setConfirmed(false);setLegal('');setNote('');setBankDirty(false);
     setPackageSha(value);setPublished(null);setConfirmed(false);setMessage('');setError('');

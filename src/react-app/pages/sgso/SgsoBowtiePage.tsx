@@ -452,7 +452,7 @@ export default function SgsoBowtiePage() {
               </div>
               {showCreateForm ? (
                 <div className="mt-4 space-y-4 text-sm text-slate-700">
-                  <input
+                  <input aria-label="Perigo principal"
                     value={form.perigo_titulo}
                     onChange={(event) =>
                       setForm((current) => ({ ...current, perigo_titulo: event.target.value }))
@@ -460,7 +460,7 @@ export default function SgsoBowtiePage() {
                     placeholder="Perigo principal"
                     className="w-full rounded-2xl border border-slate-200 px-4 py-3 outline-none transition focus:border-amber-400"
                   />
-                  <textarea
+                  <textarea aria-label="Descrição do perigo"
                     value={form.perigo_descricao}
                     onChange={(event) =>
                       setForm((current) => ({ ...current, perigo_descricao: event.target.value }))
@@ -469,7 +469,7 @@ export default function SgsoBowtiePage() {
                     placeholder="Descrição do perigo"
                     className="w-full rounded-2xl border border-slate-200 px-4 py-3 outline-none transition focus:border-amber-400"
                   />
-                  <input
+                  <input aria-label="Evento central"
                     value={form.evento_central}
                     onChange={(event) =>
                       setForm((current) => ({ ...current, evento_central: event.target.value }))
@@ -585,7 +585,7 @@ export default function SgsoBowtiePage() {
                         key={`barreira-${index}`}
                         className="rounded-2xl border border-slate-200 p-3"
                       >
-                        <input
+                        <input aria-label="Nome da barreira"
                           value={barreira.nome}
                           onChange={(event) =>
                             setForm((current) => ({
@@ -623,7 +623,7 @@ export default function SgsoBowtiePage() {
                             <option value="PREVENTIVA">Preventiva</option>
                             <option value="RECUPERACAO">Recuperação</option>
                           </select>
-                          <input
+                          <input aria-label="Links: T1, C1"
                             value={barreira.links}
                             onChange={(event) =>
                               setForm((current) => ({

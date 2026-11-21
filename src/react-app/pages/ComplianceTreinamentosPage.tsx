@@ -1016,7 +1016,7 @@ export default function ComplianceTreinamentosPage() {
                           }
                           className="px-3 py-3 text-right"
                         />
-                        <th className="px-3 py-3 text-right font-medium">Alertas</th>
+                        <th scope="col" className="px-3 py-3 text-right font-medium">Alertas</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
@@ -1207,7 +1207,7 @@ export default function ComplianceTreinamentosPage() {
                             }
                             className="px-4 py-3 text-right"
                           />
-                          <th className="px-3 py-3 text-right font-medium">Alertas</th>
+                          <th scope="col" className="px-3 py-3 text-right font-medium">Alertas</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-100">
@@ -1384,7 +1384,7 @@ export default function ComplianceTreinamentosPage() {
                           }
                           className="px-4 py-3 text-right"
                         />
-                        <th className="px-3 py-3 text-right font-medium">Alertas</th>
+                        <th scope="col" className="px-3 py-3 text-right font-medium">Alertas</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">

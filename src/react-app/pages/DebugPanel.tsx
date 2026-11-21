@@ -185,14 +185,14 @@ export default function DebugPanel() {
       {/* Header */}
       <div className="bg-gray-800 border-b border-gray-700 p-3 flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <h3 className="font-bold">🔧 Debug Panel</h3>
+          <h3 className="font-bold"><span aria-hidden="true">🔧</span> Debug Panel</h3>
           <span className="text-xs bg-gray-700 px-2 py-1 rounded">
             {connectionStatus === 'connected' ? (
-              <span className="text-green-400">✓ Connected</span>
+              <span className="text-green-400"><span aria-hidden="true">✓</span> Connected</span>
             ) : connectionStatus === 'checking' ? (
               <span className="text-yellow-400">⏳ Checking...</span>
             ) : (
-              <span className="text-red-400">✗ Error</span>
+              <span className="text-red-400"><span aria-hidden="true">✗</span> Error</span>
             )}
           </span>
         </div>

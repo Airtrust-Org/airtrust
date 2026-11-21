@@ -176,7 +176,7 @@ export function DataTable({
         <thead>
           <tr className="border-b border-neutral-200 bg-neutral-50">
             {columns.map((column) => (
-              <th
+              <th scope="col"
                 key={column.key}
                 className={`px-6 py-3 text-left text-sm font-semibold text-neutral-900 ${
                   column.sortable ? 'hover:bg-neutral-100' : ''
@@ -207,7 +207,7 @@ export function DataTable({
               </th>
             ))}
             {showActions && (
-              <th className="px-6 py-3 text-left text-sm font-semibold text-neutral-900">Ações</th>
+              <th scope="col" className="px-6 py-3 text-left text-sm font-semibold text-neutral-900">Ações</th>
             )}
           </tr>
         </thead>

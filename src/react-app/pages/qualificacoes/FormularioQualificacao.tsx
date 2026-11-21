@@ -232,8 +232,8 @@ const FormularioQualificacao = ({
     <form onSubmit={handleSubmit} className="space-y-4">
       {/* Tipo */}
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-2">Tipo *</label>
-        <select
+        <label htmlFor="formularioqualificacao-tipo" className="block text-sm font-medium text-gray-700 mb-2">Tipo *</label>
+        <select id="formularioqualificacao-tipo" aria-label="Tipo"
           name="tipo"
           value={formData.tipo}
           onChange={handleChange}
@@ -256,8 +256,8 @@ const FormularioQualificacao = ({
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Categoria *</label>
-          <select
+          <label htmlFor="formularioqualificacao-categoria" className="block text-sm font-medium text-gray-700 mb-1">Categoria *</label>
+          <select id="formularioqualificacao-categoria" aria-label="Categoria"
             name="categoria"
             value={formData.categoria}
             onChange={handleChange}
@@ -274,8 +274,8 @@ const FormularioQualificacao = ({
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Data Conclusão *</label>
-          <input
+          <label htmlFor="formularioqualificacao-data-conclusao" className="block text-sm font-medium text-gray-700 mb-1">Data Conclusão *</label>
+          <input id="formularioqualificacao-data-conclusao" aria-label="Data Conclusão"
             type="date"
             name="data_conclusao"
             value={formData.data_conclusao}
@@ -289,10 +289,10 @@ const FormularioQualificacao = ({
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
+          <label htmlFor="formularioqualificacao-data-vencimento-automatica" className="block text-sm font-medium text-gray-700 mb-1">
             Data Vencimento (automática)
           </label>
-          <input
+          <input id="formularioqualificacao-data-vencimento-automatica" aria-label="Data Vencimento (automática)"
             type="date"
             name="data_vencimento"
             value={formData.data_vencimento}
@@ -305,7 +305,7 @@ const FormularioQualificacao = ({
         </div>
 
         <div className="mt-6">
-          <label className="block text-sm font-medium text-gray-700 mb-2">Anexar Certificado</label>
+          <label htmlFor="certificado-upload" className="block text-sm font-medium text-gray-700 mb-2">Anexar Certificado</label>
 
           <div
             className={`border-2 border-dashed rounded-lg p-6 text-center transition-colors ${
@@ -339,7 +339,7 @@ const FormularioQualificacao = ({
                       </p>
                     </div>
                   </div>
-                  <button
+                  <button aria-label="Fechar"
                     type="button"
                     onClick={(e) => {
                       e.stopPropagation();
@@ -405,8 +405,8 @@ const FormularioQualificacao = ({
         </div>
 
         <div className="col-span-2">
-          <label className="block text-sm font-medium text-gray-700 mb-1">Observações</label>
-          <textarea
+          <label htmlFor="formularioqualificacao-observacoes" className="block text-sm font-medium text-gray-700 mb-1">Observações</label>
+          <textarea id="formularioqualificacao-observacoes" aria-label="Observações"
             name="observacoes"
             value={formData.observacoes}
             onChange={handleChange}

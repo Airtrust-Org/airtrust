@@ -3,6 +3,7 @@ import { Upload, Download, X, AlertCircle, CheckCircle } from 'lucide-react';
 import Papa from 'papaparse';
 import { showToast } from '../utils/toast';
 import { API_BASE_URL } from '@/react-app/config/api';
+import { ModalOverlay } from '@/react-app/components/modals/ModalOverlay';
 
 interface ImportarFuncionariosCSVModalProps {
   isOpen: boolean;
@@ -276,11 +277,11 @@ export default function ImportarFuncionariosCSVModal({
   const templateUrl = `${API_BASE_URL}/templates/funcionarios.csv`;
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+    <ModalOverlay className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
       <div className="bg-white rounded-lg p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
         <div className="flex justify-between items-center mb-6">
           <h2 className="text-2xl font-bold text-gray-900">Importar Funcionários</h2>
-          <button
+          <button aria-label="Fechar"
             onClick={handleClose}
             className="text-gray-400 hover:text-gray-600 transition-colors"
           >
@@ -309,7 +310,7 @@ export default function ImportarFuncionariosCSVModal({
         </div>
 
         <div className="mb-6">
-          <label className="block text-sm font-medium text-gray-700 mb-2">
+          <label htmlFor="csv-upload-funcs" className="block text-sm font-medium text-gray-700 mb-2">
             Selecione o arquivo CSV
           </label>
           <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-primary transition-colors">
@@ -364,12 +365,12 @@ export default function ImportarFuncionariosCSVModal({
                   Erros Encontrados:
                 </p>
                 <div className="max-h-40 overflow-y-auto">
-                  <table className="w-full text-xs">
+                  <div className="overflow-x-auto"><table className="w-full text-xs">
                     <thead className="border-b border-red-300">
                       <tr>
-                        <th className="text-left p-1">Linha</th>
-                        <th className="text-left p-1">Campo</th>
-                        <th className="text-left p-1">Erro</th>
+                        <th scope="col" className="text-left p-1">Linha</th>
+                        <th scope="col" className="text-left p-1">Campo</th>
+                        <th scope="col" className="text-left p-1">Erro</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -388,7 +389,7 @@ export default function ImportarFuncionariosCSVModal({
                         </tr>
                       )}
                     </tbody>
-                  </table>
+                  </table></div>
                 </div>
               </div>
             )}
@@ -462,6 +463,6 @@ export default function ImportarFuncionariosCSVModal({
           </button>
         </div>
       </div>
-    </div>
+    </ModalOverlay>
   );
 }

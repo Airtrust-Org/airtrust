@@ -42,7 +42,7 @@ export default function TabelaFuncionarios({
       <div className="flex items-center justify-between">
         <div className="relative w-72">
           <Search className="absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
-          <input
+          <input aria-label="Buscar funcionário..."
             type="text"
             placeholder="Buscar funcionário..."
             onChange={(e) => onSearchChange?.(e.target.value)}
@@ -52,14 +52,14 @@ export default function TabelaFuncionarios({
       </div>
 
       <div className="overflow-hidden rounded-lg border border-gray-200 bg-white">
-        <table className="w-full border-collapse">
+        <div className="overflow-x-auto"><table className="w-full border-collapse">
           <thead>
             <tr className="bg-gray-50 text-left text-sm text-gray-600">
-              <th className="px-4 py-3 font-medium">Nome</th>
-              <th className="px-4 py-3 font-medium">Matrícula</th>
-              <th className="px-4 py-3 font-medium">Função</th>
-              <th className="px-4 py-3 font-medium">Status</th>
-              <th className="px-4 py-3 font-medium">Ações</th>
+              <th scope="col" className="px-4 py-3 font-medium">Nome</th>
+              <th scope="col" className="px-4 py-3 font-medium">Matrícula</th>
+              <th scope="col" className="px-4 py-3 font-medium">Função</th>
+              <th scope="col" className="px-4 py-3 font-medium">Status</th>
+              <th scope="col" className="px-4 py-3 font-medium">Ações</th>
             </tr>
           </thead>
           <tbody>
@@ -140,7 +140,7 @@ export default function TabelaFuncionarios({
                 </tr>
               ))}
           </tbody>
-        </table>
+        </table></div>
       </div>
     </div>
   );

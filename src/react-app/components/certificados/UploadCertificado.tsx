@@ -3,6 +3,7 @@ import { API_BASE_URL } from '@/react-app/config/api';
 import { prepareCertificateUploadFile } from '@/react-app/utils/certificateUploadOptimization';
 import { Upload, X, FileText, CheckCircle, AlertCircle } from 'lucide-react';
 import { toast } from 'sonner';
+import { ModalOverlay } from '@/react-app/components/modals/ModalOverlay';
 
 interface Props {
   qualificacaoId: number;
@@ -124,12 +125,12 @@ export default function UploadCertificado({ qualificacaoId, onSuccess, onClose }
   };
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+    <ModalOverlay className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
       <div className="bg-white rounded-lg shadow-xl max-w-lg w-full max-h-[calc(100dvh-2rem)] overflow-y-auto">
         {/* Header */}
         <div className="flex justify-between items-center p-6 border-b">
           <h2 className="text-xl font-semibold">Upload de Certificado</h2>
-          <button
+          <button aria-label="Fechar"
             onClick={onClose}
             className="text-gray-400 hover:text-gray-600"
             disabled={uploading}
@@ -266,6 +267,6 @@ export default function UploadCertificado({ qualificacaoId, onSuccess, onClose }
           </button>
         </div>
       </div>
-    </div>
+    </ModalOverlay>
   );
 }

@@ -19,16 +19,16 @@ export default function PainelLegenda() {
       <div className="flex items-center gap-4 flex-wrap md:flex-nowrap md:justify-between">
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2 flex-wrap">
-            <span className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider flex-shrink-0">
+            <span className="text-xs text-slate-400 font-semibold uppercase tracking-wider flex-shrink-0">
               Tipos
             </span>
             {loading && tiposAtivos.length === 0 && (
-              <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[11px] text-slate-500">
+              <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs text-slate-500">
                 Carregando tipos...
               </span>
             )}
             {!loading && tiposAtivos.length === 0 && (
-              <span className="rounded-full border border-dashed border-slate-200 bg-slate-50 px-2.5 py-1 text-[11px] text-slate-500">
+              <span className="rounded-full border border-dashed border-slate-200 bg-slate-50 px-2.5 py-1 text-xs text-slate-500">
                 Nenhum tipo ativo configurado
               </span>
             )}
@@ -43,7 +43,7 @@ export default function PainelLegenda() {
                   type="button"
                   onClick={() => toggleTipoEvento(tipo)}
                   className={[
-                    'flex items-center gap-1.5 text-[11px] font-medium rounded-full border px-2.5 py-1 transition-all',
+                    'flex items-center gap-1.5 text-xs font-medium rounded-full border px-2.5 py-1 transition-all',
                     ativo
                       ? 'text-slate-700 border-slate-200 bg-white'
                       : 'text-slate-400 border-slate-100 bg-slate-50 opacity-30 hover:opacity-70',
@@ -62,18 +62,18 @@ export default function PainelLegenda() {
         </div>
 
         <div className="hidden md:flex flex-shrink-0 items-center gap-3 border-l border-slate-200 pl-4">
-          <span className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider">
+          <span className="text-xs text-slate-400 font-semibold uppercase tracking-wider">
             Marcadores
           </span>
-          <span className="flex items-center gap-1 text-[10px] text-slate-500">
+          <span className="flex items-center gap-1 text-xs text-slate-500">
             <span className={cn('inline-block h-3 w-3 flex-shrink-0 rounded', Q1.accent)} />
             {Q1.short}
           </span>
-          <span className="flex items-center gap-1 text-[10px] text-slate-500">
+          <span className="flex items-center gap-1 text-xs text-slate-500">
             <span className={cn('inline-block h-3 w-3 flex-shrink-0 rounded', Q2.accent)} />
             {Q2.short}
           </span>
-          <span className="flex items-center gap-1 text-[10px] text-emerald-600">
+          <span className="flex items-center gap-1 text-xs text-emerald-600">
             <CheckCircle2 className="w-3 h-3" />
             OK
           </span>

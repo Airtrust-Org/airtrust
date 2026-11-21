@@ -49,7 +49,7 @@ export function FuncionarioCard({ id }: { id: number }) {
             {funcionario.nome}
             {editingNome && (
               <div className="flex gap-2 ml-4">
-                <input
+                <input aria-label="Novo nome"
                   className="border px-2 py-1 text-sm"
                   value={novoNome}
                   onChange={(e) => setNovoNome(e.target.value)}
@@ -219,7 +219,7 @@ function Info({
   const display = value || 'N/A';
   return (
     <div>
-      <div className="text-[11px] uppercase tracking-wide text-gray-500">{label}</div>
+      <div className="text-xs uppercase tracking-wide text-gray-500">{label}</div>
       <div className={`font-medium ${highlightNear ? 'text-red-600' : ''}`}>{display}</div>
     </div>
   );

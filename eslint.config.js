@@ -2,6 +2,7 @@ import js from '@eslint/js';
 import globals from 'globals';
 import reactHooks from 'eslint-plugin-react-hooks';
 import reactRefresh from 'eslint-plugin-react-refresh';
+import jsxA11y from 'eslint-plugin-jsx-a11y';
 import tseslint from 'typescript-eslint';
 
 export default tseslint.config(
@@ -23,13 +24,29 @@ export default tseslint.config(
     },
   },
   {
+    // Acessibilidade de JSX (relatório UI/UX 2026-11-20). Tudo em `warn` até a
+    // dívida legada chegar a zero; então promover para `error` regra a regra.
+    // `label-has-for` é depreciada e `control-has-associated-label` gera falsos
+    // positivos quando o rótulo é uma expressão (`{label}`) de um <label> que envolve o campo.
+    files: ['src/react-app/**/*.tsx', 'src/components/**/*.tsx'],
+    ignores: ['**/*.test.tsx', '**/__tests__/**'],
+    plugins: { 'jsx-a11y': jsxA11y },
+    rules: {
+      ...Object.fromEntries(
+        Object.keys(jsxA11y.flatConfigs.recommended.rules).map((rule) => [rule, 'warn']),
+      ),
+      'jsx-a11y/label-has-for': 'off',
+      'jsx-a11y/control-has-associated-label': 'off',
+      'jsx-a11y/no-autofocus': 'off',
+    },
+  },
+  {
     // Diálogos nativos bloqueiam a thread, não são acessíveis nem estilizáveis.
     // Use `useConfirmDialog` (hooks/useConfirmDialog) e o Toast do sistema.
-    // Em `warn` enquanto os usos legados são migrados (relatório UI/UX 2026-11-20).
     files: ['src/react-app/**/*.{ts,tsx}'],
     ignores: ['**/*.test.{ts,tsx}', '**/__tests__/**'],
     rules: {
-      'no-alert': 'warn',
+      'no-alert': 'error',
     },
   },
   {

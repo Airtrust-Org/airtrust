@@ -52,7 +52,7 @@ export default function VerificarCertificado() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-blue-100 py-8 px-4">
+    <main className="min-h-screen bg-gradient-to-br from-blue-50 to-blue-100 py-8 px-4">
       <div className="max-w-3xl mx-auto">
         {/* Botão Voltar */}
         <button
@@ -76,11 +76,11 @@ export default function VerificarCertificado() {
 
         {/* Input Card */}
         <div className="bg-white rounded-xl shadow-xl p-5 mb-6">
-          <label className="block text-sm font-medium text-gray-700 mb-3">
+          <label htmlFor="verificarcertificado-codigo-de-verificacao-16-caracteres" className="block text-sm font-medium text-gray-700 mb-3">
             Código de Verificação (16 caracteres)
           </label>
           <div className="flex gap-3">
-            <input
+            <input id="verificarcertificado-codigo-de-verificacao-16-caracteres" aria-label="Código de Verificação (16 caracteres)"
               type="text"
               value={hash}
               onChange={(e) => setHash(e.target.value.toUpperCase())}
@@ -100,7 +100,7 @@ export default function VerificarCertificado() {
             </button>
           </div>
           <p className="text-sm text-gray-500 mt-3">
-            💡 O código está impresso no certificado no campo "VERIFICAÇÃO → HASH"
+            <span aria-hidden="true">💡</span> O código está impresso no certificado no campo "VERIFICAÇÃO → HASH"
           </p>
         </div>
 
@@ -216,7 +216,7 @@ export default function VerificarCertificado() {
           animation: shake 0.5s ease-out;
         }
       `}</style>
-    </div>
+    </main>
   );
 }
 

@@ -8,6 +8,7 @@ import {
 } from '@/react-app/config/pastaVirtual';
 import { API_BASE_URL, getAccessToken } from '@/react-app/config/api';
 import { preparePdfUploadFile } from '@/react-app/utils/certificateUploadOptimization';
+import { ModalOverlay } from '@/react-app/components/modals/ModalOverlay';
 
 interface UploadDocumentoModalProps {
   isOpen: boolean;
@@ -268,7 +269,7 @@ export default function UploadDocumentoModal({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-modal flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm">
+    <ModalOverlay className="fixed inset-0 z-modal flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm">
       <div className="max-h-[92vh] w-full max-w-2xl overflow-y-auto rounded-lg bg-white shadow-2xl dark:bg-slate-900">
         <div className="flex items-center justify-between border-b border-slate-200 p-6 dark:border-slate-700">
           <div className="flex items-center gap-3">
@@ -282,7 +283,7 @@ export default function UploadDocumentoModal({
               <p className="text-sm text-slate-500 dark:text-slate-400">PDF entre 1 KB e 10 MB</p>
             </div>
           </div>
-          <button
+          <button aria-label="Fechar"
             onClick={handleClose}
             className="rounded-lg p-2 hover:bg-slate-100 dark:hover:bg-slate-800"
             disabled={uploading}
@@ -293,10 +294,10 @@ export default function UploadDocumentoModal({
 
         <div className="space-y-5 p-6">
           <div>
-            <label className="mb-2 block text-sm font-medium text-slate-700 dark:text-slate-200">
+            <label htmlFor="uploaddocumentomodal-categoria" className="mb-2 block text-sm font-medium text-slate-700 dark:text-slate-200">
               Categoria <span className="text-red-500">*</span>
             </label>
-            <select
+            <select id="uploaddocumentomodal-categoria" aria-label="Categoria"
               value={tipoDocumento}
               onChange={(e) => {
                 setTipoDocumento(e.target.value as TipoDocumento);
@@ -376,14 +377,14 @@ export default function UploadDocumentoModal({
           </div>
 
           <div>
-            <label className="mb-2 block text-sm font-medium text-slate-700 dark:text-slate-200">
+            <label htmlFor="uploaddocumentomodal-arquivo-pdf" className="mb-2 block text-sm font-medium text-slate-700 dark:text-slate-200">
               Arquivo PDF <span className="text-red-500">*</span>
             </label>
             <div
               onClick={() => fileInputRef.current?.click()}
               className={`cursor-pointer rounded-lg border-2 border-dashed p-5 text-center transition ${file ? 'border-green-500 bg-green-50 dark:bg-green-950/20' : 'border-slate-300 hover:border-primary hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800'}`}
             >
-              <input
+              <input id="uploaddocumentomodal-arquivo-pdf" aria-label="Arquivo PDF"
                 ref={fileInputRef}
                 type="file"
                 accept="application/pdf,.pdf"
@@ -424,10 +425,10 @@ export default function UploadDocumentoModal({
           )}
 
           <div>
-            <label className="mb-2 block text-sm font-medium text-slate-700 dark:text-slate-200">
+            <label htmlFor="uploaddocumentomodal-descricao-opcional" className="mb-2 block text-sm font-medium text-slate-700 dark:text-slate-200">
               Descrição <span className="font-normal text-slate-400">(opcional)</span>
             </label>
-            <textarea
+            <textarea id="uploaddocumentomodal-descricao-opcional" aria-label="Descrição (opcional)"
               value={descricao}
               onChange={(e) => setDescricao(e.target.value)}
               placeholder="Observação objetiva que ajude a identificar o documento..."
@@ -480,6 +481,6 @@ export default function UploadDocumentoModal({
           </Button>
         </div>
       </div>
-    </div>
+    </ModalOverlay>
   );
 }

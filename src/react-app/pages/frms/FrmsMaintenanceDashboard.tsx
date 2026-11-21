@@ -275,13 +275,13 @@ export default function FrmsMaintenanceDashboard() {
               <table className="w-full min-w-[980px] text-sm">
                 <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500 dark:bg-slate-900/60">
                   <tr>
-                    <th className="px-4 py-3 text-left">Profissional</th>
-                    <th className="px-4 py-3 text-left">Check-in</th>
-                    <th className="px-4 py-3 text-left">Sono</th>
-                    <th className="px-4 py-3 text-left">KSS</th>
-                    <th className="px-4 py-3 text-left">Prontidão</th>
-                    <th className="px-4 py-3 text-left">Situação</th>
-                    <th className="px-4 py-3 text-left">Conduta</th>
+                    <th scope="col" className="px-4 py-3 text-left">Profissional</th>
+                    <th scope="col" className="px-4 py-3 text-left">Check-in</th>
+                    <th scope="col" className="px-4 py-3 text-left">Sono</th>
+                    <th scope="col" className="px-4 py-3 text-left">KSS</th>
+                    <th scope="col" className="px-4 py-3 text-left">Prontidão</th>
+                    <th scope="col" className="px-4 py-3 text-left">Situação</th>
+                    <th scope="col" className="px-4 py-3 text-left">Conduta</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 dark:divide-slate-900">

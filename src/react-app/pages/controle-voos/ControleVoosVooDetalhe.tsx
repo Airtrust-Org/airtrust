@@ -506,7 +506,7 @@ export default function ControleVoosVooDetalhe() {
                           <div>
                             <div className="flex items-center gap-2">
                               <span className="text-sm font-semibold text-slate-800 dark:text-slate-100">{label}</span>
-                              <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${current ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300' : 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300'}`}>
+                              <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${current ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300' : 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300'}`}>
                                 {current ? 'Anexado' : 'Ainda não disponível'}
                               </span>
                             </div>

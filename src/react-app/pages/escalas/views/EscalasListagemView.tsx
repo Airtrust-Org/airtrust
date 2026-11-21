@@ -159,7 +159,7 @@ export default function EscalasListagemView() {
                   {s === 'todos' ? 'Todos' : STATUS_CONFIG[s].label}
                   {count > 0 && (
                     <span
-                      className={`ml-1.5 text-[10px] ${filtroStatus === s ? 'text-white/70' : 'text-gray-400'}`}
+                      className={`ml-1.5 text-xs ${filtroStatus === s ? 'text-white/70' : 'text-gray-400'}`}
                     >
                       ({count})
                     </span>
@@ -213,7 +213,7 @@ export default function EscalasListagemView() {
                           : 'text-gray-700 hover:bg-gray-50 border border-transparent dark:text-slate-200 dark:hover:bg-slate-800/80',
                 ].join(' ')}
               >
-                <span className="text-[10px]">{MESES_CURTOS[mesNumero - 1]}</span>
+                <span className="text-xs">{MESES_CURTOS[mesNumero - 1]}</span>
                 <span
                   className={`mt-1 w-1.5 h-1.5 rounded-full ${
                     escalaMes?.status === 'publicada'
@@ -291,7 +291,7 @@ export default function EscalasListagemView() {
                         </p>
                       </div>
                       <span
-                        className={`shrink-0 flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold border ${
+                        className={`shrink-0 flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold border ${
                           escala.status === 'rascunho'
                             ? 'bg-gray-100 text-gray-600 border-gray-200 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300'
                             : escala.status === 'em_revisao'
@@ -364,7 +364,7 @@ export default function EscalasListagemView() {
                     </div>
 
                     <div className="mt-5 flex items-center justify-between border-t border-gray-100 pt-3 dark:border-slate-800">
-                      <div className="text-[11px] text-slate-400 dark:text-slate-500">
+                      <div className="text-xs text-slate-400 dark:text-slate-500">
                         {escala.status === 'publicada'
                           ? 'Pronta para consulta da tripulação'
                           : 'Escala em construção operacional'}
@@ -372,9 +372,9 @@ export default function EscalasListagemView() {
                       <div className="flex items-center gap-2">
                         {podeGerenciarOperacoes && confirmarExcluirId === escala.id ? (
                           <div className="flex items-center gap-1">
-                            <span className="text-[10px] text-red-600 font-medium">Confirmar?</span>
+                            <span className="text-xs text-red-600 font-medium">Confirmar?</span>
                             <button
-                              className="text-[10px] px-2 py-0.5 rounded bg-red-500 text-white font-semibold hover:bg-red-600 disabled:opacity-50"
+                              className="text-xs px-2 py-0.5 rounded bg-red-500 text-white font-semibold hover:bg-red-600 disabled:opacity-50"
                               onClick={async (e) => {
                                 e.stopPropagation();
                                 const btn = e.currentTarget;
@@ -396,7 +396,7 @@ export default function EscalasListagemView() {
                               Sim
                             </button>
                             <button
-                              className="rounded border border-slate-200 px-2 py-0.5 text-[10px] text-slate-500 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+                              className="rounded border border-slate-200 px-2 py-0.5 text-xs text-slate-500 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
                               onClick={(e) => {
                                 e.stopPropagation();
                                 setConfirmarExcluirId(null);

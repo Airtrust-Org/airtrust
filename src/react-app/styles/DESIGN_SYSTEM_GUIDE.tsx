@@ -73,8 +73,8 @@ function Tabela() {
       <table className="w-full">
         <thead className="bg-gray-50">
           <tr>
-            <th className={DesignSystemGlobal.tables.header}>Coluna 1</th>
-            <th className={DesignSystemGlobal.tables.header}>Coluna 2</th>
+            <th scope="col" className={DesignSystemGlobal.tables.header}>Coluna 1</th>
+            <th scope="col" className={DesignSystemGlobal.tables.header}>Coluna 2</th>
           </tr>
         </thead>
         <tbody>
@@ -128,9 +128,9 @@ function Tabs() {
 function StatusBadges() {
   return (
     <div className="flex gap-2">
-      <span className={DesignSystemGlobal.badges.valid}>✓ Válido</span>
-      <span className={DesignSystemGlobal.badges.expiring}>⚠ Vencendo</span>
-      <span className={DesignSystemGlobal.badges.expired}>✕ Vencida</span>
+      <span className={DesignSystemGlobal.badges.valid}><span aria-hidden="true">✓</span> Válido</span>
+      <span className={DesignSystemGlobal.badges.expiring}><span aria-hidden="true">⚠</span> Vencendo</span>
+      <span className={DesignSystemGlobal.badges.expired}><span aria-hidden="true">✕</span> Vencida</span>
       <span className={DesignSystemGlobal.badges.pending}>◯ Pendente</span>
     </div>
   );
@@ -142,13 +142,13 @@ function StatusBadges() {
 function Inputs() {
   return (
     <div className="space-y-4">
-      <input type="text" placeholder="Digite algo..." className={DesignSystemGlobal.inputs.base} />
-      <input
+      <input aria-label="Digite algo..." type="text" placeholder="Digite algo..." className={DesignSystemGlobal.inputs.base} />
+      <input aria-label="Pequeno"
         type="text"
         placeholder="Pequeno"
         className={`${DesignSystemGlobal.inputs.base} ${DesignSystemGlobal.inputs.small}`}
       />
-      <input
+      <input aria-label="Grande"
         type="text"
         placeholder="Grande"
         className={`${DesignSystemGlobal.inputs.base} ${DesignSystemGlobal.inputs.large}`}

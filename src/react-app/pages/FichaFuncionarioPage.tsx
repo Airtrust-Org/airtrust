@@ -690,7 +690,7 @@ export default function FichaFuncionarioPage() {
         {/* Header */}
         <div className="flex flex-col gap-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm md:flex-row md:items-center md:justify-between">
           <div className="flex items-center gap-4">
-            <button
+            <button aria-label="Voltar"
               type="button"
               onClick={() => navigate('/funcionarios')}
               className="rounded-lg border border-slate-200 p-2 hover:bg-slate-50"
@@ -986,13 +986,13 @@ export default function FichaFuncionarioPage() {
             <table className="w-full text-sm">
               <thead className="bg-gray-50">
                 <tr>
-                  <th className="px-4 py-3 text-left font-medium text-gray-600">Categoria</th>
-                  <th className="px-4 py-3 text-left font-medium text-gray-600">Qualificação</th>
-                  <th className="px-4 py-3 text-left font-medium text-gray-600">Código</th>
-                  <th className="px-4 py-3 text-left font-medium text-gray-600">Origem</th>
-                  <th className="px-4 py-3 text-left font-medium text-gray-600">Realização</th>
-                  <th className="px-4 py-3 text-left font-medium text-gray-600">Vencimento</th>
-                  <th className="px-4 py-3 text-center font-medium text-gray-600">Status</th>
+                  <th scope="col" className="px-4 py-3 text-left font-medium text-gray-600">Categoria</th>
+                  <th scope="col" className="px-4 py-3 text-left font-medium text-gray-600">Qualificação</th>
+                  <th scope="col" className="px-4 py-3 text-left font-medium text-gray-600">Código</th>
+                  <th scope="col" className="px-4 py-3 text-left font-medium text-gray-600">Origem</th>
+                  <th scope="col" className="px-4 py-3 text-left font-medium text-gray-600">Realização</th>
+                  <th scope="col" className="px-4 py-3 text-left font-medium text-gray-600">Vencimento</th>
+                  <th scope="col" className="px-4 py-3 text-center font-medium text-gray-600">Status</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
@@ -1070,11 +1070,11 @@ export default function FichaFuncionarioPage() {
               <table className="w-full text-sm">
                 <thead className="bg-gray-50">
                   <tr>
-                    <th className="px-4 py-3 text-left font-medium text-gray-600">Tipo</th>
-                    <th className="px-4 py-3 text-left font-medium text-gray-600">Número</th>
-                    <th className="px-4 py-3 text-left font-medium text-gray-600">Emissão</th>
-                    <th className="px-4 py-3 text-left font-medium text-gray-600">Vencimento</th>
-                    <th className="px-4 py-3 text-center font-medium text-gray-600">Status</th>
+                    <th scope="col" className="px-4 py-3 text-left font-medium text-gray-600">Tipo</th>
+                    <th scope="col" className="px-4 py-3 text-left font-medium text-gray-600">Número</th>
+                    <th scope="col" className="px-4 py-3 text-left font-medium text-gray-600">Emissão</th>
+                    <th scope="col" className="px-4 py-3 text-left font-medium text-gray-600">Vencimento</th>
+                    <th scope="col" className="px-4 py-3 text-center font-medium text-gray-600">Status</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
@@ -1111,12 +1111,12 @@ export default function FichaFuncionarioPage() {
               <table className="w-full text-sm">
                 <thead className="bg-gray-50">
                   <tr>
-                    <th className="px-4 py-3 text-left font-medium text-gray-600">Categoria</th>
-                    <th className="px-4 py-3 text-left font-medium text-gray-600">Registro</th>
-                    <th className="px-4 py-3 text-left font-medium text-gray-600">Código</th>
-                    <th className="px-4 py-3 text-left font-medium text-gray-600">Realização</th>
-                    <th className="px-4 py-3 text-left font-medium text-gray-600">Vencimento</th>
-                    <th className="px-4 py-3 text-center font-medium text-gray-600">Status</th>
+                    <th scope="col" className="px-4 py-3 text-left font-medium text-gray-600">Categoria</th>
+                    <th scope="col" className="px-4 py-3 text-left font-medium text-gray-600">Registro</th>
+                    <th scope="col" className="px-4 py-3 text-left font-medium text-gray-600">Código</th>
+                    <th scope="col" className="px-4 py-3 text-left font-medium text-gray-600">Realização</th>
+                    <th scope="col" className="px-4 py-3 text-left font-medium text-gray-600">Vencimento</th>
+                    <th scope="col" className="px-4 py-3 text-center font-medium text-gray-600">Status</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
@@ -1202,12 +1202,12 @@ export default function FichaFuncionarioPage() {
               <table className="w-full text-sm">
                 <thead className="bg-gray-50">
                   <tr>
-                    <th className="px-4 py-3 text-left font-medium text-gray-600">Título</th>
-                    <th className="px-4 py-3 text-left font-medium text-gray-600">Qualificação</th>
-                    <th className="px-4 py-3 text-left font-medium text-gray-600">Data</th>
-                    <th className="px-4 py-3 text-left font-medium text-gray-600">Status</th>
-                    <th className="px-4 py-3 text-left font-medium text-gray-600">Instrutor</th>
-                    <th className="px-4 py-3 text-left font-medium text-gray-600">Local</th>
+                    <th scope="col" className="px-4 py-3 text-left font-medium text-gray-600">Título</th>
+                    <th scope="col" className="px-4 py-3 text-left font-medium text-gray-600">Qualificação</th>
+                    <th scope="col" className="px-4 py-3 text-left font-medium text-gray-600">Data</th>
+                    <th scope="col" className="px-4 py-3 text-left font-medium text-gray-600">Status</th>
+                    <th scope="col" className="px-4 py-3 text-left font-medium text-gray-600">Instrutor</th>
+                    <th scope="col" className="px-4 py-3 text-left font-medium text-gray-600">Local</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
@@ -1245,15 +1245,15 @@ export default function FichaFuncionarioPage() {
               <table className="w-full text-sm">
                 <thead className="bg-gray-50">
                   <tr>
-                    <th className="px-4 py-3 text-left font-medium text-gray-600">Curso</th>
-                    <th className="px-4 py-3 text-left font-medium text-gray-600">Origem</th>
-                    <th className="px-4 py-3 text-left font-medium text-gray-600">Categoria</th>
-                    <th className="px-4 py-3 text-left font-medium text-gray-600">Tipo</th>
-                    <th className="px-4 py-3 text-left font-medium text-gray-600">Status</th>
-                    <th className="px-4 py-3 text-left font-medium text-gray-600">Progresso</th>
-                    <th className="px-4 py-3 text-left font-medium text-gray-600">Conclusão</th>
-                    <th className="px-4 py-3 text-left font-medium text-gray-600">Prazo</th>
-                    <th className="px-4 py-3 text-left font-medium text-gray-600">Ação</th>
+                    <th scope="col" className="px-4 py-3 text-left font-medium text-gray-600">Curso</th>
+                    <th scope="col" className="px-4 py-3 text-left font-medium text-gray-600">Origem</th>
+                    <th scope="col" className="px-4 py-3 text-left font-medium text-gray-600">Categoria</th>
+                    <th scope="col" className="px-4 py-3 text-left font-medium text-gray-600">Tipo</th>
+                    <th scope="col" className="px-4 py-3 text-left font-medium text-gray-600">Status</th>
+                    <th scope="col" className="px-4 py-3 text-left font-medium text-gray-600">Progresso</th>
+                    <th scope="col" className="px-4 py-3 text-left font-medium text-gray-600">Conclusão</th>
+                    <th scope="col" className="px-4 py-3 text-left font-medium text-gray-600">Prazo</th>
+                    <th scope="col" className="px-4 py-3 text-left font-medium text-gray-600">Ação</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
@@ -1375,13 +1375,13 @@ export default function FichaFuncionarioPage() {
               <table className="w-full text-sm">
                 <thead className="bg-gray-50">
                   <tr>
-                    <th className="px-4 py-3 text-left font-medium text-gray-600">Categoria</th>
-                    <th className="px-4 py-3 text-left font-medium text-gray-600">Registro</th>
-                    <th className="px-4 py-3 text-left font-medium text-gray-600">Código</th>
-                    <th className="px-4 py-3 text-left font-medium text-gray-600">Realização</th>
-                    <th className="px-4 py-3 text-left font-medium text-gray-600">Vencimento</th>
-                    <th className="px-4 py-3 text-center font-medium text-gray-600">Status</th>
-                    <th className="px-4 py-3 text-left font-medium text-gray-600">
+                    <th scope="col" className="px-4 py-3 text-left font-medium text-gray-600">Categoria</th>
+                    <th scope="col" className="px-4 py-3 text-left font-medium text-gray-600">Registro</th>
+                    <th scope="col" className="px-4 py-3 text-left font-medium text-gray-600">Código</th>
+                    <th scope="col" className="px-4 py-3 text-left font-medium text-gray-600">Realização</th>
+                    <th scope="col" className="px-4 py-3 text-left font-medium text-gray-600">Vencimento</th>
+                    <th scope="col" className="px-4 py-3 text-center font-medium text-gray-600">Status</th>
+                    <th scope="col" className="px-4 py-3 text-left font-medium text-gray-600">
                       Status regulatório
                     </th>
                   </tr>
@@ -1433,12 +1433,12 @@ export default function FichaFuncionarioPage() {
               <table className="w-full text-sm">
                 <thead className="bg-gray-50">
                   <tr>
-                    <th className="px-4 py-3 text-left font-medium text-gray-600">Categoria</th>
-                    <th className="px-4 py-3 text-left font-medium text-gray-600">Registro</th>
-                    <th className="px-4 py-3 text-left font-medium text-gray-600">Código</th>
-                    <th className="px-4 py-3 text-left font-medium text-gray-600">Realização</th>
-                    <th className="px-4 py-3 text-left font-medium text-gray-600">Vencimento</th>
-                    <th className="px-4 py-3 text-left font-medium text-gray-600">
+                    <th scope="col" className="px-4 py-3 text-left font-medium text-gray-600">Categoria</th>
+                    <th scope="col" className="px-4 py-3 text-left font-medium text-gray-600">Registro</th>
+                    <th scope="col" className="px-4 py-3 text-left font-medium text-gray-600">Código</th>
+                    <th scope="col" className="px-4 py-3 text-left font-medium text-gray-600">Realização</th>
+                    <th scope="col" className="px-4 py-3 text-left font-medium text-gray-600">Vencimento</th>
+                    <th scope="col" className="px-4 py-3 text-left font-medium text-gray-600">
                       Status regulatório
                     </th>
                   </tr>

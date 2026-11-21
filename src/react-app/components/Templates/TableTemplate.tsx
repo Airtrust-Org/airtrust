@@ -65,7 +65,7 @@ export const TableTemplate: React.FC<TableTemplateProps> = ({
       {/* Filter Row */}
       <div className={styles.filterRow}>
         {searchable && (
-          <input
+          <input aria-label="Search..."
             type="text"
             placeholder="Search..."
             value={searchTerm}
@@ -78,11 +78,11 @@ export const TableTemplate: React.FC<TableTemplateProps> = ({
 
       {/* Table */}
       <div className={styles.tableWrapper}>
-        <table className={styles.table}>
+        <div className="overflow-x-auto"><table className={styles.table}>
           <thead>
             <tr>
               {columns.map((col) => (
-                <th
+                <th scope="col"
                   key={col.key}
                   onClick={() => col.sortable && handleSort(col.key)}
                   style={{ width: col.width }}
@@ -94,12 +94,12 @@ export const TableTemplate: React.FC<TableTemplateProps> = ({
                   )}
                 </th>
               ))}
-              {actions && <th>Actions</th>}
+              {actions && <th scope="col">Actions</th>}
             </tr>
           </thead>
           <tbody>
             {sortedData.map((row, idx) => (
-              <tr
+              <tr tabIndex={0} onKeyDown={(e) => { if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); e.currentTarget.click(); } }}
                 key={idx}
                 onClick={() => onRowClick?.(row)}
                 className={onRowClick ? styles.clickable : ''}
@@ -111,7 +111,7 @@ export const TableTemplate: React.FC<TableTemplateProps> = ({
               </tr>
             ))}
           </tbody>
-        </table>
+        </table></div>
       </div>
 
       {sortedData.length === 0 && (

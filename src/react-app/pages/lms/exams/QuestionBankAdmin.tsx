@@ -3,6 +3,7 @@
  * F4 owns that file until its Player 3 integration has been coordinated.
  * Requires a staged, approved read/write API and an authenticated admin route.
  */
+import { confirmDialog } from '@/react-app/utils/confirmDialog';
 import React,{useCallback,useEffect,useRef,useState} from 'react';
 import {API_BASE_URL,fetchWithAuth} from '../../../config/api';
 import {normalizeQuestionDifficulty,difficultyForPatch} from './examDifficulty';
@@ -70,6 +71,7 @@ export default function QuestionBankAdmin({
   useEffect(()=>{onDirtyChange?.(dirty);},[dirty,onDirtyChange]);
   useEffect(()=>{
     if(!dirty)return;
+    let bypassIntercept=false;
     const handler=(event:BeforeUnloadEvent)=>{event.preventDefault();event.returnValue='';};
     // React Router links bypass beforeunload. Intercept user-initiated navigation
     // in the capture phase while the editor has unsaved changes.
@@ -77,15 +79,20 @@ export default function QuestionBankAdmin({
       const node=event.target;
       const anchor=node instanceof Element?node.closest('a[href]'):null;
       if(!anchor||event.defaultPrevented)return;
-      if(!window.confirm('Há alterações não salvas. Sair sem salvar?')){
-        event.preventDefault();event.stopImmediatePropagation();
-      }
+      if(bypassIntercept)return;
+      // O diálogo é assíncrono: bloqueia o clique agora e reencaminha se confirmado.
+      event.preventDefault();event.stopImmediatePropagation();
+      void confirmDialog('Há alterações não salvas. Sair sem salvar?').then(ok=>{
+        if(!ok)return;
+        bypassIntercept=true;
+        try{(anchor as HTMLElement).click();}finally{bypassIntercept=false;}
+      });
     };
     window.addEventListener('beforeunload',handler);
     document.addEventListener('click',intercept,true);
     return()=>{window.removeEventListener('beforeunload',handler);document.removeEventListener('click',intercept,true);};
   },[dirty]);
-  const confirmDiscard=()=>!dirty||window.confirm('Existem alterações não salvas. Deseja descartá-las?');
+  const confirmDiscard=async()=>!dirty||await confirmDialog('Existem alterações não salvas. Deseja descartá-las?');
   const listed=items.filter(item=>
     (statusFilter==='ALL'||item.status===statusFilter)&&
     (item.questionId+' '+(item.promptPreview||'')+' '+(item.moduleId||'')+' '+(item.topicId||''))
@@ -108,13 +115,13 @@ export default function QuestionBankAdmin({
     setForm(prev=>({...prev,[key]:value}));
     setDirty(true);
   }
-  function startNew(){
-    if(!confirmDiscard())return;
+  async function startNew(){
+    if(!(await confirmDiscard()))return;
     setDirty(false);setCurrent(null);setQuestionId('questao-'+(globalThis.crypto?.randomUUID?.()||Date.now().toString(36)+Math.random().toString(36).slice(2)).replace(/-/g,'').slice(0,14));setForm(draft(trainingSourceSha256));
     setError('');setMessage('');
   }
   async function open(item:Summary){
-    if(!canWrite||!confirmDiscard())return;
+    if(!canWrite||!(await confirmDiscard()))return;
     setBusy(true);setError('');setMessage('');
     try{
       const value=await req<Stored>(url+'/'+encodeURIComponent(item.questionId)+
@@ -194,7 +201,7 @@ export default function QuestionBankAdmin({
   };
   const importDrafts=async()=>{
     if(busy||!importRows.length)return;
-    if(!window.confirm('Importar '+importRows.length+' novas questões como rascunhos? Nenhuma será publicada automaticamente.'))return;
+    if(!(await confirmDialog('Importar '+importRows.length+' novas questões como rascunhos? Nenhuma será publicada automaticamente.')))return;
     setBusy(true);setError('');setMessage('');
     let count=0;
     try{
@@ -207,8 +214,8 @@ export default function QuestionBankAdmin({
       setImportRows([]);
     }finally{setBusy(false);}
   };
-  const duplicate=()=>{
-    if(!current||!confirmDiscard())return;
+  const duplicate=async()=>{
+    if(!current||!(await confirmDiscard()))return;
     setCurrent(null);setQuestionId(newId());setForm({...form,choices:form.choices.map(c=>({...c}))});
     setDirty(true);setMessage('Cópia local. Revise as alternativas e salve como nova questão.');setError('');
   };

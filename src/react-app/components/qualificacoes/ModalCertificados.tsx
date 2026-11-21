@@ -9,6 +9,7 @@ import { API_BASE_URL, getAccessToken } from '@/react-app/config/api';
 import { apiFetch } from '@/react-app/lib/apiFetch';
 import { buildPasta360Url } from '@/react-app/utils/pasta360';
 import { prepareCertificateUploadFile } from '@/react-app/utils/certificateUploadOptimization';
+import { ModalOverlay } from '@/react-app/components/modals/ModalOverlay';
 
 interface ModalCertificadosProps {
   isOpen: boolean;
@@ -355,14 +356,14 @@ export function ModalCertificados({
                 className="block w-full text-xs text-slate-600 file:mr-2 file:rounded-md file:border-0 file:bg-primary-50 file:px-2 file:py-1 file:text-xs file:font-medium file:text-primary-700 hover:file:bg-primary-100"
               />
               <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-                <input
+                <input aria-label="Data de realização"
                   type="date"
                   placeholder="Data de realização"
                   value={uploadDataRealizacao}
                   onChange={(e) => setUploadDataRealizacao(e.target.value)}
                   className="w-full rounded-md border border-slate-300 px-2 py-1 text-xs focus:border-primary-600 focus:outline-none focus:ring-1 focus:ring-primary-600"
                 />
-                <input
+                <input aria-label="Descrição (opcional)"
                   type="text"
                   placeholder="Descrição (opcional)"
                   value={uploadDescricao}
@@ -398,22 +399,22 @@ export function ModalCertificados({
             </div>
           ) : (
             <div className="overflow-hidden rounded-lg border border-slate-200">
-              <table className="min-w-full divide-y divide-slate-200">
+              <div className="overflow-x-auto"><table className="min-w-full divide-y divide-slate-200">
                 <thead className="bg-slate-50">
                   <tr>
-                    <th className="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+                    <th scope="col" className="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
                       Arquivo
                     </th>
-                    <th className="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+                    <th scope="col" className="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
                       Tipo
                     </th>
-                    <th className="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+                    <th scope="col" className="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
                       Tamanho
                     </th>
-                    <th className="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+                    <th scope="col" className="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
                       Criado em
                     </th>
-                    <th className="px-4 py-2 text-right text-xs font-semibold uppercase tracking-wide text-slate-500">
+                    <th scope="col" className="px-4 py-2 text-right text-xs font-semibold uppercase tracking-wide text-slate-500">
                       Ações
                     </th>
                   </tr>
@@ -451,7 +452,7 @@ export function ModalCertificados({
                     </tr>
                   ))}
                 </tbody>
-              </table>
+              </table></div>
             </div>
           )}
         </div>
@@ -461,7 +462,7 @@ export function ModalCertificados({
 
       {/* Modal de Confirmação de Delete */}
       {showConfirmDelete && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+        <ModalOverlay className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-lg shadow-lg max-w-sm w-full p-6">
             <div className="flex items-center gap-3 mb-4">
               <AlertCircle className="h-6 w-6 text-red-600" />
@@ -497,7 +498,7 @@ export function ModalCertificados({
               </button>
             </div>
           </div>
-        </div>
+        </ModalOverlay>
       )}
     </Modal>
   );

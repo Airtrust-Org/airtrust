@@ -98,7 +98,7 @@ export default function Manobras() {
           <div className="mb-6">
             <div className="relative max-w-md">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-neutral-400 h-5 w-5" />
-              <input
+              <input aria-label="Buscar manobras..."
                 type="text"
                 placeholder="Buscar manobras..."
                 value={searchTerm}
@@ -113,19 +113,19 @@ export default function Manobras() {
             <table className="w-full text-sm">
               <thead className="border-b border-neutral-200 bg-neutral-50">
                 <tr>
-                  <th className=" py-3 text-left text-xs font-semibold text-neutral-600 uppercase w-24">
+                  <th scope="col" className=" py-3 text-left text-xs font-semibold text-neutral-600 uppercase w-24">
                     Ações
                   </th>
-                  <th className=" py-3 text-left text-xs font-semibold text-neutral-600 uppercase">
+                  <th scope="col" className=" py-3 text-left text-xs font-semibold text-neutral-600 uppercase">
                     Código
                   </th>
-                  <th className=" py-3 text-left text-xs font-semibold text-neutral-600 uppercase">
+                  <th scope="col" className=" py-3 text-left text-xs font-semibold text-neutral-600 uppercase">
                     Nome
                   </th>
-                  <th className=" py-3 text-left text-xs font-semibold text-neutral-600 uppercase">
+                  <th scope="col" className=" py-3 text-left text-xs font-semibold text-neutral-600 uppercase">
                     Tipo
                   </th>
-                  <th className=" py-3 text-left text-xs font-semibold text-neutral-600 uppercase">
+                  <th scope="col" className=" py-3 text-left text-xs font-semibold text-neutral-600 uppercase">
                     Referência QRH
                   </th>
                 </tr>

@@ -275,7 +275,7 @@ function LinhaGuia({ guia, onMudou }: { guia: GuiaInstrutor & { id: number }; on
   return (
     <div className="border-b border-slate-200 dark:border-slate-800 py-3">
       <div className="flex flex-wrap items-center gap-3">
-        <button
+        <button type="button"
           onClick={() => setExpandido((v) => !v)}
           className="text-left flex-1 min-w-[240px]"
           title={getNomeExibicaoGuia(guia).tooltip}
@@ -284,7 +284,7 @@ function LinhaGuia({ guia, onMudou }: { guia: GuiaInstrutor & { id: number }; on
           <p className="text-xs font-mono text-slate-500">{guia.codigo} · v{guia.versao}</p>
         </button>
         <span
-          className={`text-[11px] px-2 py-0.5 rounded-full font-medium ${
+          className={`text-xs px-2 py-0.5 rounded-full font-medium ${
             guia.status === 'ATIVO'
               ? 'bg-emerald-100 text-emerald-700'
               : guia.status === 'SUBSTITUIDO'
@@ -296,8 +296,8 @@ function LinhaGuia({ guia, onMudou }: { guia: GuiaInstrutor & { id: number }; on
         >
           {guia.status}
         </span>
-        <span className="text-[11px] text-slate-500">HTML: {guia.html_status_validacao}</span>
-        <span className="text-[11px] text-slate-500">PDF: {guia.pdf_disponivel ? 'sim' : 'não'}</span>
+        <span className="text-xs text-slate-500">HTML: {guia.html_status_validacao}</span>
+        <span className="text-xs text-slate-500">PDF: {guia.pdf_disponivel ? 'sim' : 'não'}</span>
         {guia.status !== 'ATIVO' && guia.status !== 'SUBSTITUIDO' && (
           <Button size="sm" variant="secondary" disabled={processando} onClick={ativar}>
             <ShieldCheck className="w-3.5 h-3.5 mr-1" /> Ativar

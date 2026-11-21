@@ -271,15 +271,15 @@ function HistoricoTab({ collective }: { collective: boolean }) {
           <table className="w-full text-xs">
             <thead>
               <tr className="border-b border-slate-100">
-                <th className="py-2 text-left font-medium text-slate-500">Data</th>
+                <th scope="col" className="py-2 text-left font-medium text-slate-500">Data</th>
                 {collective && (
-                  <th className="py-2 text-left font-medium text-slate-500">Tripulante</th>
+                  <th scope="col" className="py-2 text-left font-medium text-slate-500">Tripulante</th>
                 )}
-                <th className="py-2 text-left font-medium text-slate-500">KSS</th>
-                <th className="py-2 text-left font-medium text-slate-500">Sono (h)</th>
-                <th className="py-2 text-left font-medium text-slate-500">Score</th>
-                <th className="py-2 text-left font-medium text-slate-500">Nível de alerta</th>
-                <th className="py-2 text-left font-medium text-slate-500">Status Op.</th>
+                <th scope="col" className="py-2 text-left font-medium text-slate-500">KSS</th>
+                <th scope="col" className="py-2 text-left font-medium text-slate-500">Sono (h)</th>
+                <th scope="col" className="py-2 text-left font-medium text-slate-500">Score</th>
+                <th scope="col" className="py-2 text-left font-medium text-slate-500">Nível de alerta</th>
+                <th scope="col" className="py-2 text-left font-medium text-slate-500">Status Op.</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-50">
@@ -368,11 +368,11 @@ function PainelGestorTab() {
             <table className="w-full text-xs">
               <thead className="bg-slate-50">
                 <tr className="border-b border-slate-200">
-                  <th className="px-4 py-3 text-left font-medium text-slate-500">Tripulante</th>
-                  <th className="px-4 py-3 text-left font-medium text-slate-500">KSS</th>
-                  <th className="px-4 py-3 text-left font-medium text-slate-500">Score</th>
-                  <th className="px-4 py-3 text-left font-medium text-slate-500">Nível de alerta</th>
-                  <th className="px-4 py-3 text-left font-medium text-slate-500">Situação na data</th>
+                  <th scope="col" className="px-4 py-3 text-left font-medium text-slate-500">Tripulante</th>
+                  <th scope="col" className="px-4 py-3 text-left font-medium text-slate-500">KSS</th>
+                  <th scope="col" className="px-4 py-3 text-left font-medium text-slate-500">Score</th>
+                  <th scope="col" className="px-4 py-3 text-left font-medium text-slate-500">Nível de alerta</th>
+                  <th scope="col" className="px-4 py-3 text-left font-medium text-slate-500">Situação na data</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">

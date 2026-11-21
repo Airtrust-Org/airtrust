@@ -323,7 +323,7 @@ export default function ImportarRelacoesInteligente({
 
       {/* Instruções */}
       <div className="mt-6 bg-primary/10 border border-blue-200 rounded-lg p-6">
-        <h3 className="text-lg font-semibold text-blue-900 mb-3">📋 Como Usar</h3>
+        <h3 className="text-lg font-semibold text-blue-900 mb-3"><span aria-hidden="true">📋</span> Como Usar</h3>
         <ol className="space-y-2 text-sm text-primary">
           <li>
             <strong>1.</strong> Baixe o template Excel clicando no botão acima

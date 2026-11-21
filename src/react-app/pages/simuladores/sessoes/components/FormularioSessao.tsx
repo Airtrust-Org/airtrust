@@ -5,6 +5,7 @@ import TimeInput from '@/react-app/components/TimeInput';
 import { normalizeTimeInput } from '@/react-app/lib/time-input';
 
 import { X, Save } from 'lucide-react';
+import { ModalOverlay } from '@/react-app/components/modals/ModalOverlay';
 
 const isValidTimeValue = (value: string | null): boolean => {
   if (!value) return false;
@@ -106,12 +107,12 @@ export default function FormSessao({ isOpen, onClose, onSuccess }: Props) {
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+    <ModalOverlay className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
         {/* Header */}
         <div className="flex items-center justify-between p-6 border-b border-gray-200">
           <h2 className="text-2xl font-bold text-gray-900">Agendar Nova Sessão</h2>
-          <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
+          <button aria-label="Fechar" type="button" onClick={onClose} className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
             <X className="w-5 h-5 text-gray-500" />
           </button>
         </div>
@@ -121,8 +122,8 @@ export default function FormSessao({ isOpen, onClose, onSuccess }: Props) {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             {/* Simulador */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Simulador *</label>
-              <select
+              <label htmlFor="formulariosessao-simulador" className="block text-sm font-medium text-gray-700 mb-2">Simulador *</label>
+              <select id="formulariosessao-simulador" aria-label="Simulador"
                 required
                 value={formData.simulador_id}
                 onChange={(e) => setFormData({ ...formData, simulador_id: e.target.value })}
@@ -139,8 +140,8 @@ export default function FormSessao({ isOpen, onClose, onSuccess }: Props) {
 
             {/* Data */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Data *</label>
-              <input
+              <label htmlFor="formulariosessao-data" className="block text-sm font-medium text-gray-700 mb-2">Data *</label>
+              <input id="formulariosessao-data" aria-label="Data"
                 type="date"
                 required
                 value={formData.data}
@@ -151,8 +152,8 @@ export default function FormSessao({ isOpen, onClose, onSuccess }: Props) {
 
             {/* Hora Início */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Hora Início *</label>
-              <TimeInput
+              <label htmlFor="formulariosessao-hora-inicio" className="block text-sm font-medium text-gray-700 mb-2">Hora Início *</label>
+              <TimeInput id="formulariosessao-hora-inicio"
                 required
                 value={formData.hora_inicio}
                 onChange={(value) => setFormData({ ...formData, hora_inicio: value })}
@@ -162,8 +163,8 @@ export default function FormSessao({ isOpen, onClose, onSuccess }: Props) {
 
             {/* Hora Fim */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Hora Fim *</label>
-              <TimeInput
+              <label htmlFor="formulariosessao-hora-fim" className="block text-sm font-medium text-gray-700 mb-2">Hora Fim *</label>
+              <TimeInput id="formulariosessao-hora-fim"
                 required
                 value={formData.hora_fim}
                 onChange={(value) => setFormData({ ...formData, hora_fim: value })}
@@ -173,8 +174,8 @@ export default function FormSessao({ isOpen, onClose, onSuccess }: Props) {
 
             {/* Instrutor */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Instrutor *</label>
-              <select
+              <label htmlFor="formulariosessao-instrutor" className="block text-sm font-medium text-gray-700 mb-2">Instrutor *</label>
+              <select id="formulariosessao-instrutor" aria-label="Instrutor"
                 required
                 value={formData.instrutor_id}
                 onChange={(e) => setFormData({ ...formData, instrutor_id: e.target.value })}
@@ -191,10 +192,10 @@ export default function FormSessao({ isOpen, onClose, onSuccess }: Props) {
 
             {/* Equipamento Simulado */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
+              <label htmlFor="formulariosessao-equipamento-simulado" className="block text-sm font-medium text-gray-700 mb-2">
                 Equipamento Simulado
               </label>
-              <input
+              <input id="formulariosessao-equipamento-simulado" aria-label="Equipamento Simulado"
                 type="text"
                 value={formData.aeronave_simulada}
                 onChange={(e) => setFormData({ ...formData, aeronave_simulada: e.target.value })}
@@ -206,8 +207,8 @@ export default function FormSessao({ isOpen, onClose, onSuccess }: Props) {
 
           {/* Alunos */}
           <div className="mt-6">
-            <label className="block text-sm font-medium text-gray-700 mb-2">Alunos</label>
-            <select
+            <label htmlFor="formulariosessao-alunos" className="block text-sm font-medium text-gray-700 mb-2">Alunos</label>
+            <select id="formulariosessao-alunos" aria-label="Alunos"
               multiple
               value={formData.aluno_ids}
               onChange={(e) => {
@@ -255,10 +256,10 @@ export default function FormSessao({ isOpen, onClose, onSuccess }: Props) {
 
           {/* Objetivos */}
           <div className="mt-6">
-            <label className="block text-sm font-medium text-gray-700 mb-2">
+            <label htmlFor="formulariosessao-objetivos-da-sessao" className="block text-sm font-medium text-gray-700 mb-2">
               Objetivos da Sessão
             </label>
-            <textarea
+            <textarea id="formulariosessao-objetivos-da-sessao" aria-label="Objetivos da Sessão"
               value={formData.objetivos}
               onChange={(e) => setFormData({ ...formData, objetivos: e.target.value })}
               rows={4}
@@ -278,7 +279,7 @@ export default function FormSessao({ isOpen, onClose, onSuccess }: Props) {
           >
             Cancelar
           </button>
-          <button
+          <button type="button"
             onClick={handleSubmit}
             disabled={loading}
             className=" py-2 bg-primary text-white rounded-lg font-medium hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
@@ -297,6 +298,6 @@ export default function FormSessao({ isOpen, onClose, onSuccess }: Props) {
           </button>
         </div>
       </div>
-    </div>
+    </ModalOverlay>
   );
 }

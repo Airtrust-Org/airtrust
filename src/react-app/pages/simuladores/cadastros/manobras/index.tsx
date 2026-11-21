@@ -10,6 +10,7 @@ import { Input } from '@/react-app/components/UI/Input';
 import { ArrowLeft, Plus, Trash2, Upload, Inbox } from 'lucide-react';
 import { confirmDialog } from '@/react-app/utils/confirmDialog';
 import { RowActionsMenu } from '@/react-app/components/UI/RowActionsMenu';
+import { ModalOverlay } from '@/react-app/components/modals/ModalOverlay';
 
 interface Manobra {
   id: number;
@@ -277,8 +278,8 @@ export default function CrudManobras({ embedded = false, onBack }: Props = {}) {
       <div className="bg-white dark:bg-slate-900 rounded-lg border border-gray-200 dark:border-slate-700 p-4 space-y-4">
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">Buscar</label>
-            <Input
+            <label htmlFor="index-buscar" className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">Buscar</label>
+            <Input id="index-buscar" aria-label="Buscar"
               placeholder="Código ou nome..."
               value={busca}
               onChange={(e) => setBusca(e.target.value)}
@@ -286,8 +287,8 @@ export default function CrudManobras({ embedded = false, onBack }: Props = {}) {
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">Equipamento</label>
-            <select
+            <label htmlFor="index-equipamento" className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">Equipamento</label>
+            <select id="index-equipamento" aria-label="Equipamento"
               className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md text-sm bg-white dark:bg-slate-800 text-gray-900 dark:text-slate-100"
               value={filtroModelo}
               onChange={(e) => setFiltroModelo(e.target.value)}
@@ -298,8 +299,8 @@ export default function CrudManobras({ embedded = false, onBack }: Props = {}) {
             </select>
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">Categoria</label>
-            <select
+            <label htmlFor="index-categoria" className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">Categoria</label>
+            <select id="index-categoria" aria-label="Categoria"
               className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md text-sm bg-white dark:bg-slate-800 text-gray-900 dark:text-slate-100"
               value={filtroCategoria}
               onChange={(e) => setFiltroCategoria(e.target.value)}
@@ -337,25 +338,25 @@ export default function CrudManobras({ embedded = false, onBack }: Props = {}) {
         <table className="w-full">
           <thead className="bg-gray-50 dark:bg-slate-800 border-b border-gray-200 dark:border-slate-700">
             <tr>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-slate-400 uppercase">
+              <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-slate-400 uppercase">
                 Código
               </th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-slate-400 uppercase">
+              <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-slate-400 uppercase">
                 Modelo
               </th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-slate-400 uppercase">
+              <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-slate-400 uppercase">
                 Nome
               </th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-slate-400 uppercase">
+              <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-slate-400 uppercase">
                 Descrição
               </th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-slate-400 uppercase">
+              <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-slate-400 uppercase">
                 Categoria
               </th>
-              <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 dark:text-slate-400 uppercase">
+              <th scope="col" className="px-4 py-3 text-center text-xs font-medium text-gray-500 dark:text-slate-400 uppercase">
                 Dificuldade
               </th>
-              <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 dark:text-slate-400 uppercase">
+              <th scope="col" className="px-4 py-3 text-center text-xs font-medium text-gray-500 dark:text-slate-400 uppercase">
                 Ações
               </th>
             </tr>
@@ -435,7 +436,7 @@ export default function CrudManobras({ embedded = false, onBack }: Props = {}) {
 
       {/* Modal */}
       {showModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 animate-fade-in" onClick={fecharModal}>
+        <ModalOverlay className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 animate-fade-in" onClick={fecharModal}>
           <div className="bg-white dark:bg-slate-900 rounded-lg max-w-lg w-full animate-scale-in max-h-[calc(100dvh-2rem)] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
             <div className="p-6 border-b border-gray-200 dark:border-slate-700">
               <h3 className="text-lg font-semibold text-gray-900 dark:text-slate-100">{editando ? 'Editar' : 'Nova'} Manobra</h3>
@@ -443,8 +444,8 @@ export default function CrudManobras({ embedded = false, onBack }: Props = {}) {
             <div className="p-6 space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">Código <span className="text-red-500">*</span></label>
-                  <Input
+                  <label htmlFor="index-codigo" className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">Código <span className="text-red-500">*</span></label>
+                  <Input id="index-codigo" aria-label="Código"
                     value={formData.codigo || ''}
                     onChange={(e) =>
                       setFormData({ ...formData, codigo: e.target.value.toUpperCase() })
@@ -452,10 +453,10 @@ export default function CrudManobras({ embedded = false, onBack }: Props = {}) {
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">
+                  <label htmlFor="index-equipamento-2" className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">
                     Equipamento
                   </label>
-                  <select
+                  <select id="index-equipamento-2" aria-label="Equipamento"
                     className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md bg-white dark:bg-slate-800 text-gray-900 dark:text-slate-100"
                     value={formData.tipo_aeronave || ''}
                     onChange={(e) => setFormData({ ...formData, tipo_aeronave: e.target.value })}
@@ -467,8 +468,8 @@ export default function CrudManobras({ embedded = false, onBack }: Props = {}) {
                 </div>
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">Categoria</label>
-                <select
+                <label htmlFor="index-categoria-2" className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">Categoria</label>
+                <select id="index-categoria-2" aria-label="Categoria"
                   className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md bg-white dark:bg-slate-800 text-gray-900 dark:text-slate-100"
                   value={formData.categoria || ''}
                   onChange={(e) => setFormData({ ...formData, categoria: e.target.value })}
@@ -482,15 +483,15 @@ export default function CrudManobras({ embedded = false, onBack }: Props = {}) {
                 </select>
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">Nome <span className="text-red-500">*</span></label>
-                <Input
+                <label htmlFor="index-nome" className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">Nome <span className="text-red-500">*</span></label>
+                <Input id="index-nome" aria-label="Nome"
                   value={formData.nome || ''}
                   onChange={(e) => setFormData({ ...formData, nome: e.target.value })}
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">Descrição</label>
-                <textarea
+                <label htmlFor="index-descricao" className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">Descrição</label>
+                <textarea id="index-descricao" aria-label="Descrição"
                   className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md bg-white dark:bg-slate-800 text-gray-900 dark:text-slate-100"
                   value={formData.descricao || ''}
                   onChange={(e) => setFormData({ ...formData, descricao: e.target.value })}
@@ -498,10 +499,10 @@ export default function CrudManobras({ embedded = false, onBack }: Props = {}) {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">
+                <label htmlFor="index-nivel-de-dificuldade" className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">
                   Nível de Dificuldade
                 </label>
-                <select
+                <select id="index-nivel-de-dificuldade" aria-label="Nível de Dificuldade"
                   className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md bg-white dark:bg-slate-800 text-gray-900 dark:text-slate-100"
                   value={formData.nivel_dificuldade || 'BASICO'}
                   onChange={(e) =>
@@ -526,7 +527,7 @@ export default function CrudManobras({ embedded = false, onBack }: Props = {}) {
               </Button>
             </div>
           </div>
-        </div>
+        </ModalOverlay>
       )}
     </div>
   );

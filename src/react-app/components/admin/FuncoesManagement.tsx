@@ -242,7 +242,7 @@ export default function FuncoesManagement() {
               </p>
             </div>
             <div className="flex gap-3">
-              <button
+              <button type="button"
                 onClick={() => setShowImportModal(true)}
                 className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 flex items-center gap-2"
               >
@@ -280,10 +280,10 @@ export default function FuncoesManagement() {
               <table className="w-full">
                 <thead className="bg-gray-50 border-b border-gray-200">
                   <tr>
-                    <th className="text-left py-3 px-6 font-medium text-gray-900">Nome</th>
-                    <th className="text-left py-3 px-6 font-medium text-gray-900">Categoria</th>
-                    <th className="text-left py-3 px-6 font-medium text-gray-900">Descrição</th>
-                    <th className="text-center py-3 px-6 font-medium text-gray-900">Ações</th>
+                    <th scope="col" className="text-left py-3 px-6 font-medium text-gray-900">Nome</th>
+                    <th scope="col" className="text-left py-3 px-6 font-medium text-gray-900">Categoria</th>
+                    <th scope="col" className="text-left py-3 px-6 font-medium text-gray-900">Descrição</th>
+                    <th scope="col" className="text-center py-3 px-6 font-medium text-gray-900">Ações</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-200">
@@ -338,8 +338,8 @@ export default function FuncoesManagement() {
           )}
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Nome *</label>
-            <input
+            <label htmlFor="funcoesmanagement-nome" className="block text-sm font-medium text-gray-700 mb-2">Nome *</label>
+            <input id="funcoesmanagement-nome" aria-label="Nome"
               type="text"
               name="nome"
               value={formData.nome}
@@ -351,8 +351,8 @@ export default function FuncoesManagement() {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Categoria</label>
-            <select
+            <label htmlFor="funcoesmanagement-categoria" className="block text-sm font-medium text-gray-700 mb-2">Categoria</label>
+            <select id="funcoesmanagement-categoria" aria-label="Categoria"
               name="categoria"
               value={formData.categoria}
               onChange={handleInputChange}
@@ -367,8 +367,8 @@ export default function FuncoesManagement() {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Descrição</label>
-            <textarea
+            <label htmlFor="funcoesmanagement-descricao" className="block text-sm font-medium text-gray-700 mb-2">Descrição</label>
+            <textarea id="funcoesmanagement-descricao" aria-label="Descrição"
               name="descricao"
               value={formData.descricao}
               onChange={handleInputChange}
@@ -399,8 +399,8 @@ export default function FuncoesManagement() {
           )}
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Nome *</label>
-            <input
+            <label htmlFor="funcoesmanagement-nome-2" className="block text-sm font-medium text-gray-700 mb-2">Nome *</label>
+            <input id="funcoesmanagement-nome-2" aria-label="Nome"
               type="text"
               name="nome"
               value={formData.nome}
@@ -412,8 +412,8 @@ export default function FuncoesManagement() {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Categoria</label>
-            <select
+            <label htmlFor="funcoesmanagement-categoria-2" className="block text-sm font-medium text-gray-700 mb-2">Categoria</label>
+            <select id="funcoesmanagement-categoria-2" aria-label="Categoria"
               name="categoria"
               value={formData.categoria}
               onChange={handleInputChange}
@@ -428,8 +428,8 @@ export default function FuncoesManagement() {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Descrição</label>
-            <textarea
+            <label htmlFor="funcoesmanagement-descricao-2" className="block text-sm font-medium text-gray-700 mb-2">Descrição</label>
+            <textarea id="funcoesmanagement-descricao-2" aria-label="Descrição"
               name="descricao"
               value={formData.descricao}
               onChange={handleInputChange}

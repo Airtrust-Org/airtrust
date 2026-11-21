@@ -24,6 +24,7 @@ import { useApi } from '@/react-app/hooks/useApi';
 import { useFrmsEscalas, useFrmsMutation } from '@/react-app/hooks/useFrms';
 import type { FrmsEscalaRow } from '@/react-app/hooks/useFrms';
 import { toast } from 'sonner';
+import { ModalOverlay } from '@/react-app/components/modals/ModalOverlay';
 
 function getTodayLocalKey(): string {
   const now = new Date();
@@ -127,13 +128,13 @@ function EscalaFormModal({ tripulanteId, escala, onClose, onSaved }: FormModalPr
   };
 
   return (
-    <div className="fixed inset-0 z-modal flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
+    <ModalOverlay className="fixed inset-0 z-modal flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
       <div className="w-full max-w-lg rounded-2xl bg-white shadow-2xl max-h-[calc(100dvh-2rem)] overflow-y-auto">
         <div className="flex items-center justify-between border-b border-gray-100 px-6 py-4">
           <h2 className="text-base font-bold text-gray-900">
             {isEdit ? 'Editar Escala' : 'Nova Escala Quinzenal'}
           </h2>
-          <button onClick={onClose} className="rounded-lg p-1 hover:bg-gray-100">
+          <button aria-label="Fechar" type="button" onClick={onClose} className="rounded-lg p-1 hover:bg-gray-100">
             <X className="h-5 w-5 text-gray-400" />
           </button>
         </div>
@@ -146,8 +147,8 @@ function EscalaFormModal({ tripulanteId, escala, onClose, onSaved }: FormModalPr
             </p>
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="block text-xs text-gray-500 mb-1">Início</label>
-                <input
+                <label htmlFor="frmsescalas-inicio" className="block text-xs text-gray-500 mb-1">Início</label>
+                <input id="frmsescalas-inicio" aria-label="Início"
                   type="date"
                   value={dataInicioEmb}
                   onChange={(e) => setDataInicioEmb(e.target.value)}
@@ -156,8 +157,8 @@ function EscalaFormModal({ tripulanteId, escala, onClose, onSaved }: FormModalPr
                 />
               </div>
               <div>
-                <label className="block text-xs text-gray-500 mb-1">Fim</label>
-                <input
+                <label htmlFor="frmsescalas-fim" className="block text-xs text-gray-500 mb-1">Fim</label>
+                <input id="frmsescalas-fim" aria-label="Fim"
                   type="date"
                   value={dataFimEmb}
                   onChange={(e) => setDataFimEmb(e.target.value)}
@@ -167,7 +168,7 @@ function EscalaFormModal({ tripulanteId, escala, onClose, onSaved }: FormModalPr
               </div>
             </div>
             {diasEmb > 0 && (
-              <p className="text-[11px] text-blue-600 mt-1">{diasEmb} dias de embarque</p>
+              <p className="text-xs text-blue-600 mt-1">{diasEmb} dias de embarque</p>
             )}
           </div>
 
@@ -178,8 +179,8 @@ function EscalaFormModal({ tripulanteId, escala, onClose, onSaved }: FormModalPr
             </p>
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="block text-xs text-gray-500 mb-1">Início</label>
-                <input
+                <label htmlFor="frmsescalas-inicio-2" className="block text-xs text-gray-500 mb-1">Início</label>
+                <input id="frmsescalas-inicio-2" aria-label="Início"
                   type="date"
                   value={dataInicioFolga}
                   onChange={(e) => setDataInicioFolga(e.target.value)}
@@ -188,8 +189,8 @@ function EscalaFormModal({ tripulanteId, escala, onClose, onSaved }: FormModalPr
                 />
               </div>
               <div>
-                <label className="block text-xs text-gray-500 mb-1">Fim</label>
-                <input
+                <label htmlFor="frmsescalas-fim-2" className="block text-xs text-gray-500 mb-1">Fim</label>
+                <input id="frmsescalas-fim-2" aria-label="Fim"
                   type="date"
                   value={dataFimFolga}
                   onChange={(e) => setDataFimFolga(e.target.value)}
@@ -199,18 +200,18 @@ function EscalaFormModal({ tripulanteId, escala, onClose, onSaved }: FormModalPr
               </div>
             </div>
             {diasFolga > 0 && (
-              <p className="text-[11px] text-emerald-600 mt-1">{diasFolga} dias de folga</p>
+              <p className="text-xs text-emerald-600 mt-1">{diasFolga} dias de folga</p>
             )}
           </div>
 
           {/* Status (só na edição) */}
           {isEdit && (
             <div>
-              <label className="block text-xs font-medium text-gray-500 mb-1">
+              <label htmlFor="frmsescalas-status-do-ciclo" className="block text-xs font-medium text-gray-500 mb-1">
                 Status do Ciclo
               </label>
               <div className="relative">
-                <select
+                <select id="frmsescalas-status-do-ciclo" aria-label="Status do Ciclo"
                   value={statusCiclo}
                   onChange={(e) => setStatusCiclo(e.target.value)}
                   className="w-full appearance-none rounded-lg border border-gray-200 pl-3 pr-8 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-primary/30 cursor-pointer"
@@ -226,8 +227,8 @@ function EscalaFormModal({ tripulanteId, escala, onClose, onSaved }: FormModalPr
 
           {/* Observação */}
           <div>
-            <label className="block text-xs font-medium text-gray-500 mb-1">Observação</label>
-            <textarea
+            <label htmlFor="frmsescalas-observacao" className="block text-xs font-medium text-gray-500 mb-1">Observação</label>
+            <textarea id="frmsescalas-observacao" aria-label="Observação"
               value={obs}
               onChange={(e) => setObs(e.target.value)}
               rows={2}
@@ -263,7 +264,7 @@ function EscalaFormModal({ tripulanteId, escala, onClose, onSaved }: FormModalPr
           </div>
         </form>
       </div>
-    </div>
+    </ModalOverlay>
   );
 }
 
@@ -300,7 +301,7 @@ export default function FrmsEscalas() {
       <div className="space-y-4">
         {/* Header */}
         <div className="flex items-center gap-4">
-          <button
+          <button type="button"
             onClick={() => navigate('/frms')}
             className="flex items-center gap-1 rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-600 hover:bg-gray-50 transition-colors"
           >
@@ -313,7 +314,7 @@ export default function FrmsEscalas() {
             </p>
           </div>
           {tripulanteId && (
-            <button
+            <button type="button"
               onClick={() => {
                 setEditingEscala(null);
                 setShowForm(true);
@@ -327,11 +328,11 @@ export default function FrmsEscalas() {
 
         {/* Seletor de Tripulante */}
         <div className="rounded-xl border border-gray-200 bg-white p-5">
-          <label className="block text-xs font-semibold uppercase tracking-wide text-gray-500 mb-2">
+          <label htmlFor="frmsescalas-selecionar-tripulante" className="block text-xs font-semibold uppercase tracking-wide text-gray-500 mb-2">
             Selecionar Tripulante
           </label>
           <div className="relative max-w-sm">
-            <select
+            <select id="frmsescalas-selecionar-tripulante" aria-label="Selecionar Tripulante"
               value={tripulanteId}
               onChange={(e) => setTripulanteId(e.target.value)}
               className="w-full appearance-none rounded-lg border border-gray-200 bg-white pl-3 pr-8 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 cursor-pointer"
@@ -355,7 +356,7 @@ export default function FrmsEscalas() {
               <span className="text-sm font-semibold text-gray-700">
                 Escalas de {tripulanteNome ?? `#${tripulanteId}`}
               </span>
-              <span className="ml-2 rounded-full bg-gray-100 px-2 py-0.5 text-[11px] font-bold text-gray-500">
+              <span className="ml-2 rounded-full bg-gray-100 px-2 py-0.5 text-xs font-bold text-gray-500">
                 {escalas.length}
               </span>
             </div>
@@ -379,31 +380,31 @@ export default function FrmsEscalas() {
                 />
               </div>
             ) : (
-              <table className="w-full text-sm">
+              <div className="overflow-x-auto"><table className="w-full text-sm">
                 <thead>
                   <tr className="bg-gray-50/70 border-b border-gray-100">
-                    <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase text-gray-500">
+                    <th scope="col" className="px-4 py-3 text-left text-xs font-semibold uppercase text-gray-500">
                       Ciclo
                     </th>
-                    <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase text-gray-500">
+                    <th scope="col" className="px-4 py-3 text-left text-xs font-semibold uppercase text-gray-500">
                       Embarque
                     </th>
-                    <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase text-gray-500">
+                    <th scope="col" className="px-4 py-3 text-left text-xs font-semibold uppercase text-gray-500">
                       Folga
                     </th>
-                    <th className="px-4 py-3 text-center text-[11px] font-semibold uppercase text-gray-500">
+                    <th scope="col" className="px-4 py-3 text-center text-xs font-semibold uppercase text-gray-500">
                       Dias Emb
                     </th>
-                    <th className="px-4 py-3 text-center text-[11px] font-semibold uppercase text-gray-500">
+                    <th scope="col" className="px-4 py-3 text-center text-xs font-semibold uppercase text-gray-500">
                       Dias Folga
                     </th>
-                    <th className="px-4 py-3 text-center text-[11px] font-semibold uppercase text-gray-500">
+                    <th scope="col" className="px-4 py-3 text-center text-xs font-semibold uppercase text-gray-500">
                       Status
                     </th>
-                    <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase text-gray-500">
+                    <th scope="col" className="px-4 py-3 text-left text-xs font-semibold uppercase text-gray-500">
                       Obs.
                     </th>
-                    <th className="px-4 py-3" />
+                    <th scope="col" className="px-4 py-3" />
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-50">
@@ -435,7 +436,7 @@ export default function FrmsEscalas() {
                         </td>
                         <td className="px-4 py-2.5 text-center">
                           <span
-                            className={`rounded-full px-2.5 py-0.5 text-[11px] font-bold ${st.color}`}
+                            className={`rounded-full px-2.5 py-0.5 text-xs font-bold ${st.color}`}
                           >
                             {st.label}
                           </span>
@@ -444,7 +445,7 @@ export default function FrmsEscalas() {
                           {e.observacao ?? '—'}
                         </td>
                         <td className="px-4 py-2.5">
-                          <button
+                          <button type="button"
                             onClick={() => {
                               setEditingEscala(e);
                               setShowForm(true);
@@ -459,7 +460,7 @@ export default function FrmsEscalas() {
                     );
                   })}
                 </tbody>
-              </table>
+              </table></div>
             )}
           </div>
         )}

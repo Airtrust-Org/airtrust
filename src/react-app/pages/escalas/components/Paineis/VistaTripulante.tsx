@@ -13,6 +13,7 @@ import type { EscalaEvento, EscalaTripulacao } from '../../hooks/queries/useEsca
 import { parseISO, eachDayOfInterval, format, differenceInDays } from 'date-fns';
 import { normalizeTipoCodigo } from '../../constants/tiposEvento';
 import { useTiposEventoResolvidos } from '../../hooks/useTiposEventoResolvidos';
+import { ModalOverlay } from '@/react-app/components/modals/ModalOverlay';
 
 interface VistaTripulanteProps {
   escalaId: string;
@@ -131,7 +132,7 @@ export default function VistaTripulante({
   };
 
   return (
-    <div className="fixed inset-0 z-modal bg-black/40 flex items-center justify-center p-4">
+    <ModalOverlay className="fixed inset-0 z-modal bg-black/40 flex items-center justify-center p-4">
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] flex flex-col overflow-hidden">
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
@@ -142,15 +143,15 @@ export default function VistaTripulante({
               <p className="text-xs text-gray-500">Escala individual detalhada</p>
             </div>
           </div>
-          <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
+          <button aria-label="Fechar" onClick={onClose} className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
             <X className="w-5 h-5 text-gray-500" />
           </button>
         </div>
 
         {/* Pilot selector */}
         <div className="px-6 py-3 border-b border-gray-50 flex items-center gap-3">
-          <label className="text-xs text-gray-500">Tripulante:</label>
-          <select
+          <label htmlFor="vistatripulante-tripulante" className="text-xs text-gray-500">Tripulante:</label>
+          <select id="vistatripulante-tripulante" aria-label="Tripulante"
             value={selectedPilot}
             onChange={(e) => setSelectedPilot(e.target.value)}
             className="text-sm border border-gray-200 rounded-lg px-3 py-1.5 bg-white focus:ring-2 focus:ring-primary/30 focus:border-blue-500"
@@ -198,7 +199,7 @@ export default function VistaTripulante({
           <div className="grid grid-cols-7 gap-1">
             {/* Day headers */}
             {['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'].map((d) => (
-              <div key={d} className="text-center text-[10px] font-medium text-gray-400 pb-1">
+              <div key={d} className="text-center text-xs font-medium text-gray-400 pb-1">
                 {d}
               </div>
             ))}
@@ -221,7 +222,7 @@ export default function VistaTripulante({
                   } ${isWeekend ? 'bg-gray-50/50' : ''}`}
                 >
                   <div
-                    className={`text-[10px] font-medium ${isToday ? 'text-blue-600' : 'text-gray-400'}`}
+                    className={`text-xs font-medium ${isToday ? 'text-blue-600' : 'text-gray-400'}`}
                   >
                     {dia.getDate()}
                   </div>
@@ -232,7 +233,7 @@ export default function VistaTripulante({
                     return (
                       <div
                         key={evt.id}
-                        className="text-[9px] px-1 py-0.5 rounded mt-0.5 truncate font-medium"
+                        className="text-xs px-1 py-0.5 rounded mt-0.5 truncate font-medium"
                         style={{
                           backgroundColor,
                           color: '#FFFFFF',
@@ -268,12 +269,12 @@ export default function VistaTripulante({
                       <span className="text-xs font-medium text-gray-800">
                         {cfg?.label || evt.tipo_evento}
                       </span>
-                      <span className="text-[10px] text-gray-400 ml-auto">
+                      <span className="text-xs text-gray-400 ml-auto">
                         {formatDate(evt.data_inicio)}
                         {evt.data_inicio !== evt.data_fim ? ` → ${formatDate(evt.data_fim)}` : ''}
                       </span>
                       {evt.status === 'pendente' && (
-                        <span className="text-[9px] px-1.5 py-0.5 bg-amber-100 text-amber-700 rounded">
+                        <span className="text-xs px-1.5 py-0.5 bg-amber-100 text-amber-700 rounded">
                           Pendente
                         </span>
                       )}
@@ -285,6 +286,6 @@ export default function VistaTripulante({
           )}
         </div>
       </div>
-    </div>
+    </ModalOverlay>
   );
 }

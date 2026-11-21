@@ -91,6 +91,7 @@ import {
   useLmsCourseCompliance,
   type ComplianceRow,
 } from './LmsCourseComplianceMetrics';
+import { ModalOverlay } from '@/react-app/components/modals/ModalOverlay';
 
 // ── Types & helpers ─────────────────────────────────────────────────────────
 
@@ -578,7 +579,7 @@ function ContentDropzone({
                 {file.type || 'Arquivo binário'} · {formatFileSize(file.size)}
               </p>
             </div>
-            <button
+            <button aria-label="Fechar"
               type="button"
               onClick={() => pick(null)}
               className="rounded-full p-1 text-slate-400 hover:bg-slate-100"
@@ -886,7 +887,7 @@ function CourseDrawer({
   };
 
   return createPortal(
-    <div
+    <ModalOverlay
       className="fixed inset-0 z-50 bg-slate-950/45 backdrop-blur-[2px] animate-fade-in"
       onClick={safeClose}
     >
@@ -931,7 +932,7 @@ function CourseDrawer({
                     Abrir player
                   </Button>
                 ) : null}
-                <button
+                <button aria-label="Fechar"
                   type="button"
                   onClick={safeClose}
                   disabled={isSaving}
@@ -956,7 +957,7 @@ function CourseDrawer({
                     <div className="grid gap-4 lg:grid-cols-[1.4fr_0.8fr]">
                       <div className="space-y-2">
                         <FieldLabel label="Título" required />
-                        <input
+                        <input aria-label="Ex.: CRM, Fatores Humanos"
                           value={form.titulo}
                           onChange={(e) => setForm((c) => ({ ...c, titulo: e.target.value }))}
                           className={fieldCls}
@@ -991,7 +992,7 @@ function CourseDrawer({
                     </div>
                     <div className="space-y-2">
                       <FieldLabel label="Descrição" />
-                      <textarea
+                      <textarea aria-label="Objetivo, público-alvo e o que será aprendido."
                         rows={4}
                         value={form.descricao ?? ''}
                         onChange={(e) => setForm((c) => ({ ...c, descricao: e.target.value }))}
@@ -1080,8 +1081,8 @@ function CourseDrawer({
                           </div>
                         )}
                         <div>
-                          <label className="mb-1 block text-xs font-medium text-slate-500">Versão SCORM</label>
-                          <select
+                          <label htmlFor="lmscatalogo-versao-scorm" className="mb-1 block text-xs font-medium text-slate-500">Versão SCORM</label>
+                          <select id="lmscatalogo-versao-scorm" aria-label="Versão SCORM"
                             value={form.scorm_versao ?? '1.2'}
                             onChange={(e) =>
                               setForm((c) => ({
@@ -1255,7 +1256,7 @@ function CourseDrawer({
                       </div>
                       <div className="space-y-2 lg:col-span-2">
                         <FieldLabel label="Referências" />
-                        <textarea
+                        <textarea aria-label="Normas, regulamentos, manuais, programas e procedimentos aplicáveis — uma referência por linha."
                           rows={4}
                           value={form.referencias ?? ''}
                           onChange={(e) => setForm((c) => ({ ...c, referencias: e.target.value }))}
@@ -1569,7 +1570,7 @@ function CourseDrawer({
           </form>
         </div>
       </div>
-    </div>,
+    </ModalOverlay>,
     document.body,
   );
 }
@@ -1825,7 +1826,7 @@ function CourseCard({
                   {actionLabel}
                 </Button>
               ) : (
-                <button
+                <button type="button"
                   onClick={() => onAction(curso)}
                   className={`flex-1 inline-flex items-center justify-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${getLmsActionButtonClasses(matricula?.status ?? 'NAO_INICIADO')}`}
                 >
@@ -1886,7 +1887,7 @@ function CourseCard({
                   Matrículas
                 </Link>
                 {canDeleteCourse ? (
-                  <button
+                  <button aria-label="Excluir"
                     type="button"
                     onClick={() => onStartDelete(curso.id)}
                     className="inline-flex items-center gap-1.5 rounded-lg border border-rose-200 bg-white px-2.5 py-1.5 text-xs font-medium text-rose-600 hover:bg-rose-50 dark:border-rose-500/30 dark:bg-slate-900 dark:text-rose-300 dark:hover:bg-rose-500/10"

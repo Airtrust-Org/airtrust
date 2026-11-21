@@ -95,6 +95,7 @@ export async function gerarPDFListaPresenca(dados: ListaPresencaData): Promise<B
   const { jsPDF } = await import('jspdf');
 
   const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+  doc.setLanguage?.('pt-BR');
 
   const PW = doc.internal.pageSize.getWidth(); // 210
   const PH = doc.internal.pageSize.getHeight(); // 297
@@ -419,6 +420,7 @@ export async function gerarPDFListaPresencaTurma(dados: ListaPresencaTurmaData):
   const { jsPDF } = await import('jspdf');
 
   const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+  doc.setLanguage?.('pt-BR');
 
   const PW = doc.internal.pageSize.getWidth();
   const PH = doc.internal.pageSize.getHeight();

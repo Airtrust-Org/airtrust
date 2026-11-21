@@ -15,6 +15,7 @@ import {
 import { apiJson, frontendErrorMessage } from '@/react-app/lib/api-contract';
 import { fetchWithAuth } from '@/react-app/config/api';
 import { showToast } from '@/react-app/utils/toast';
+import { confirmDialog, showAlertDialog } from '@/react-app/utils/confirmDialog';
 
 type PlanningStatus =
   | 'PROPOSTO'
@@ -355,7 +356,7 @@ function ResourceAssignmentCell({
         )}
       </div>
       {current.resource_assignment && !current.resource_assignment.complete && (
-        <span className="text-[10px] font-medium text-amber-700">
+        <span className="text-xs font-medium text-amber-700">
           Pendente: {current.resource_assignment.pending.join(', ')}
         </span>
       )}
@@ -581,7 +582,7 @@ export default function PlanejamentoSimuladores() {
 
   
   const handleSubmeter = async (id: number) => {
-    if (!window.confirm('Enviar proposta para aprovação?')) return;
+    if (!(await confirmDialog('Enviar proposta para aprovação?'))) return;
     setActioningId(id);
     try {
       await apiJson(`/api/simuladores/planejamento/${id}/submeter`, { method: 'POST' });
@@ -594,13 +595,13 @@ export default function PlanejamentoSimuladores() {
   };
 
   const handleAprovar = async (id: number) => {
-    if (!window.confirm('Confirma a aprovação desta proposta CAE? O status será alterado para APROVADO.')) return;
+    if (!(await confirmDialog('Confirma a aprovação desta proposta CAE? O status será alterado para APROVADO.'))) return;
     setActioningId(id);
     try {
       await apiJson(`/api/simuladores/planejamento/${id}/aprovar`, { method: 'POST' });
       await load();
     } catch (error: unknown) {
-      alert('Erro ao aprovar proposta: ' + frontendErrorMessage(error));
+      showAlertDialog('Erro ao aprovar proposta: ' + frontendErrorMessage(error));
     } finally {
       setActioningId(null);
     }
@@ -661,7 +662,7 @@ export default function PlanejamentoSimuladores() {
   const handleDevolver = async (id: number) => {
     const obs = devolverObs[id] || '';
     if (!obs) {
-      alert('Informe o motivo da devolução antes de continuar.');
+      showAlertDialog('Informe o motivo da devolução antes de continuar.');
       return;
     }
     setActioningId(id);
@@ -673,7 +674,7 @@ export default function PlanejamentoSimuladores() {
       });
       await load();
     } catch (error: unknown) {
-      alert('Erro ao devolver proposta: ' + frontendErrorMessage(error));
+      showAlertDialog('Erro ao devolver proposta: ' + frontendErrorMessage(error));
     } finally {
       setActioningId(null);
     }
@@ -807,6 +808,7 @@ export default function PlanejamentoSimuladores() {
       setExporting('pdf');
       const { jsPDF } = await import('jspdf');
       const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+      doc.setLanguage?.('pt-BR');
       const pageWidth = doc.internal.pageSize.getWidth();
       const pageHeight = doc.internal.pageSize.getHeight();
       const margin = 10;
@@ -1146,13 +1148,13 @@ export default function PlanejamentoSimuladores() {
             <table className="min-w-[1000px] w-full text-sm">
               <thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500 dark:bg-slate-950/70">
                 <tr>
-                  <th className="px-3 py-3">Vencimento</th>
-                  <th className="px-3 py-3">Qualificação</th>
-                  <th className="px-3 py-3">Aeronave</th>
-                  <th className="px-3 py-3">Tripulante(s)</th>
-                  <th className="px-3 py-3">Janela sugerida</th>
-                  <th className="px-3 py-3">Carga / sessões</th>
-                  <th className="px-3 py-3">Situação</th>
+                  <th scope="col" className="px-3 py-3">Vencimento</th>
+                  <th scope="col" className="px-3 py-3">Qualificação</th>
+                  <th scope="col" className="px-3 py-3">Aeronave</th>
+                  <th scope="col" className="px-3 py-3">Tripulante(s)</th>
+                  <th scope="col" className="px-3 py-3">Janela sugerida</th>
+                  <th scope="col" className="px-3 py-3">Carga / sessões</th>
+                  <th scope="col" className="px-3 py-3">Situação</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
@@ -1255,13 +1257,13 @@ export default function PlanejamentoSimuladores() {
               <table className="min-w-[850px] w-full text-sm">
                 <thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500 dark:bg-slate-950/70">
                   <tr>
-                    <th className="px-3 py-2">Aeronave</th>
-                    <th className="px-3 py-2">Data</th>
-                    <th className="px-3 py-2">Horário</th>
-                    <th className="px-3 py-2">Duração</th>
-                    <th className="px-3 py-2">Estado</th>
-                    <th className="px-3 py-2">Confiança</th>
-                    <th className="px-3 py-2">Fonte</th>
+                    <th scope="col" className="px-3 py-2">Aeronave</th>
+                    <th scope="col" className="px-3 py-2">Data</th>
+                    <th scope="col" className="px-3 py-2">Horário</th>
+                    <th scope="col" className="px-3 py-2">Duração</th>
+                    <th scope="col" className="px-3 py-2">Estado</th>
+                    <th scope="col" className="px-3 py-2">Confiança</th>
+                    <th scope="col" className="px-3 py-2">Fonte</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
@@ -1302,14 +1304,14 @@ export default function PlanejamentoSimuladores() {
               <table className="min-w-[1100px] w-full text-sm">
                 <thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500 dark:bg-slate-950/70">
                   <tr>
-                    <th className="px-3 py-2">Tripulação</th>
-                    <th className="px-3 py-2">Aeronave</th>
-                    <th className="px-3 py-2">Vencimento</th>
-                    <th className="px-3 py-2">Currículo</th>
-                    <th className="px-3 py-2">Slots recomendados</th>
-                    <th className="px-3 py-2">Margem</th>
-                    <th className="px-3 py-2">Conflitos</th>
-                    <th className="px-3 py-2">Resultado</th>
+                    <th scope="col" className="px-3 py-2">Tripulação</th>
+                    <th scope="col" className="px-3 py-2">Aeronave</th>
+                    <th scope="col" className="px-3 py-2">Vencimento</th>
+                    <th scope="col" className="px-3 py-2">Currículo</th>
+                    <th scope="col" className="px-3 py-2">Slots recomendados</th>
+                    <th scope="col" className="px-3 py-2">Margem</th>
+                    <th scope="col" className="px-3 py-2">Conflitos</th>
+                    <th scope="col" className="px-3 py-2">Resultado</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
@@ -1424,18 +1426,18 @@ export default function PlanejamentoSimuladores() {
             <table className="min-w-[1500px] w-full text-sm">
               <thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500 dark:bg-slate-950/70">
                 <tr>
-                  <th className="px-3 py-3">Aprovação</th>
-                  <th className="px-3 py-3">Recursos</th>
-                  <th className="px-3 py-3">Status</th>
-                  <th className="px-3 py-3">Vencimento</th>
-                  <th className="px-3 py-3">Qualificação</th>
-                  <th className="px-3 py-3">Aeronave</th>
-                  <th className="px-3 py-3">Tripulação</th>
-                  <th className="px-3 py-3">Quinzena / janela</th>
-                  <th className="px-3 py-3">Data prevista</th>
-                  <th className="px-3 py-3">Carga / sessões</th>
-                  <th className="px-3 py-3">Escala publicada</th>
-                  <th className="px-3 py-3">Ação</th>
+                  <th scope="col" className="px-3 py-3">Aprovação</th>
+                  <th scope="col" className="px-3 py-3">Recursos</th>
+                  <th scope="col" className="px-3 py-3">Status</th>
+                  <th scope="col" className="px-3 py-3">Vencimento</th>
+                  <th scope="col" className="px-3 py-3">Qualificação</th>
+                  <th scope="col" className="px-3 py-3">Aeronave</th>
+                  <th scope="col" className="px-3 py-3">Tripulação</th>
+                  <th scope="col" className="px-3 py-3">Quinzena / janela</th>
+                  <th scope="col" className="px-3 py-3">Data prevista</th>
+                  <th scope="col" className="px-3 py-3">Carga / sessões</th>
+                  <th scope="col" className="px-3 py-3">Escala publicada</th>
+                  <th scope="col" className="px-3 py-3">Ação</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
@@ -1466,7 +1468,7 @@ export default function PlanejamentoSimuladores() {
                             </span>
                             {item.planejamento_snapshot?.resource_assignment &&
                               !item.planejamento_snapshot.resource_assignment.complete && (
-                                <span className="text-[10px] font-medium text-amber-700">
+                                <span className="text-xs font-medium text-amber-700">
                                   Defina o simulador e o instrutor/examinador antes da aprovação.
                                 </span>
                               )}
@@ -1490,7 +1492,7 @@ export default function PlanejamentoSimuladores() {
                               Aprovar
                             </button>
                             <div className="flex flex-col gap-1">
-                              <input
+                              <input aria-label="Motivo devolução"
                                 type="text"
                                 placeholder="Motivo devolução"
                                 className="w-full rounded-md border-0 py-1.5 px-2 text-slate-900 shadow-sm ring-1 ring-inset ring-slate-300 placeholder:text-slate-400 focus:ring-2 focus:ring-inset focus:ring-primary sm:text-sm sm:leading-6 dark:bg-slate-900 dark:text-slate-100 dark:ring-slate-700 text-xs"
@@ -1517,7 +1519,7 @@ export default function PlanejamentoSimuladores() {
                             <span className="inline-flex items-center rounded-md bg-red-50 px-2 py-1 text-xs font-medium text-red-700 ring-1 ring-inset ring-red-600/10">
                               Devolvido
                             </span>
-                            <span className="text-[10px] text-slate-500">{item.planejamento_aprovacao_observacoes}</span>
+                            <span className="text-xs text-slate-500">{item.planejamento_aprovacao_observacoes}</span>
                             <button
                               onClick={() => handleSubmeter(item.id)}
                               disabled={actioningId === item.id}
@@ -1571,7 +1573,7 @@ export default function PlanejamentoSimuladores() {
                           ))}
                         </select>
                         {item.planejamento_editado_manualmente ? (
-                          <span className="mt-1 block text-[11px] font-medium text-violet-600">
+                          <span className="mt-1 block text-xs font-medium text-violet-600">
                             edição preservada
                           </span>
                         ) : null}

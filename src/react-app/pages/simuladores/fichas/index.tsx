@@ -1147,7 +1147,7 @@ export function FichasAvaliacaoContent({ mode = 'all' }: FichasAvaliacaoContentP
               {/* Busca compacta */}
               <div className="relative shrink-0 w-44">
                 <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
-                <input
+                <input aria-label="Buscar..."
                   type="text"
                   placeholder="Buscar..."
                   value={busca}
@@ -1342,7 +1342,7 @@ export function FichasAvaliacaoContent({ mode = 'all' }: FichasAvaliacaoContentP
 
                     <div className="grid gap-3 sm:grid-cols-2">
                       <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-3">
-                        <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">
+                        <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
                           Sessão
                         </p>
                         <p className="mt-1 text-sm font-medium text-slate-900">
@@ -1353,7 +1353,7 @@ export function FichasAvaliacaoContent({ mode = 'all' }: FichasAvaliacaoContentP
                         </p>
                       </div>
                       <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-3">
-                        <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">
+                        <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
                           Agendamento
                         </p>
                         <div className="mt-1 flex flex-wrap items-center gap-2 text-sm text-slate-700">
@@ -1384,22 +1384,22 @@ export function FichasAvaliacaoContent({ mode = 'all' }: FichasAvaliacaoContentP
               <table className="w-full">
                 <thead className="bg-gray-50 border-b border-gray-200">
                   <tr>
-                    <th className="px-4 py-3 text-left">
+                    <th scope="col" className="px-4 py-3 text-left">
                       <SortableHeader column="status" label="Status" />
                     </th>
-                    <th className="px-4 py-3 text-left">
+                    <th scope="col" className="px-4 py-3 text-left">
                       <SortableHeader column="participante_nome" label="Participante" />
                     </th>
-                    <th className="px-4 py-3 text-left">
+                    <th scope="col" className="px-4 py-3 text-left">
                       <SortableHeader column="sessao_titulo" label="Sessão / Horário" />
                     </th>
-                    <th className="px-4 py-3 text-left">
+                    <th scope="col" className="px-4 py-3 text-left">
                       <SortableHeader column="instrutor_nome" label="Instrutor" />
                     </th>
-                    <th className="px-4 py-3 text-left">
+                    <th scope="col" className="px-4 py-3 text-left">
                       <SortableHeader column="data_hora" label="Data" />
                     </th>
-                    <th className="px-4 py-3 text-right text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                    <th scope="col" className="px-4 py-3 text-right text-xs font-semibold text-gray-600 uppercase tracking-wider">
                       Ações
                     </th>
                   </tr>
@@ -1451,7 +1451,7 @@ export function FichasAvaliacaoContent({ mode = 'all' }: FichasAvaliacaoContentP
                               {ficha.simulador_nome || ficha.simulador_codigo || '-'}
                             </p>
                             {isFichaEspecial && (
-                              <span className="mt-1.5 inline-flex items-center gap-1 rounded-full bg-violet-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-violet-700">
+                              <span className="mt-1.5 inline-flex items-center gap-1 rounded-full bg-violet-100 px-2 py-0.5 text-xs font-semibold uppercase tracking-wide text-violet-700">
                                 {ficha.tipo_sessao === 'CRED-EXA' ? 'Examinador' : 'Instrutor'}
                               </span>
                             )}
@@ -1659,7 +1659,7 @@ export function FichasAvaliacaoContent({ mode = 'all' }: FichasAvaliacaoContentP
                               </p>
                             </div>
                             <span
-                              className={`shrink-0 rounded-full px-2 py-1 text-[11px] font-semibold ${
+                              className={`shrink-0 rounded-full px-2 py-1 text-xs font-semibold ${
                                 bloqueado
                                   ? 'bg-amber-100 text-amber-800'
                                   : 'bg-emerald-100 text-emerald-700'

@@ -130,7 +130,7 @@ export default function FrmsWorkspaceNav({
         >
           {ADMIN_GROUPS.map((group) => (
             <div key={group.label} className="flex flex-wrap items-center gap-1">
-              <span className="px-2 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-400">
+              <span className="px-2 text-xs font-bold uppercase tracking-[0.12em] text-slate-400">
                 {group.label}
               </span>
               {group.links.map((link) => (

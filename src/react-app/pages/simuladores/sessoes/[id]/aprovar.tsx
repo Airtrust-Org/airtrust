@@ -214,10 +214,10 @@ export default function AprovarSessao() {
 
           <div className="space-y-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
+              <label htmlFor="aprovar-observacoes-gerais" className="block text-sm font-medium text-gray-700 mb-2">
                 Observações Gerais
               </label>
-              <textarea
+              <textarea id="aprovar-observacoes-gerais" aria-label="Observações Gerais"
                 value={observacoes}
                 onChange={(e) => setObservacoes(e.target.value)}
                 rows={3}
@@ -227,10 +227,10 @@ export default function AprovarSessao() {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
+              <label htmlFor="aprovar-motivo-da-reprovacao-se-aplicavel" className="block text-sm font-medium text-gray-700 mb-2">
                 Motivo da Reprovação (se aplicável)
               </label>
-              <textarea
+              <textarea id="aprovar-motivo-da-reprovacao-se-aplicavel" aria-label="Motivo da Reprovação (se aplicável)"
                 value={motivo}
                 onChange={(e) => setMotivo(e.target.value)}
                 rows={3}

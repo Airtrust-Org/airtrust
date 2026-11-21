@@ -1,4 +1,5 @@
-import { useId } from 'react';
+import { useId, useRef } from 'react';
+import { useModalA11y } from '@/react-app/hooks/useModalA11y';
 import { createPortal } from 'react-dom';
 import { X, AlertTriangle } from 'lucide-react';
 
@@ -34,6 +35,8 @@ export function ConfirmDeleteModal({
   isDeleting = false,
 }: ConfirmDeleteModalProps) {
   const titleId = useId();
+  const dialogRef = useRef<HTMLDivElement>(null);
+  useModalA11y({ isOpen, onClose, dialogRef });
   const messageId = useId();
   const itemId = useId();
   const warningId = useId();
@@ -56,6 +59,7 @@ export function ConfirmDeleteModal({
       role="presentation"
     >
       <div
+        ref={dialogRef}
         role="alertdialog"
         aria-modal="true"
         aria-labelledby={titleId}
@@ -97,7 +101,7 @@ export function ConfirmDeleteModal({
             </div>
           )}
           <p id={warningId} className="text-sm text-gray-600 mt-4">
-            ⚠️ Esta ação não pode ser desfeita.
+            <span aria-hidden="true">⚠️</span> Esta ação não pode ser desfeita.
           </p>
         </div>
 

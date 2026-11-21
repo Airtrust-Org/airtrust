@@ -1,5 +1,6 @@
 import { useState, cloneElement, ReactElement } from 'react';
 import { X, Check, ChevronLeft, ChevronRight } from 'lucide-react';
+import { ModalOverlay } from '@/react-app/components/modals/ModalOverlay';
 
 interface WizardModalProps {
   isOpen: boolean;
@@ -49,7 +50,7 @@ export function WizardModal({
   const isLastStep = currentStep === steps.length - 1;
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+    <ModalOverlay className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
       <div className="bg-white rounded-2xl shadow-xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
 
         {/* HEADER FIXO */}
@@ -60,7 +61,7 @@ export function WizardModal({
               <p className="text-sm text-gray-600 mt-1">{description}</p>
             )}
           </div>
-          <button
+          <button aria-label="Fechar"
             onClick={onClose}
             className="text-gray-400 hover:text-gray-600 transition-colors"
           >
@@ -135,6 +136,6 @@ export function WizardModal({
           </div>
         </div>
       </div>
-    </div>
+    </ModalOverlay>
   );
 }

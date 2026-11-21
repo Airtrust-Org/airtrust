@@ -4,6 +4,7 @@ import { toast } from 'sonner';
 import { API_BASE_URL } from '@/react-app/config/api';
 import { X } from 'lucide-react';
 import { tryAddCalendarMonthsClamped } from '@/shared/utils/validade-meses';
+import { ModalOverlay } from '@/react-app/components/modals/ModalOverlay';
 
 interface Props {
   isOpen: boolean;
@@ -258,13 +259,13 @@ export function ModalHabilitacao({ isOpen, onClose, onSave, habilitacao }: Props
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-modal">
+    <ModalOverlay className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-modal">
       <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
         <div className="flex justify-between items-center p-6 border-b">
           <h2 className="text-xl font-bold">
             {habilitacao?.id ? 'Editar Habilitação' : 'Nova Habilitação'}
           </h2>
-          <button onClick={onClose} className="text-gray-500 hover:text-gray-700">
+          <button aria-label="Fechar" type="button" onClick={onClose} className="text-gray-500 hover:text-gray-700">
             <X className="h-5 w-5" />
           </button>
         </div>
@@ -272,8 +273,8 @@ export function ModalHabilitacao({ isOpen, onClose, onSave, habilitacao }: Props
         <form onSubmit={handleSubmit} className="p-6 space-y-4">
           {/* FUNCIONÁRIO */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Funcionário *</label>
-            <select
+            <label htmlFor="modalhabilitacao-funcionario" className="block text-sm font-medium text-gray-700 mb-1">Funcionário *</label>
+            <select id="modalhabilitacao-funcionario" aria-label="Funcionário"
               value={form.funcionario_id}
               onChange={(e) => setForm({ ...form, funcionario_id: e.target.value })}
               required
@@ -291,8 +292,8 @@ export function ModalHabilitacao({ isOpen, onClose, onSave, habilitacao }: Props
           {/* QUALIFICAÇÃO E VALIDADE */}
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Qualificação *</label>
-              <select
+              <label htmlFor="modalhabilitacao-qualificacao" className="block text-sm font-medium text-gray-700 mb-1">Qualificação *</label>
+              <select id="modalhabilitacao-qualificacao" aria-label="Qualificação"
                 value={form.qualificacao_id}
                 onChange={handleQualificacaoChange}
                 required
@@ -319,10 +320,10 @@ export function ModalHabilitacao({ isOpen, onClose, onSave, habilitacao }: Props
           {/* DATA DE CONCLUSÃO E VENCIMENTO */}
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label htmlFor="modalhabilitacao-data-de-conclusao" className="block text-sm font-medium text-gray-700 mb-1">
                 Data de Conclusão *
               </label>
-              <input
+              <input id="modalhabilitacao-data-de-conclusao" aria-label="Data de Conclusão"
                 type="date"
                 value={form.data_conclusao}
                 onChange={handleDataConclusaoChange}
@@ -351,8 +352,8 @@ export function ModalHabilitacao({ isOpen, onClose, onSave, habilitacao }: Props
 
           {/* RESULTADO */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Resultado</label>
-            <select
+            <label htmlFor="modalhabilitacao-resultado" className="block text-sm font-medium text-gray-700 mb-1">Resultado</label>
+            <select id="modalhabilitacao-resultado" aria-label="Resultado"
               value={form.resultado}
               onChange={(e) => setForm({ ...form, resultado: e.target.value })}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary"
@@ -365,8 +366,8 @@ export function ModalHabilitacao({ isOpen, onClose, onSave, habilitacao }: Props
 
           {/* OBSERVAÇÕES */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Observações</label>
-            <textarea
+            <label htmlFor="modalhabilitacao-observacoes" className="block text-sm font-medium text-gray-700 mb-1">Observações</label>
+            <textarea id="modalhabilitacao-observacoes" aria-label="Observações"
               value={form.observacoes}
               onChange={(e) => setForm({ ...form, observacoes: e.target.value })}
               rows={3}
@@ -376,8 +377,8 @@ export function ModalHabilitacao({ isOpen, onClose, onSave, habilitacao }: Props
 
           {/* INSTRUTOR */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Instrutor</label>
-            <select
+            <label htmlFor="modalhabilitacao-instrutor" className="block text-sm font-medium text-gray-700 mb-1">Instrutor</label>
+            <select id="modalhabilitacao-instrutor" aria-label="Instrutor"
               value={form.instrutor}
               onChange={(e) => setForm({ ...form, instrutor: e.target.value })}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary"
@@ -424,6 +425,6 @@ export function ModalHabilitacao({ isOpen, onClose, onSave, habilitacao }: Props
           </div>
         </form>
       </div>
-    </div>
+    </ModalOverlay>
   );
 }

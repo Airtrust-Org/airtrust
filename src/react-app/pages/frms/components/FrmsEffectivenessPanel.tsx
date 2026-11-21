@@ -78,7 +78,7 @@ function ComponentBar({ label, value, color }: { label: string; value: number; c
   const isNegative = value < 0;
   return (
     <div className="flex items-center gap-2">
-      <span className="text-[10px] text-slate-500 w-20 text-right truncate">{label}</span>
+      <span className="text-xs text-slate-500 w-20 text-right truncate">{label}</span>
       <div className="flex-1 h-1.5 rounded-full bg-slate-100 overflow-hidden">
         <div
           className={`h-1.5 rounded-full transition-[width] duration-200 ease-out motion-reduce:transition-none ${color}`}
@@ -86,7 +86,7 @@ function ComponentBar({ label, value, color }: { label: string; value: number; c
         />
       </div>
       <span
-        className={`text-[10px] tabular-nums w-12 text-right ${isNegative ? 'text-red-500' : 'text-slate-500'}`}
+        className={`text-xs tabular-nums w-12 text-right ${isNegative ? 'text-red-500' : 'text-slate-500'}`}
       >
         {isNegative ? '' : '+'}
         {(value * 100).toFixed(1)}%
@@ -165,11 +165,11 @@ export default function FrmsEffectivenessPanel({
               strokeLinecap="round"
             />
           </svg>
-          <span className="absolute inset-0 flex items-center justify-center text-[9px] font-bold text-slate-700">
+          <span className="absolute inset-0 flex items-center justify-center text-xs font-bold text-slate-700">
             {Math.round(pct)}
           </span>
         </div>
-        <span className="text-[10px] text-slate-500">{nivel}</span>
+        <span className="text-xs text-slate-500">{nivel}</span>
       </div>
     );
   }
@@ -195,11 +195,11 @@ export default function FrmsEffectivenessPanel({
       <h4 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">
         Efetividade estimada
       </h4>
-      <p className="mb-2 text-[11px] text-slate-500">
+      <p className="mb-2 text-xs text-slate-500">
         Estimativa operacional que combina jornada, sono/repouso, ritmo circadiano e carga de voo.
         100% representa a referência do modelo; reduções mostram os fatores que degradaram o índice.
       </p>
-      <p className={`mb-3 text-[11px] font-medium ${
+      <p className={`mb-3 text-xs font-medium ${
         dataSource === 'REAL'
           ? 'text-emerald-700'
           : dataSource === 'PROJETADA_APRESENTACAO' || dataSource === 'PROJETADA_ATIVIDADE' || dataSource === 'ESTIMADO'
@@ -246,7 +246,7 @@ export default function FrmsEffectivenessPanel({
           >
             {nivel}
           </span>
-          <p className="text-[10px] text-slate-400 mt-1">
+          <p className="text-xs text-slate-400 mt-1">
             Proxy local inspirado em modelos biomatemáticos; não substitui avaliação operacional
             humana e não representa validação formal SAFTE-FAST
           </p>
@@ -256,10 +256,10 @@ export default function FrmsEffectivenessPanel({
       {/* Component decomposition */}
       {componentes && (
         <div className="space-y-1.5">
-          <p className="text-[10px] text-slate-400 uppercase tracking-wider font-medium">
+          <p className="text-xs text-slate-400 uppercase tracking-wider font-medium">
             O que alterou o índice
           </p>
-          <p className="text-[10px] leading-4 text-slate-500">
+          <p className="text-xs leading-4 text-slate-500">
             Valores negativos reduzem a efetividade; 0,0% significa que o fator calculado não alterou o índice.
             Evidência ausente é indicada separadamente e não deve ser interpretada como zero.
           </p>
@@ -275,7 +275,7 @@ export default function FrmsEffectivenessPanel({
             );
           })}
           {operationalLoad && (
-            <div className="mt-1 rounded-md bg-slate-50 px-2 py-1.5 text-[10px] leading-4 text-slate-500">
+            <div className="mt-1 rounded-md bg-slate-50 px-2 py-1.5 text-xs leading-4 text-slate-500">
               <p className="font-semibold text-slate-600">Fatores offshore independentes</p>
               <p>{landingsEvidenceLine(operationalLoad)}</p>
               <p>{weatherEvidenceLine(operationalLoad)}</p>
@@ -290,9 +290,9 @@ export default function FrmsEffectivenessPanel({
                 <div key={leg.legId} className="mt-1 rounded border border-slate-200 bg-white px-2 py-1">
                   <p className="font-medium text-slate-600">Etapa {leg.legId}</p>
                   <p>Saída: {metarConditionLabel(leg.departure.condition)} · {fmtPoints(leg.departureDelta)} · {leg.departureStationIcao ?? 'estação indisponível'} · {leg.departureObservedAtUtc ?? 'horário indisponível'}</p>
-                  {leg.departureRawMetar && <p className="break-all font-mono text-[9px] text-slate-400">METAR: {leg.departureRawMetar}</p>}
+                  {leg.departureRawMetar && <p className="break-all font-mono text-xs text-slate-400">METAR: {leg.departureRawMetar}</p>}
                   <p>Chegada: {metarConditionLabel(leg.arrival.condition)} · {fmtPoints(leg.arrivalDelta)} · {leg.arrivalStationIcao ?? 'estação indisponível'} · {leg.arrivalObservedAtUtc ?? 'horário indisponível'}</p>
-                  {leg.arrivalRawMetar && <p className="break-all font-mono text-[9px] text-slate-400">METAR: {leg.arrivalRawMetar}</p>}
+                  {leg.arrivalRawMetar && <p className="break-all font-mono text-xs text-slate-400">METAR: {leg.arrivalRawMetar}</p>}
                 </div>
               ))}
               {operationalLoad.data_quality !== 'COMPLETE' && (

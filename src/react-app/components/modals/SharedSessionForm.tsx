@@ -886,8 +886,8 @@ const SharedSessionForm = forwardRef<SharedSessionFormHandle, SharedSessionFormP
       </div>
 
       <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
-        <label className="mb-1 block text-xs font-medium text-slate-600">Horário da troca (divisão PF/PM)</label>
-        <input
+        <label htmlFor="sharedsessionform-horario-da-troca-divisao-pf-pm" className="mb-1 block text-xs font-medium text-slate-600">Horário da troca (divisão PF/PM)</label>
+        <input id="sharedsessionform-horario-da-troca-divisao-pf-pm"
           aria-label="Horário da troca"
           type="time"
           value={effectiveSplitTime}
@@ -960,12 +960,12 @@ const SharedSessionForm = forwardRef<SharedSessionFormHandle, SharedSessionFormP
             <table className="min-w-full divide-y divide-slate-200 text-xs">
               <thead className="bg-slate-50 text-left text-slate-600">
                 <tr>
-                  <th className="whitespace-nowrap px-3 py-2 font-medium">Tripulante</th>
-                  <th className="whitespace-nowrap px-3 py-2 font-medium">Total</th>
-                  <th className="whitespace-nowrap px-3 py-2 font-medium">PF</th>
-                  <th className="whitespace-nowrap px-3 py-2 font-medium">PM</th>
-                  <th className="whitespace-nowrap px-3 py-2 font-medium">Curricular</th>
-                  <th className="whitespace-nowrap px-3 py-2 font-medium">Modelo da ficha</th>
+                  <th scope="col" className="whitespace-nowrap px-3 py-2 font-medium">Tripulante</th>
+                  <th scope="col" className="whitespace-nowrap px-3 py-2 font-medium">Total</th>
+                  <th scope="col" className="whitespace-nowrap px-3 py-2 font-medium">PF</th>
+                  <th scope="col" className="whitespace-nowrap px-3 py-2 font-medium">PM</th>
+                  <th scope="col" className="whitespace-nowrap px-3 py-2 font-medium">Curricular</th>
+                  <th scope="col" className="whitespace-nowrap px-3 py-2 font-medium">Modelo da ficha</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 bg-white text-slate-700">
@@ -1060,7 +1060,7 @@ const SharedSessionForm = forwardRef<SharedSessionFormHandle, SharedSessionFormP
                       : 'border-slate-200 bg-slate-50 text-slate-600 hover:bg-slate-100'
               }`}
             >
-              <span aria-hidden="true" className="inline-flex h-4 w-4 items-center justify-center text-[11px]">{icon}</span>
+              <span aria-hidden="true" className="inline-flex h-4 w-4 items-center justify-center text-xs">{icon}</span>
               <span>{STEP_LABELS[step]}</span>
               {status === 'completed' && <CheckCircle2 className="ml-auto h-4 w-4" aria-hidden="true" />}
             </button>

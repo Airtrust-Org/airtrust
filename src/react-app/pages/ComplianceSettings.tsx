@@ -6,6 +6,8 @@
 import { useState, useEffect, useTransition } from 'react';
 import { getAccessToken } from '@/react-app/config/api';
 import AppLayout from '@/react-app/components/AppLayout';
+import { confirmDialog } from '@/react-app/utils/confirmDialog';
+import { ModalOverlay } from '@/react-app/components/modals/ModalOverlay';
 
 // ========================================
 // TIPOS
@@ -152,7 +154,7 @@ export function ComplianceSettings() {
   };
 
   const deleteRequisito = async (id: number) => {
-    if (!confirm('Remover este requisito de compliance?')) return;
+    if (!(await confirmDialog('Remover este requisito de compliance?', { confirmText: 'Remover' }))) return;
     const token = getAccessToken();
     await apiFetch(`/api/compliance/requisitos/${id}`, {
       method: 'DELETE',
@@ -249,7 +251,7 @@ export function ComplianceSettings() {
       <div className="max-w-4xl mx-auto">
         {/* Header */}
         <div className="bg-white rounded-lg shadow-md p-6 mb-6">
-          <h1 className="text-2xl font-bold text-gray-800 mb-2">⚙️ Configurações de Compliance</h1>
+          <h1 className="text-2xl font-bold text-gray-800 mb-2"><span aria-hidden="true">⚙️</span> Configurações de Compliance</h1>
           <p className="text-gray-600">
             Recalcule os status de compliance de qualificações e licenças
           </p>
@@ -259,7 +261,7 @@ export function ComplianceSettings() {
         {stats && (
           <div className="bg-white rounded-lg shadow-md p-6 mb-6">
             <div className="flex items-center justify-between mb-4">
-              <h2 className="text-xl font-semibold text-gray-800">📊 Estatísticas Atuais</h2>
+              <h2 className="text-xl font-semibold text-gray-800"><span aria-hidden="true">📊</span> Estatísticas Atuais</h2>
               <button
                 onClick={loadStats}
                 disabled={loadingStats}
@@ -276,17 +278,17 @@ export function ComplianceSettings() {
               </div>
 
               <div className="bg-green-50 p-4 rounded-lg">
-                <div className="text-sm text-green-700">✅ Conformes</div>
+                <div className="text-sm text-green-700"><span aria-hidden="true">✅</span> Conformes</div>
                 <div className="text-2xl font-bold text-green-800">{stats.conformes}</div>
               </div>
 
               <div className="bg-yellow-50 p-4 rounded-lg">
-                <div className="text-sm text-yellow-700">⚠️ A Vencer</div>
+                <div className="text-sm text-yellow-700"><span aria-hidden="true">⚠️</span> A Vencer</div>
                 <div className="text-2xl font-bold text-yellow-800">{stats.a_vencer}</div>
               </div>
 
               <div className="bg-red-50 p-4 rounded-lg">
-                <div className="text-sm text-red-700">❌ Vencidos</div>
+                <div className="text-sm text-red-700"><span aria-hidden="true">❌</span> Vencidos</div>
                 <div className="text-2xl font-bold text-red-800">{stats.vencidos}</div>
               </div>
 
@@ -296,7 +298,7 @@ export function ComplianceSettings() {
               </div>
 
               <div className="bg-purple-50 p-4 rounded-lg">
-                <div className="text-sm text-purple-700">📈 Média</div>
+                <div className="text-sm text-purple-700"><span aria-hidden="true">📈</span> Média</div>
                 <div className="text-2xl font-bold text-purple-800">
                   {stats.percentual_medio.toFixed(1)}%
                 </div>
@@ -307,23 +309,23 @@ export function ComplianceSettings() {
 
         {/* Formulário de Recálculo */}
         <div className="bg-white rounded-lg shadow-md p-6">
-          <h2 className="text-xl font-semibold text-gray-800 mb-4">🔄 Recálculo de Compliance</h2>
+          <h2 className="text-xl font-semibold text-gray-800 mb-4"><span aria-hidden="true">🔄</span> Recálculo de Compliance</h2>
 
           <div className="space-y-4">
             {/* Seletor de Escopo */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
+              <label htmlFor="compliancesettings-escopo-do-recalculo" className="block text-sm font-medium text-gray-700 mb-2">
                 Escopo do Recálculo
               </label>
-              <select
+              <select id="compliancesettings-escopo-do-recalculo" aria-label="Escopo do Recálculo"
                 value={scope}
                 onChange={(e) => setScope(e.target.value as typeof scope)}
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary/30 focus:border-transparent transition-all"
                 disabled={isPending}
               >
-                <option value="all">🌐 Todos os registros</option>
-                <option value="funcionario">👤 Funcionário específico</option>
-                <option value="tipo_qualificacao">📋 Tipo de qualificação</option>
+                <option value="all"><span aria-hidden="true">🌐</span> Todos os registros</option>
+                <option value="funcionario"><span aria-hidden="true">👤</span> Funcionário específico</option>
+                <option value="tipo_qualificacao"><span aria-hidden="true">📋</span> Tipo de qualificação</option>
               </select>
             </div>
 
@@ -404,7 +406,7 @@ export function ComplianceSettings() {
             {/* Erro */}
             {(error || (result && !result.success)) && (
               <div className="mt-4 p-4 bg-red-50 border border-red-200 rounded-lg">
-                <h3 className="font-semibold text-red-800 mb-1 flex items-center gap-2">❌ Erro</h3>
+                <h3 className="font-semibold text-red-800 mb-1 flex items-center gap-2"><span aria-hidden="true">❌</span> Erro</h3>
                 <p className="text-sm text-red-700">
                   {error || result?.error || 'Erro desconhecido'}
                 </p>
@@ -437,15 +439,15 @@ export function ComplianceSettings() {
             </p>
             <ul className="list-disc list-inside ml-4 space-y-1">
               <li>
-                <span className="text-green-700">✅ CONFORME:</span> Vencimento em mais de 30 dias
+                <span className="text-green-700"><span aria-hidden="true">✅</span> CONFORME:</span> Vencimento em mais de 30 dias
                 (100%)
               </li>
               <li>
-                <span className="text-yellow-700">⚠️ A_VENCER:</span> Vencimento em até 30 dias
+                <span className="text-yellow-700"><span aria-hidden="true">⚠️</span> A_VENCER:</span> Vencimento em até 30 dias
                 (75%)
               </li>
               <li>
-                <span className="text-red-700">❌ VENCIDO:</span> Data de vencimento passou (0%)
+                <span className="text-red-700"><span aria-hidden="true">❌</span> VENCIDO:</span> Data de vencimento passou (0%)
               </li>
               <li>
                 <span className="text-gray-700">⏳ PENDENTE:</span> Sem data de vencimento definida
@@ -458,7 +460,7 @@ export function ComplianceSettings() {
         <div className="mt-6 bg-white rounded-lg shadow-md p-6">
           <div className="flex items-center justify-between mb-4">
             <div>
-              <h2 className="text-xl font-semibold text-gray-800">📋 Requisitos de Compliance</h2>
+              <h2 className="text-xl font-semibold text-gray-800"><span aria-hidden="true">📋</span> Requisitos de Compliance</h2>
               <p className="text-sm text-gray-500 mt-1">
                 Defina quais qualificações, licenças ou cursos EAD são obrigatórios por função
               </p>
@@ -482,12 +484,12 @@ export function ComplianceSettings() {
               <table className="w-full text-sm">
                 <thead className="bg-gray-50">
                   <tr>
-                    <th className="px-4 py-3 text-left font-medium text-gray-600">Função</th>
-                    <th className="px-4 py-3 text-left font-medium text-gray-600">Tipo</th>
-                    <th className="px-4 py-3 text-left font-medium text-gray-600">Referência</th>
-                    <th className="px-4 py-3 text-left font-medium text-gray-600">Descrição</th>
-                    <th className="px-4 py-3 text-center font-medium text-gray-600">Obrigatório</th>
-                    <th className="px-4 py-3 text-center font-medium text-gray-600">Ações</th>
+                    <th scope="col" className="px-4 py-3 text-left font-medium text-gray-600">Função</th>
+                    <th scope="col" className="px-4 py-3 text-left font-medium text-gray-600">Tipo</th>
+                    <th scope="col" className="px-4 py-3 text-left font-medium text-gray-600">Referência</th>
+                    <th scope="col" className="px-4 py-3 text-left font-medium text-gray-600">Descrição</th>
+                    <th scope="col" className="px-4 py-3 text-center font-medium text-gray-600">Obrigatório</th>
+                    <th scope="col" className="px-4 py-3 text-center font-medium text-gray-600">Ações</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
@@ -546,7 +548,7 @@ export function ComplianceSettings() {
 
         {/* Modal de requisito */}
         {modalRequisito.open && (
-          <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <ModalOverlay className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
             <div className="bg-white rounded-xl shadow-2xl w-full max-w-md p-6 max-h-[calc(100dvh-2rem)] overflow-y-auto">
               <h3 className="text-lg font-semibold text-gray-800 mb-4">
                 {modalRequisito.editing ? 'Editar Requisito' : 'Novo Requisito de Compliance'}
@@ -554,8 +556,8 @@ export function ComplianceSettings() {
 
               <div className="space-y-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Função *</label>
-                  <input
+                  <label htmlFor="compliancesettings-funcao" className="block text-sm font-medium text-gray-700 mb-1">Função *</label>
+                  <input id="compliancesettings-funcao" aria-label="Função"
                     type="text"
                     value={requisitoForm.funcao}
                     onChange={(e) => setRequisitoForm((f) => ({ ...f, funcao: e.target.value }))}
@@ -565,10 +567,10 @@ export function ComplianceSettings() {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                  <label htmlFor="compliancesettings-tipo-de-recurso" className="block text-sm font-medium text-gray-700 mb-1">
                     Tipo de Recurso
                   </label>
-                  <select
+                  <select id="compliancesettings-tipo-de-recurso" aria-label="Tipo de Recurso"
                     value={requisitoForm.tipo_recurso}
                     onChange={(e) =>
                       setRequisitoForm((f) => ({
@@ -607,8 +609,8 @@ export function ComplianceSettings() {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Descrição</label>
-                  <input
+                  <label htmlFor="compliancesettings-descricao" className="block text-sm font-medium text-gray-700 mb-1">Descrição</label>
+                  <input id="compliancesettings-descricao" aria-label="Descrição"
                     type="text"
                     value={requisitoForm.descricao}
                     onChange={(e) => setRequisitoForm((f) => ({ ...f, descricao: e.target.value }))}
@@ -653,7 +655,7 @@ export function ComplianceSettings() {
                 </button>
               </div>
             </div>
-          </div>
+          </ModalOverlay>
         )}
 
         {/* Voltar */}

@@ -54,6 +54,7 @@ import {
   Loader2,
 } from 'lucide-react';
 import { SettingsSectionIntro } from './components/SettingsSectionIntro';
+import { ModalOverlay } from '@/react-app/components/modals/ModalOverlay';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -268,7 +269,7 @@ function CreateBackupModal({ onClose, onSuccess }: CreateModalProps) {
   };
 
   return (
-    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+    <ModalOverlay className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
       <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl w-full max-w-2xl border border-slate-200 dark:border-slate-700">
         {/* Header */}
         <div className="flex items-center gap-3 p-6 border-b border-slate-200 dark:border-slate-700">
@@ -381,10 +382,10 @@ function CreateBackupModal({ onClose, onSuccess }: CreateModalProps) {
 
           {/* Descrição */}
           <div>
-            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+            <label htmlFor="backup-descricao-opcional" className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
               Descrição <span className="text-slate-400 font-normal">(opcional)</span>
             </label>
-            <textarea
+            <textarea id="backup-descricao-opcional" aria-label="Descrição (opcional)"
               value={descricao}
               onChange={(e) => setDescricao(e.target.value)}
               placeholder="Ex: Backup antes da migração de dados..."
@@ -428,7 +429,7 @@ function CreateBackupModal({ onClose, onSuccess }: CreateModalProps) {
           </button>
         </div>
       </div>
-    </div>
+    </ModalOverlay>
   );
 }
 
@@ -484,7 +485,7 @@ function LogsModal({ backup, onClose }: LogsModalProps) {
   };
 
   return (
-    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+    <ModalOverlay className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
       <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl w-full max-w-2xl border border-slate-200 dark:border-slate-700 flex flex-col max-h-[80vh]">
         {/* Header */}
         <div className="flex items-center justify-between p-6 border-b border-slate-200 dark:border-slate-700">
@@ -501,7 +502,7 @@ function LogsModal({ backup, onClose }: LogsModalProps) {
           </div>
           <div className="flex items-center gap-3">
             <StatusBadge status={backup.status} />
-            <button
+            <button aria-label="Fechar"
               onClick={onClose}
               className="p-1.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors"
             >
@@ -575,7 +576,7 @@ function LogsModal({ backup, onClose }: LogsModalProps) {
           </button>
         </div>
       </div>
-    </div>
+    </ModalOverlay>
   );
 }
 
@@ -640,7 +641,7 @@ function RestoreModal({ backup, onClose, onSuccess }: RestoreModalProps) {
   };
 
   return (
-    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+    <ModalOverlay className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
       <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl w-full max-w-lg border border-slate-200 dark:border-slate-700">
         {/* Header */}
         <div className="flex items-center gap-3 p-6 border-b border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-900/20 rounded-t-2xl">
@@ -726,11 +727,11 @@ function RestoreModal({ backup, onClose, onSuccess }: RestoreModalProps) {
 
           {/* Confirmation input */}
           <div>
-            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+            <label htmlFor="backup-digite-confirmar-para-prosseguir" className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
               Digite <span className="font-mono font-bold text-red-600">CONFIRMAR</span> para
               prosseguir
             </label>
-            <input
+            <input id="backup-digite-confirmar-para-prosseguir" aria-label="Digite CONFIRMAR para prosseguir"
               type="text"
               value={confirmText}
               onChange={(e) => setConfirmText(e.target.value)}
@@ -766,7 +767,7 @@ function RestoreModal({ backup, onClose, onSuccess }: RestoreModalProps) {
           </button>
         </div>
       </div>
-    </div>
+    </ModalOverlay>
   );
 }
 
@@ -967,7 +968,7 @@ export default function BackupPage() {
         <div className="p-4 border-b border-slate-200 dark:border-slate-800 flex flex-col sm:flex-row gap-3">
           <div className="flex-1 relative">
             <Activity className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-            <input
+            <input aria-label="Buscar por UUID, descrição ou origem..."
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
@@ -1030,31 +1031,31 @@ export default function BackupPage() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-700">
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide">
+                  <th scope="col" className="px-4 py-3 text-left text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide">
                     Status
                   </th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide">
+                  <th scope="col" className="px-4 py-3 text-left text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide">
                     Tipo
                   </th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide">
+                  <th scope="col" className="px-4 py-3 text-left text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide">
                     UUID
                   </th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide">
+                  <th scope="col" className="px-4 py-3 text-left text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide">
                     Origem
                   </th>
-                  <th className="px-4 py-3 text-right text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide">
+                  <th scope="col" className="px-4 py-3 text-right text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide">
                     Registros
                   </th>
-                  <th className="px-4 py-3 text-right text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide">
+                  <th scope="col" className="px-4 py-3 text-right text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide">
                     Tamanho
                   </th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide">
+                  <th scope="col" className="px-4 py-3 text-left text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide">
                     Data
                   </th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide">
+                  <th scope="col" className="px-4 py-3 text-left text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide">
                     Retenção
                   </th>
-                  <th className="px-4 py-3 text-center text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide">
+                  <th scope="col" className="px-4 py-3 text-center text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide">
                     Ações
                   </th>
                 </tr>

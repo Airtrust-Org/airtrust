@@ -20,6 +20,7 @@ import { useLanguage } from '@/react-app/i18n/useLanguage';
 import { SettingsSectionIntro } from './components/SettingsSectionIntro';
 import { BombeirosFrmsDemo } from './BombeirosFrmsDemo';
 import { mayPreviewBombeirosFrmsDemo } from './bombeirosFrmsDemoData';
+import { ModalOverlay } from '@/react-app/components/modals/ModalOverlay';
 
 interface Empresa {
   id: number;
@@ -341,7 +342,7 @@ export function GestaoEmpresas() {
                       <div className="flex flex-wrap items-center gap-2">
                         <h3 className="text-lg font-bold text-slate-900">{empresa.nome}</h3>
                         {empresaAtualId === empresa.id && (
-                          <span className="inline-flex items-center gap-1 rounded-full border border-blue-200 bg-blue-50 px-2.5 py-1 text-[11px] font-semibold text-blue-700">
+                          <span className="inline-flex items-center gap-1 rounded-full border border-blue-200 bg-blue-50 px-2.5 py-1 text-xs font-semibold text-blue-700">
                             <BadgeCheck className="h-3.5 w-3.5" />
                             Atual
                           </span>
@@ -375,7 +376,7 @@ export function GestaoEmpresas() {
                 </div>
 
                 <div className="mt-5 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
-                  <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
                     {t('settings.companies.cnpj')}
                   </p>
                   <p className="mt-1 font-medium text-slate-900">
@@ -387,7 +388,7 @@ export function GestaoEmpresas() {
                   <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
                     <div className="flex items-center gap-2 text-slate-500">
                       <Users className="h-4 w-4" />
-                      <span className="text-[11px] font-semibold uppercase tracking-wide">
+                      <span className="text-xs font-semibold uppercase tracking-wide">
                         {t('settings.companies.usersLimit')}
                       </span>
                     </div>
@@ -399,7 +400,7 @@ export function GestaoEmpresas() {
                   <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
                     <div className="flex items-center gap-2 text-slate-500">
                       <Briefcase className="h-4 w-4" />
-                      <span className="text-[11px] font-semibold uppercase tracking-wide">
+                      <span className="text-xs font-semibold uppercase tracking-wide">
                         {t('settings.companies.storage')}
                       </span>
                     </div>
@@ -461,7 +462,7 @@ export function GestaoEmpresas() {
       )}
 
       {showModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4">
+        <ModalOverlay className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4">
           <div className="flex h-[90vh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl">
             <div className="flex items-center justify-between border-b border-slate-200 px-6 py-5">
               <div>
@@ -477,7 +478,7 @@ export function GestaoEmpresas() {
                 </p>
               </div>
 
-              <button
+              <button aria-label="Fechar"
                 onClick={fecharModal}
                 className="rounded-lg p-2 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600"
               >
@@ -498,11 +499,11 @@ export function GestaoEmpresas() {
               />
             </div>
           </div>
-        </div>
+        </ModalOverlay>
       )}
 
       {confirmDelete && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4">
+        <ModalOverlay className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4">
           <div className="w-full max-w-sm rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl">
             <div className="text-center">
               <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-red-100">
@@ -535,7 +536,7 @@ export function GestaoEmpresas() {
               </button>
             </div>
           </div>
-        </div>
+        </ModalOverlay>
       )}
     </div>
   );

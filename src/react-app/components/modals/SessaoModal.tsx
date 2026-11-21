@@ -16,6 +16,7 @@ import { API_BASE_URL, getAccessToken } from '@/react-app/config/api';
 import TimeInput from '@/react-app/components/TimeInput';
 import { normalizeTimeInput } from '@/react-app/lib/time-input';
 import { showAlertDialog } from '@/react-app/utils/confirmDialog';
+import { ModalOverlay } from '@/react-app/components/modals/ModalOverlay';
 
 interface Simulador {
   id: number;
@@ -238,14 +239,14 @@ export default function SessaoModal({ isOpen, onClose, onSalvar, sessaoId }: Ses
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-modal flex items-center justify-center bg-black/50">
+    <ModalOverlay className="fixed inset-0 z-modal flex items-center justify-center bg-black/50">
       <div className="bg-white dark:bg-slate-900 rounded-lg shadow-xl w-full max-w-3xl max-h-[90vh] overflow-hidden flex flex-col">
         {/* Header */}
         <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 px-6 py-4">
           <h3 className="text-lg font-semibold text-slate-900 dark:text-white">
             {sessaoId ? 'Editar Sessão' : 'Nova Sessão'}
           </h3>
-          <button
+          <button aria-label="Fechar"
             onClick={onClose}
             className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
           >
@@ -258,10 +259,10 @@ export default function SessaoModal({ isOpen, onClose, onSalvar, sessaoId }: Ses
           {/* Simulador e Modelo */}
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+              <label htmlFor="sessaomodal-simulador" className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
                 Simulador *
               </label>
-              <select
+              <select id="sessaomodal-simulador" aria-label="Simulador"
                 value={formData.simulador_id}
                 onChange={(e) => setFormData({ ...formData, simulador_id: e.target.value })}
                 className="w-full rounded-md border border-slate-300 dark:border-slate-700 dark:bg-slate-800 dark:text-white px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
@@ -276,10 +277,10 @@ export default function SessaoModal({ isOpen, onClose, onSalvar, sessaoId }: Ses
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+              <label htmlFor="sessaomodal-modelo-de-sessao" className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
                 Modelo de Sessão *
               </label>
-              <select
+              <select id="sessaomodal-modelo-de-sessao" aria-label="Modelo de Sessão"
                 value={formData.modelo_id}
                 onChange={(e) => setFormData({ ...formData, modelo_id: e.target.value })}
                 className="w-full rounded-md border border-slate-300 dark:border-slate-700 dark:bg-slate-800 dark:text-white px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
@@ -297,10 +298,10 @@ export default function SessaoModal({ isOpen, onClose, onSalvar, sessaoId }: Ses
           {/* Data, Hora e Duração */}
           <div className="grid grid-cols-3 gap-4">
             <div>
-              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+              <label htmlFor="sessaomodal-data" className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
                 Data *
               </label>
-              <input
+              <input id="sessaomodal-data" aria-label="Data"
                 type="date"
                 value={formData.data_inicio}
                 onChange={(e) => setFormData({ ...formData, data_inicio: e.target.value })}
@@ -309,10 +310,10 @@ export default function SessaoModal({ isOpen, onClose, onSalvar, sessaoId }: Ses
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+              <label htmlFor="sessaomodal-hora" className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
                 Hora *
               </label>
-              <TimeInput
+              <TimeInput id="sessaomodal-hora"
                 value={formData.hora_inicio}
                 onChange={(value) => setFormData({ ...formData, hora_inicio: value })}
                 className="w-full rounded-md border border-slate-300 dark:border-slate-700 dark:bg-slate-800 dark:text-white px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
@@ -320,10 +321,10 @@ export default function SessaoModal({ isOpen, onClose, onSalvar, sessaoId }: Ses
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+              <label htmlFor="sessaomodal-duracao-min" className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
                 Duração (min)
               </label>
-              <input
+              <input id="sessaomodal-duracao-min" aria-label="Duração (min)"
                 type="number"
                 value={formData.duracao_minutos}
                 onChange={(e) =>
@@ -336,10 +337,10 @@ export default function SessaoModal({ isOpen, onClose, onSalvar, sessaoId }: Ses
 
           {/* Instrutor */}
           <div>
-            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+            <label htmlFor="sessaomodal-instrutor" className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
               Instrutor *
             </label>
-            <select
+            <select id="sessaomodal-instrutor" aria-label="Instrutor"
               value={formData.instrutor_id}
               onChange={(e) => setFormData({ ...formData, instrutor_id: e.target.value })}
               className="w-full rounded-md border border-slate-300 dark:border-slate-700 dark:bg-slate-800 dark:text-white px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
@@ -396,7 +397,7 @@ export default function SessaoModal({ isOpen, onClose, onSalvar, sessaoId }: Ses
                   </select>
 
                   {formData.participantes.length > 1 && (
-                    <button
+                    <button aria-label="Excluir"
                       type="button"
                       onClick={() => removerParticipante(index)}
                       className="text-red-600 hover:text-red-700"
@@ -438,6 +439,6 @@ export default function SessaoModal({ isOpen, onClose, onSalvar, sessaoId }: Ses
           </button>
         </div>
       </div>
-    </div>
+    </ModalOverlay>
   );
 }

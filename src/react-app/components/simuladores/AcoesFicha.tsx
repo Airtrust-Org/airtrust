@@ -59,19 +59,19 @@ const AcoesFicha: React.FC<AcoesFichaProps> = ({ ficha }) => {
         onClick={handleVisualizarFicha} 
         className="px-3 py-1 bg-primary/100 text-white rounded text-sm hover:bg-primary"
       >
-        👁️ Visualizar
+        <span aria-hidden="true">👁️</span> Visualizar
       </button>
       <button 
         onClick={handleEditarFicha} 
         className="px-3 py-1 bg-green-500 text-white rounded text-sm hover:bg-green-600"
       >
-        ✏️ Editar
+        <span aria-hidden="true">✏️</span> Editar
       </button>
       <button 
         onClick={handleAvaliarFicha} 
         className="px-3 py-1 bg-yellow-500 text-white rounded text-sm hover:bg-yellow-600"
       >
-        📋 Avaliar
+        <span aria-hidden="true">📋</span> Avaliar
       </button>
     </div>
   );

@@ -326,6 +326,7 @@ export async function gerarPDFFichaCliente(
     unit: 'mm',
     format: 'a4',
   });
+  doc.setLanguage?.('pt-BR');
 
   const pageWidth = doc.internal.pageSize.getWidth();
   const pageHeight = doc.internal.pageSize.getHeight();

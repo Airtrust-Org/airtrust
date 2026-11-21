@@ -29,6 +29,7 @@ import {
   isTripulacaoVooFuncionario,
 } from '@/react-app/config/pastaVirtual';
 import UploadDocumentoModal from './UploadDocumentoModal';
+import { ModalOverlay } from '@/react-app/components/modals/ModalOverlay';
 
 interface PastaVirtualCompletaProps {
   funcionarioId: number;
@@ -292,8 +293,8 @@ export default function PastaVirtualCompleta({
                                   <span
                                     className={
                                       atual
-                                        ? 'rounded-full bg-blue-50 px-2 py-0.5 text-[11px] font-medium text-blue-700 dark:bg-blue-950/40 dark:text-blue-300'
-                                        : 'rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-600 dark:bg-slate-800 dark:text-slate-300'
+                                        ? 'rounded-full bg-blue-50 px-2 py-0.5 text-xs font-medium text-blue-700 dark:bg-blue-950/40 dark:text-blue-300'
+                                        : 'rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600 dark:bg-slate-800 dark:text-slate-300'
                                     }
                                   >
                                     {atual ? 'Versão atual' : 'Histórico'}
@@ -472,7 +473,7 @@ export default function PastaVirtualCompleta({
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
           <div className="relative flex-1">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-            <input
+            <input aria-label="Buscar por documento ou categoria..."
               value={busca}
               onChange={(e) => setBusca(e.target.value)}
               placeholder="Buscar por documento ou categoria..."
@@ -529,7 +530,7 @@ export default function PastaVirtualCompleta({
       />
 
       {showConfirmDelete && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+        <ModalOverlay className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
           <div className="w-full max-w-sm rounded-lg bg-white p-6 shadow-lg dark:bg-slate-900">
             <div className="mb-4 flex items-center gap-3">
               <AlertCircle className="h-6 w-6 text-red-600" />
@@ -567,7 +568,7 @@ export default function PastaVirtualCompleta({
               </button>
             </div>
           </div>
-        </div>
+        </ModalOverlay>
       )}
     </div>
   );

@@ -322,7 +322,7 @@ export default function ControleVoosPlanoVooCard({
               <section key={leg.ordem} className="rounded-xl border border-slate-200 p-4 dark:border-slate-800">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-100">Perna {leg.ordem}: {leg.origem || '—'} → {leg.destino || '—'}</h3>
-                  <span className={`rounded-full px-2 py-1 text-[11px] font-semibold ${legReadiness?.ready ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300' : 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300'}`}>
+                  <span className={`rounded-full px-2 py-1 text-xs font-semibold ${legReadiness?.ready ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300' : 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300'}`}>
                     {legReadiness?.ready ? 'Completa' : `${legReadiness?.missing.length || 0} pendência(s)`}
                   </span>
                 </div>

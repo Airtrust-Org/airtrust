@@ -183,12 +183,12 @@ export default function ModalFeriasAfastamentoGlobal({ onClose, onSaved }: Props
 
         <div className="grid gap-5 lg:grid-cols-[minmax(280px,1.05fr)_minmax(0,0.95fr)]">
           <div className="rounded-2xl border border-slate-200 bg-white p-4">
-            <label className="mb-2 block text-xs font-semibold uppercase tracking-wide text-slate-500">
+            <label htmlFor="modalferiasafastamentoglobal-funcionario" className="mb-2 block text-xs font-semibold uppercase tracking-wide text-slate-500">
               Funcionário
             </label>
             <div className="relative mb-3">
               <Search className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
-              <input
+              <input id="modalferiasafastamentoglobal-funcionario" aria-label="Funcionário"
                 type="text"
                 value={busca}
                 onChange={(event) => setBusca(event.target.value)}
@@ -265,12 +265,12 @@ export default function ModalFeriasAfastamentoGlobal({ onClose, onSaved }: Props
             </div>
 
             <div className="rounded-2xl border border-slate-200 bg-white p-4">
-              <label className="mb-2 block text-xs font-semibold uppercase tracking-wide text-slate-500">
+              <label htmlFor="modalferiasafastamentoglobal-periodo" className="mb-2 block text-xs font-semibold uppercase tracking-wide text-slate-500">
                 Período
               </label>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <input
+                  <input id="modalferiasafastamentoglobal-periodo" aria-label="Período"
                     type="date"
                     value={dataInicio}
                     onChange={(event) => {
@@ -294,7 +294,7 @@ export default function ModalFeriasAfastamentoGlobal({ onClose, onSaved }: Props
                     className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900"
                   />
                   {dataInicio && (
-                    <span className="mt-1 block px-1 text-[11px] font-medium text-slate-500">
+                    <span className="mt-1 block px-1 text-xs font-medium text-slate-500">
                       {fmtDateShort(dataInicio)}
                     </span>
                   )}
@@ -310,7 +310,7 @@ export default function ModalFeriasAfastamentoGlobal({ onClose, onSaved }: Props
                     className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900"
                   />
                   {dataFim && (
-                    <span className="mt-1 block px-1 text-[11px] font-medium text-slate-500">
+                    <span className="mt-1 block px-1 text-xs font-medium text-slate-500">
                       {fmtDateShort(dataFim)}
                     </span>
                   )}
@@ -319,10 +319,10 @@ export default function ModalFeriasAfastamentoGlobal({ onClose, onSaved }: Props
             </div>
 
             <div className="rounded-2xl border border-slate-200 bg-white p-4">
-              <label className="mb-2 block text-xs font-semibold uppercase tracking-wide text-slate-500">
+              <label htmlFor="modalferiasafastamentoglobal-observacoes" className="mb-2 block text-xs font-semibold uppercase tracking-wide text-slate-500">
                 Observações
               </label>
-              <textarea
+              <textarea id="modalferiasafastamentoglobal-observacoes" aria-label="Observações"
                 rows={5}
                 value={observacoes}
                 onChange={(event) => setObservacoes(event.target.value)}

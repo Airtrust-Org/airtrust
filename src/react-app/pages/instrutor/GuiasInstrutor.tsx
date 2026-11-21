@@ -78,7 +78,7 @@ function GuiaCard({ guia }: { guia: GuiaInstrutor }) {
           <p className="text-sm font-semibold text-slate-900 dark:text-slate-100 line-clamp-2">{tituloExibido.visivel}</p>
           <p className="text-xs font-mono text-slate-500 dark:text-slate-400 mt-0.5">{guia.codigo}</p>
         </div>
-        <span className="shrink-0 rounded-full bg-slate-100 dark:bg-slate-800 px-2 py-0.5 text-[11px] font-medium text-slate-600 dark:text-slate-300">
+        <span className="shrink-0 rounded-full bg-slate-100 dark:bg-slate-800 px-2 py-0.5 text-xs font-medium text-slate-600 dark:text-slate-300">
           v{guia.versao}
         </span>
       </div>
@@ -120,7 +120,7 @@ function GuiaCard({ guia }: { guia: GuiaInstrutor }) {
         </Button>
       </div>
       {!guia.html_disponivel && (
-        <p className="text-[11px] text-amber-600 dark:text-amber-400">
+        <p className="text-xs text-amber-600 dark:text-amber-400">
           HTML em validação interna — apenas PDF disponível no momento.
         </p>
       )}
@@ -171,7 +171,7 @@ function ProximasSessoes() {
                   <BookOpen className="w-3.5 h-3.5 mr-1.5" /> Guia desta sessão
                 </Button>
               ) : (
-                <p className="text-[11px] text-slate-400 dark:text-slate-500">Sem guia vinculado</p>
+                <p className="text-xs text-slate-400 dark:text-slate-500">Sem guia vinculado</p>
               )}
             </div>
           </Card>

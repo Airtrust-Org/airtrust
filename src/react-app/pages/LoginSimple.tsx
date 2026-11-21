@@ -187,7 +187,7 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-white p-4">
+    <main className="min-h-screen flex items-center justify-center bg-white p-4">
       <div className="w-full max-w-sm">
         <div className="mb-8 text-center">
           <img
@@ -214,7 +214,7 @@ export default function LoginPage() {
             <h1 className="text-xl font-bold text-slate-900">
               {entryOptions.length > 1 ? 'Como você quer entrar?' : t('auth.login.title')}
             </h1>
-            <p className="text-sm text-slate-500 mt-1">
+            <p className="text-sm text-slate-600 mt-1">
               {entryOptions.length > 1
                 ? 'Escolha entre a gestão da empresa e suas atividades como aluno ou instrutor.'
                 : IS_STAGING
@@ -312,8 +312,8 @@ export default function LoginPage() {
 
               {IS_DEV && (
                 <div className="mt-5 pt-5 border-t border-slate-100">
-                  <p className="text-xs text-slate-400 text-center mb-2.5">
-                    ⚡ Acesso rápido (modo dev.)
+                  <p className="text-xs text-slate-600 text-center mb-2.5">
+                    <span aria-hidden="true">⚡</span> Acesso rápido (modo dev.)
                   </p>
                   <div className="grid grid-cols-4 gap-1.5">
                     {DEV_PROFILES.map((p) => (
@@ -336,10 +336,10 @@ export default function LoginPage() {
           )}
         </div>
 
-        <p className="text-center text-xs text-slate-400 mt-6">
+        <p className="text-center text-xs text-slate-500 mt-6">
           © 2026 AirTrust. Todos os direitos reservados.
         </p>
       </div>
-    </div>
+    </main>
   );
 }

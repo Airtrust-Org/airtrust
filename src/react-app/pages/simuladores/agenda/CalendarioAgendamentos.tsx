@@ -818,7 +818,7 @@ export default function CalendarioAgendamentos() {
         (agendamento.examinador_id != null && agendamento.examinador_id > 0) ||
         !!agendamento.examinador_nome;
       return (
-        <div
+        <div role="button" tabIndex={0} onKeyDown={(e) => { if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); e.currentTarget.click(); } }}
           className={`${cores.bg} ${
             cores.border
           } border-l-4 rounded-r px-2 py-1 mb-1 cursor-pointer hover:shadow-sm transition-shadow text-xs ${
@@ -841,35 +841,35 @@ export default function CalendarioAgendamentos() {
               </span>
             )}
             {concluida && (
-              <span title="Todas as fichas concluídas" className="text-[9px] text-slate-400">
+              <span title="Todas as fichas concluídas" className="text-xs text-slate-400">
                 ✓
               </span>
             )}
           </div>
-          <div className="text-slate-700 font-medium truncate text-[11px]">
+          <div className="text-slate-700 font-medium truncate text-xs">
             {agendamento.tema_sessao || agendamento.tipo_sessao || agendamento.simulador_nome}
           </div>
           {agendamento.examinador_nome && (
-            <div className="text-emerald-900 font-semibold truncate text-[10px]">
+            <div className="text-emerald-900 font-semibold truncate text-xs">
               👨‍✈️ {t('sim.calendar.card.examiner')}: {agendamento.examinador_nome}
             </div>
           )}
           {participantesText && (
-            <div className="text-slate-500 truncate text-[10px]">{participantesText}</div>
+            <div className="text-slate-500 truncate text-xs">{participantesText}</div>
           )}
         </div>
       );
     }
 
     return (
-      <div
+      <div role="button" tabIndex={0} onKeyDown={(e) => { if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); e.currentTarget.click(); } }}
         className={`${cores.bg} ${cores.border} border-l-4 rounded-r-lg p-3 mb-2 cursor-pointer hover:shadow-md transition-shadow`}
         onClick={handleClick}
       >
         <div className={`font-bold ${cores.text} text-sm flex items-center gap-1`}>
           {agendamento.tema_sessao || agendamento.tipo_sessao || agendamento.simulador_nome}
           {Boolean(agendamento.modo_compartilhado) && (
-            <span className="rounded bg-indigo-100 px-1.5 py-0.5 text-[9px] font-semibold uppercase text-indigo-700">
+            <span className="rounded bg-indigo-100 px-1.5 py-0.5 text-xs font-semibold uppercase text-indigo-700">
               Compartilhada
             </span>
           )}
@@ -932,7 +932,7 @@ export default function CalendarioAgendamentos() {
             const eventos = agendamentosPorDia.get(dateKey) || [];
 
             return (
-              <div
+              <div role="button" tabIndex={0} onKeyDown={(e) => { if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); e.currentTarget.click(); } }}
                 key={index}
                 onClick={() => handleNovaSessaoNaData(day)}
                 className={`min-h-[120px] border-b border-r border-slate-100 p-2 dark:border-slate-800 ${
@@ -1005,7 +1005,7 @@ export default function CalendarioAgendamentos() {
             const eventos = agendamentosPorDia.get(dateKey) || [];
 
             return (
-              <div
+              <div role="button" tabIndex={0} onKeyDown={(e) => { if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); e.currentTarget.click(); } }}
                 key={index}
                 onClick={() => handleNovaSessaoNaData(day)}
                 className={`border-r border-slate-100 p-3 last:border-r-0 dark:border-slate-800 ${

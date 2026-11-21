@@ -492,7 +492,7 @@ export default function AlertasNotificacoes() {
                   />
                 </label>
               </div>
-              <p className="mt-2 text-[11px] text-slate-500">
+              <p className="mt-2 text-xs text-slate-500">
                 Variáveis: {'{{funcionario}}'}, {'{{qualificacao}}'}, {'{{dias}}'},{' '}
                 {'{{data_vencimento}}'}, {'{{categoria}}'}, {'{{dias_vencida}}'}.
               </p>
@@ -864,7 +864,7 @@ export default function AlertasNotificacoes() {
                   }
                 />
               </div>
-              <p className="mt-1 text-[11px] text-slate-500">
+              <p className="mt-1 text-xs text-slate-500">
                 O bloqueio/avaliação de aptidão FRMS continua obrigatório; este controle desliga
                 apenas o lembrete de comunicação.
               </p>
@@ -1328,7 +1328,7 @@ export default function AlertasNotificacoes() {
             </div>
           ))}
         </div>
-        <p className="mt-3 text-[11px] text-slate-500">
+        <p className="mt-3 text-xs text-slate-500">
           Alterações desta política exigem administrador da plataforma porque a tabela atual é
           global. O lembrete diário de check-in FRMS, que é comunicação tenant-scoped, é
           configurável acima.

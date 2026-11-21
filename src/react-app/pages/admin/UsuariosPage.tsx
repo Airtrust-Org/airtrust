@@ -66,6 +66,7 @@ import {
   perfilUsuarioLabel as perfilLabel,
   perfisUsuariosSelecionaveis,
 } from './perfis-usuarios';
+import { ModalOverlay } from '@/react-app/components/modals/ModalOverlay';
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 
@@ -342,7 +343,7 @@ export function UsuariosAdminContent({ embedded = false }: { embedded?: boolean 
           <AlertTriangle className="h-12 w-12 text-amber-500" />
           <h2 className="text-xl font-semibold text-slate-900">Acesso Restrito</h2>
           <p className="text-sm text-slate-600">Você não tem permissão para gerenciar usuários.</p>
-          <button onClick={() => navigate(-1)} className="text-primary hover:underline text-sm">
+          <button type="button" onClick={() => navigate(-1)} className="text-primary hover:underline text-sm">
             Voltar
           </button>
         </div>
@@ -500,7 +501,7 @@ export function UsuariosAdminContent({ embedded = false }: { embedded?: boolean 
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div className="flex items-center gap-3">
             {!embedded && (
-              <button
+              <button aria-label="Voltar" type="button"
                 onClick={() => navigate('/configuracoes')}
                 className="p-2 rounded-lg hover:bg-slate-100 transition"
               >
@@ -518,14 +519,14 @@ export function UsuariosAdminContent({ embedded = false }: { embedded?: boolean 
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <button
+            <button type="button"
               onClick={() => setModalPerfis(true)}
               className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 transition text-sm font-medium"
             >
               <LayoutGrid className="h-4 w-4 text-slate-500" />
               Ver Perfis
             </button>
-            <button
+            <button type="button"
               onClick={() => setModalCriar(true)}
               className="flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 transition text-sm font-medium"
             >
@@ -538,7 +539,7 @@ export function UsuariosAdminContent({ embedded = false }: { embedded?: boolean 
         {/* Filtro */}
         <div className="relative max-w-sm">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-          <input
+          <input aria-label="Buscar usuários..."
             type="text"
             placeholder="Buscar usuários..."
             value={filtro}
@@ -562,12 +563,12 @@ export function UsuariosAdminContent({ embedded = false }: { embedded?: boolean 
             <table className="w-full min-w-[700px]">
               <thead className="bg-slate-50 border-b border-slate-200">
                 <tr className="text-xs font-medium text-slate-500 uppercase tracking-wide">
-                  <th className="px-4 py-3 text-left">Usuário</th>
-                  <th className="px-4 py-3 text-left">Perfil</th>
-                  <th className="px-4 py-3 text-left">Funcionário vinculado</th>
-                  <th className="px-4 py-3 text-left">Status</th>
-                  <th className="px-4 py-3 text-left">Último acesso</th>
-                  <th className="px-4 py-3 text-right">Ações</th>
+                  <th scope="col" className="px-4 py-3 text-left">Usuário</th>
+                  <th scope="col" className="px-4 py-3 text-left">Perfil</th>
+                  <th scope="col" className="px-4 py-3 text-left">Funcionário vinculado</th>
+                  <th scope="col" className="px-4 py-3 text-left">Status</th>
+                  <th scope="col" className="px-4 py-3 text-left">Último acesso</th>
+                  <th scope="col" className="px-4 py-3 text-right">Ações</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -643,7 +644,7 @@ export function UsuariosAdminContent({ embedded = false }: { embedded?: boolean 
                       <div className="flex items-center justify-end gap-1">
                         {/* Entrar como usuário (apenas admin; backend registra auditoria) */}
                         {isAdmin && Number(user?.id) !== Number(u.id) && (
-                          <button
+                          <button type="button"
                             onClick={() => handleImpersonate(u)}
                             title="Entrar como este usuário"
                             aria-label={`Entrar como ${u.nome}`}
@@ -654,7 +655,7 @@ export function UsuariosAdminContent({ embedded = false }: { embedded?: boolean 
                         )}
                         {/* Redefinir Senha (apenas admin) */}
                         {isAdmin && (
-                          <button
+                          <button type="button"
                             onClick={() => setModalResetSenha(u)}
                             title="Redefinir senha"
                             className="p-1.5 rounded hover:bg-slate-100 text-slate-500 hover:text-amber-600 transition"
@@ -663,7 +664,7 @@ export function UsuariosAdminContent({ embedded = false }: { embedded?: boolean 
                           </button>
                         )}
                         {/* Permissões */}
-                        <button
+                        <button type="button"
                           onClick={() => setModalPermissoes(u)}
                           title="Permissões individuais"
                           className="p-1.5 rounded hover:bg-slate-100 text-slate-500 hover:text-primary transition"
@@ -671,7 +672,7 @@ export function UsuariosAdminContent({ embedded = false }: { embedded?: boolean 
                           <UserCog className="h-4 w-4" />
                         </button>
                         {/* Editar */}
-                        <button
+                        <button type="button"
                           onClick={() => setModalEditar(u)}
                           title="Editar usuário"
                           className="p-1.5 rounded hover:bg-slate-100 text-slate-500 hover:text-primary transition"
@@ -679,7 +680,7 @@ export function UsuariosAdminContent({ embedded = false }: { embedded?: boolean 
                           <Pencil className="h-4 w-4" />
                         </button>
                         {/* Reenviar convite */}
-                        <button
+                        <button type="button"
                           onClick={() => handleReenviarConvite(u)}
                           title="Gerar / Reenviar convite"
                           className="p-1.5 rounded hover:bg-slate-100 text-slate-500 hover:text-amber-600 transition"
@@ -688,7 +689,7 @@ export function UsuariosAdminContent({ embedded = false }: { embedded?: boolean 
                         </button>
                         {/* Desativar */}
                         {u.active ? (
-                          <button
+                          <button type="button"
                             onClick={() => handleDesativar(u)}
                             title="Desativar usuário"
                             className="p-1.5 rounded hover:bg-slate-100 text-slate-500 hover:text-red-600 transition"
@@ -965,14 +966,14 @@ function ModalCriarUsuario({
   };
 
   return (
-    <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+    <ModalOverlay className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md">
         <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200">
           <h2 className="text-lg font-semibold text-slate-900 flex items-center gap-2">
             <UserPlus className="h-5 w-5 text-primary" />
             Novo Usuário
           </h2>
-          <button onClick={onClose} className="p-1 rounded hover:bg-slate-100">
+          <button aria-label="Fechar" type="button" onClick={onClose} className="p-1 rounded hover:bg-slate-100">
             <X className="h-5 w-5 text-slate-500" />
           </button>
         </div>
@@ -980,8 +981,8 @@ function ModalCriarUsuario({
         <form onSubmit={handleSubmit} className="p-6 space-y-4">
           {/* Nome */}
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Nome completo</label>
-            <input
+            <label htmlFor="usuariospage-nome-completo" className="block text-sm font-medium text-slate-700 mb-1">Nome completo</label>
+            <input id="usuariospage-nome-completo" aria-label="Nome completo"
               type="text"
               value={nome}
               onChange={(e) => setNome(e.target.value)}
@@ -993,8 +994,8 @@ function ModalCriarUsuario({
 
           {/* Email */}
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">E-mail</label>
-            <input
+            <label htmlFor="usuariospage-e-mail" className="block text-sm font-medium text-slate-700 mb-1">E-mail</label>
+            <input id="usuariospage-e-mail" aria-label="E-mail"
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
@@ -1006,10 +1007,10 @@ function ModalCriarUsuario({
 
           {/* Perfil */}
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">
+            <label htmlFor="usuariospage-perfil-de-acesso" className="block text-sm font-medium text-slate-700 mb-1">
               Perfil de acesso
             </label>
-            <select
+            <select id="usuariospage-perfil-de-acesso" aria-label="Perfil de acesso"
               value={perfil}
               onChange={(e) => setPerfil(e.target.value)}
               className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-primary/30 focus:border-primary bg-white"
@@ -1101,7 +1102,7 @@ function ModalCriarUsuario({
           </div>
         </form>
       </div>
-    </div>
+    </ModalOverlay>
   );
 }
 
@@ -1229,14 +1230,14 @@ function ModalEditarUsuario({
   };
 
   return (
-    <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+    <ModalOverlay className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md">
         <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200">
           <h2 className="text-lg font-semibold text-slate-900 flex items-center gap-2">
             <Pencil className="h-5 w-5 text-primary" />
             Editar Usuário
           </h2>
-          <button onClick={onClose} className="p-1 rounded hover:bg-slate-100">
+          <button aria-label="Fechar" type="button" onClick={onClose} className="p-1 rounded hover:bg-slate-100">
             <X className="h-5 w-5 text-slate-500" />
           </button>
         </div>
@@ -1245,8 +1246,8 @@ function ModalEditarUsuario({
           <p className="text-sm text-slate-500">{usuario.email}</p>
 
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Nome</label>
-            <input
+            <label htmlFor="usuariospage-nome" className="block text-sm font-medium text-slate-700 mb-1">Nome</label>
+            <input id="usuariospage-nome" aria-label="Nome"
               type="text"
               value={nome}
               onChange={(e) => setNome(e.target.value)}
@@ -1256,10 +1257,10 @@ function ModalEditarUsuario({
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">
+            <label htmlFor="usuariospage-perfil-de-acesso-2" className="block text-sm font-medium text-slate-700 mb-1">
               Perfil de acesso
             </label>
-            <select
+            <select id="usuariospage-perfil-de-acesso-2" aria-label="Perfil de acesso"
               value={perfil}
               onChange={(e) => {
                 setPerfil(e.target.value);
@@ -1299,10 +1300,10 @@ function ModalEditarUsuario({
           )}
 
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">
+            <label htmlFor="usuariospage-funcionario-vinculado-opcional" className="block text-sm font-medium text-slate-700 mb-1">
               Funcionário vinculado <span className="text-slate-400 font-normal">(opcional)</span>
             </label>
-            <select
+            <select id="usuariospage-funcionario-vinculado-opcional" aria-label="Funcionário vinculado (opcional)"
               value={funcionarioId ?? ''}
               onChange={(e) => setFuncionarioId(Number(e.target.value) || null)}
               className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-primary/30 bg-white"
@@ -1335,7 +1336,7 @@ function ModalEditarUsuario({
           </div>
         </form>
       </div>
-    </div>
+    </ModalOverlay>
   );
 }
 
@@ -1438,7 +1439,7 @@ function ModalPermissoes({
   const activeGrupo = PERMISSOES_DISPONIVEIS.find((g) => g.grupo === activeTab);
 
   return (
-    <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+    <ModalOverlay className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl flex flex-col max-h-[90vh]">
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 shrink-0">
@@ -1459,7 +1460,7 @@ function ModalPermissoes({
               </p>
             </div>
           </div>
-          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-slate-100 transition">
+          <button aria-label="Fechar" type="button" onClick={onClose} className="p-1.5 rounded-lg hover:bg-slate-100 transition">
             <X className="h-5 w-5 text-slate-500" />
           </button>
         </div>
@@ -1479,7 +1480,7 @@ function ModalPermissoes({
               )}
             </div>
             {permissoes.length > 0 && (
-              <button
+              <button type="button"
                 onClick={clearAll}
                 className="text-xs text-red-500 hover:text-red-700 hover:underline font-medium transition"
               >
@@ -1501,7 +1502,7 @@ function ModalPermissoes({
                 const count = countOverridesForTab(tab.key);
                 const isActive = activeTab === tab.key;
                 return (
-                  <button
+                  <button type="button"
                     key={tab.key}
                     onClick={() => setActiveTab(tab.key)}
                     className={`w-full flex items-center justify-between px-3 py-2 text-sm transition rounded-none ${
@@ -1546,11 +1547,11 @@ function ModalPermissoes({
                         {PERM_LABELS[perm] ?? perm}
                       </span>
                       {roleDefault ? (
-                        <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full bg-emerald-100 text-emerald-700 text-[11px] font-medium whitespace-nowrap">
+                        <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full bg-emerald-100 text-emerald-700 text-xs font-medium whitespace-nowrap">
                           <Check className="h-2.5 w-2.5" /> Liberado pelo perfil
                         </span>
                       ) : (
-                        <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-500 text-[11px] font-medium whitespace-nowrap">
+                        <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-500 text-xs font-medium whitespace-nowrap">
                           <X className="h-2.5 w-2.5" /> Negado pelo perfil
                         </span>
                       )}
@@ -1558,11 +1559,11 @@ function ModalPermissoes({
 
                     {/* Linha 2 — código + botões de override */}
                     <div className="flex items-center justify-between gap-3">
-                      <span className="text-[11px] text-slate-400 font-mono">{perm}</span>
+                      <span className="text-xs text-slate-400 font-mono">{perm}</span>
 
                       {/* Segmented control */}
                       <div className="inline-flex rounded-lg border border-slate-200 overflow-hidden shrink-0">
-                        <button
+                        <button type="button"
                           onClick={() => setOverride(perm, null)}
                           className={`px-3 py-1.5 text-xs font-medium transition border-r border-slate-200 ${
                             !hasOverride
@@ -1572,7 +1573,7 @@ function ModalPermissoes({
                         >
                           Padrão
                         </button>
-                        <button
+                        <button type="button"
                           onClick={() => setOverride(perm, override === 'GRANT' ? null : 'GRANT')}
                           className={`px-3 py-1.5 text-xs font-medium transition flex items-center gap-1 border-r border-slate-200 ${
                             override === 'GRANT'
@@ -1583,7 +1584,7 @@ function ModalPermissoes({
                           <ShieldCheck className="h-3 w-3" />
                           Liberar
                         </button>
-                        <button
+                        <button type="button"
                           onClick={() => setOverride(perm, override === 'DENY' ? null : 'DENY')}
                           className={`px-3 py-1.5 text-xs font-medium transition flex items-center gap-1 ${
                             override === 'DENY'
@@ -1605,13 +1606,13 @@ function ModalPermissoes({
 
         {/* Footer */}
         <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-slate-200 shrink-0">
-          <button
+          <button type="button"
             onClick={onClose}
             className="px-4 py-2 text-sm text-slate-700 hover:bg-slate-100 rounded-lg transition"
           >
             Cancelar
           </button>
-          <button
+          <button type="button"
             onClick={handleSave}
             disabled={saving || loading}
             className="px-4 py-2 text-sm bg-primary text-white rounded-lg hover:bg-primary/90 transition disabled:opacity-50 flex items-center gap-2"
@@ -1628,7 +1629,7 @@ function ModalPermissoes({
           </button>
         </div>
       </div>
-    </div>
+    </ModalOverlay>
   );
 }
 
@@ -1881,7 +1882,7 @@ function ModalPerfis({ onClose }: { onClose: () => void }) {
   const hasDirty = perfis.some((p) => p.dirty);
 
   return (
-    <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+    <ModalOverlay className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl flex flex-col max-h-[90vh]">
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 shrink-0">
@@ -1898,7 +1899,7 @@ function ModalPerfis({ onClose }: { onClose: () => void }) {
           </div>
           <div className="flex items-center gap-2">
             {!editing && (
-              <button
+              <button type="button"
                 onClick={() => setEditing(true)}
                 className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-slate-700 border border-slate-300 rounded-lg hover:bg-slate-50 transition"
               >
@@ -1906,7 +1907,7 @@ function ModalPerfis({ onClose }: { onClose: () => void }) {
                 Editar
               </button>
             )}
-            <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-slate-100 transition">
+            <button aria-label="Fechar" type="button" onClick={onClose} className="p-1.5 rounded-lg hover:bg-slate-100 transition">
               <X className="h-5 w-5 text-slate-500" />
             </button>
           </div>
@@ -1922,7 +1923,7 @@ function ModalPerfis({ onClose }: { onClose: () => void }) {
             <div className="w-44 shrink-0 border-r border-slate-200 bg-slate-50 flex flex-col">
               <div className="flex-1 overflow-y-auto py-2">
                 {perfis.map((p, idx) => (
-                  <button
+                  <button type="button"
                     key={p.value + idx}
                     onClick={() => setActivePerfilIdx(idx)}
                     className={`w-full flex items-center justify-between px-3 py-2.5 text-sm transition ${
@@ -1945,7 +1946,7 @@ function ModalPerfis({ onClose }: { onClose: () => void }) {
                 <div className="border-t border-slate-200 p-2">
                   {showNovo ? (
                     <div className="space-y-1.5">
-                      <input
+                      <input aria-label="Nome do perfil"
                         type="text"
                         value={novoLabel}
                         onChange={(e) => setNovoLabel(e.target.value)}
@@ -1955,13 +1956,13 @@ function ModalPerfis({ onClose }: { onClose: () => void }) {
                         autoFocus
                       />
                       <div className="flex gap-1">
-                        <button
+                        <button type="button"
                           onClick={handleAddPerfil}
                           className="flex-1 text-xs bg-primary text-white rounded px-2 py-1 hover:bg-primary/90 transition"
                         >
                           Criar
                         </button>
-                        <button
+                        <button type="button"
                           onClick={() => {
                             setShowNovo(false);
                             setNovoLabel('');
@@ -1973,7 +1974,7 @@ function ModalPerfis({ onClose }: { onClose: () => void }) {
                       </div>
                     </div>
                   ) : (
-                    <button
+                    <button type="button"
                       onClick={() => setShowNovo(true)}
                       className="w-full flex items-center gap-1.5 px-2 py-1.5 text-xs text-primary font-medium hover:bg-primary/5 rounded transition"
                     >
@@ -2016,7 +2017,7 @@ function ModalPerfis({ onClose }: { onClose: () => void }) {
                       </label>
                     )}
                     {editing && !activePerfil.is_builtin && (
-                      <button
+                      <button type="button"
                         onClick={() => handleDeletePerfil(activePerfilIdx)}
                         className="p-1 rounded text-red-500 hover:bg-red-50 hover:text-red-600 transition"
                         title="Excluir perfil"
@@ -2063,7 +2064,7 @@ function ModalPerfis({ onClose }: { onClose: () => void }) {
                                 <p className="text-xs text-slate-400 font-mono">{perm}</p>
                               </div>
                               {editing ? (
-                                <button
+                                <button type="button"
                                   onClick={() => togglePerm(activePerfilIdx, perm)}
                                   role="switch"
                                   aria-checked={granted}
@@ -2123,7 +2124,7 @@ function ModalPerfis({ onClose }: { onClose: () => void }) {
           <div className="flex items-center gap-2">
             {editing ? (
               <>
-                <button
+                <button type="button"
                   onClick={() => {
                     // Restore last saved state (localStorage or defaults)
                     const stored = loadPerfisScoped(empresaAtualId, user?.id);
@@ -2150,7 +2151,7 @@ function ModalPerfis({ onClose }: { onClose: () => void }) {
                 >
                   Cancelar
                 </button>
-                <button
+                <button type="button"
                   onClick={handleSave}
                   disabled={saving || !hasDirty}
                   className="px-4 py-2 text-sm bg-primary text-white rounded-lg hover:bg-primary/90 transition disabled:opacity-50 flex items-center gap-2"
@@ -2167,7 +2168,7 @@ function ModalPerfis({ onClose }: { onClose: () => void }) {
                 </button>
               </>
             ) : (
-              <button
+              <button type="button"
                 onClick={onClose}
                 className="px-4 py-2 text-sm bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200 transition font-medium"
               >
@@ -2177,7 +2178,7 @@ function ModalPerfis({ onClose }: { onClose: () => void }) {
           </div>
         </div>
       </div>
-    </div>
+    </ModalOverlay>
   );
 }
 
@@ -2199,7 +2200,7 @@ function ModalLinkConvite({
   };
 
   return (
-    <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+    <ModalOverlay className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6">
         <div className="flex items-center gap-3 mb-4">
           <div className="w-10 h-10 rounded-full bg-emerald-100 flex items-center justify-center">
@@ -2223,7 +2224,7 @@ function ModalLinkConvite({
             readOnly
             className="flex-1 border border-slate-300 rounded-lg px-3 py-2 text-sm text-slate-700 bg-slate-50 focus:outline-none"
           />
-          <button
+          <button type="button"
             onClick={handleCopy}
             className="flex items-center gap-2 px-3 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 transition text-sm"
           >
@@ -2233,7 +2234,7 @@ function ModalLinkConvite({
         </div>
 
         <div className="flex justify-end mt-5">
-          <button
+          <button type="button"
             onClick={onClose}
             className="px-4 py-2 text-sm bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200 transition"
           >
@@ -2241,7 +2242,7 @@ function ModalLinkConvite({
           </button>
         </div>
       </div>
-    </div>
+    </ModalOverlay>
   );
 }
 
@@ -2293,7 +2294,7 @@ function ModalResetSenha({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+    <ModalOverlay className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md">
         <div className="flex items-center justify-between border-b border-slate-100 px-6 py-4">
           <div>
@@ -2305,14 +2306,14 @@ function ModalResetSenha({
               {usuario.nome} · {usuario.email}
             </p>
           </div>
-          <button onClick={onClose} className="text-slate-400 hover:text-slate-600 transition">
+          <button aria-label="Fechar" type="button" onClick={onClose} className="text-slate-400 hover:text-slate-600 transition">
             <X className="h-5 w-5" />
           </button>
         </div>
         <form onSubmit={handleSubmit} className="p-6 space-y-4">
           <div>
-            <label className="block text-xs font-medium text-slate-700 mb-1">Nova Senha *</label>
-            <input
+            <label htmlFor="usuariospage-nova-senha" className="block text-xs font-medium text-slate-700 mb-1">Nova Senha *</label>
+            <input id="usuariospage-nova-senha" aria-label="Nova Senha"
               type="password"
               value={novaSenha}
               onChange={(e) => setNovaSenha(e.target.value)}
@@ -2324,10 +2325,10 @@ function ModalResetSenha({
             />
           </div>
           <div>
-            <label className="block text-xs font-medium text-slate-700 mb-1">
+            <label htmlFor="usuariospage-confirmar-nova-senha" className="block text-xs font-medium text-slate-700 mb-1">
               Confirmar Nova Senha *
             </label>
-            <input
+            <input id="usuariospage-confirmar-nova-senha" aria-label="Confirmar Nova Senha"
               type="password"
               value={confirmarSenha}
               onChange={(e) => setConfirmarSenha(e.target.value)}
@@ -2338,7 +2339,7 @@ function ModalResetSenha({
             {erroConfirmacao && <p className="text-xs text-red-500 mt-1">{erroConfirmacao}</p>}
           </div>
           <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg p-3">
-            ⚠️ O usuário precisará usar a nova senha no próximo acesso. Esta ação é registrada em
+            <span aria-hidden="true">⚠️</span> O usuário precisará usar a nova senha no próximo acesso. Esta ação é registrada em
             auditoria.
           </p>
           <div className="flex justify-end gap-2 pt-2">
@@ -2360,6 +2361,6 @@ function ModalResetSenha({
           </div>
         </form>
       </div>
-    </div>
+    </ModalOverlay>
   );
 }

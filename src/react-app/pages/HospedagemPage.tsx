@@ -22,6 +22,7 @@ import { format, parseISO } from 'date-fns';
 import { confirmDialog } from '../utils/confirmDialog';
 import FuncionarioLink from '../components/funcionarios/FuncionarioLink';
 import RowActionsMenu from '../components/UI/RowActionsMenu';
+import { ModalOverlay } from '@/react-app/components/modals/ModalOverlay';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -173,13 +174,13 @@ function ModalHospedagem({ hospedagem, funcionarios, onClose, onSaved }: ModalPr
   };
 
   return (
-    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+    <ModalOverlay className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[calc(100dvh-2rem)] overflow-y-auto">
         <div className="px-6 py-4 border-b flex items-center justify-between">
           <h2 className="text-lg font-semibold text-gray-900">
             {isEdit ? 'Editar Hospedagem' : 'Nova Hospedagem'}
           </h2>
-          <button
+          <button type="button"
             onClick={onClose}
             className="text-gray-400 hover:text-gray-600 text-2xl leading-none"
           >
@@ -190,8 +191,8 @@ function ModalHospedagem({ hospedagem, funcionarios, onClose, onSaved }: ModalPr
         <form onSubmit={handleSubmit} className="p-6 space-y-4">
           {/* Tripulante */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Tripulante *</label>
-            <select
+            <label htmlFor="hospedagempage-tripulante" className="block text-sm font-medium text-gray-700 mb-1">Tripulante *</label>
+            <select id="hospedagempage-tripulante" aria-label="Tripulante"
               value={form.funcionario_id}
               onChange={(e) => set('funcionario_id', parseInt(e.target.value))}
               className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
@@ -209,8 +210,8 @@ function ModalHospedagem({ hospedagem, funcionarios, onClose, onSaved }: ModalPr
           {/* Tipo + Local */}
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Tipo *</label>
-              <select
+              <label htmlFor="hospedagempage-tipo" className="block text-sm font-medium text-gray-700 mb-1">Tipo *</label>
+              <select id="hospedagempage-tipo" aria-label="Tipo"
                 value={form.tipo}
                 onChange={(e) => set('tipo', e.target.value)}
                 className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
@@ -223,8 +224,8 @@ function ModalHospedagem({ hospedagem, funcionarios, onClose, onSaved }: ModalPr
               </select>
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Local *</label>
-              <input
+              <label htmlFor="hospedagempage-local" className="block text-sm font-medium text-gray-700 mb-1">Local *</label>
+              <input id="hospedagempage-local" aria-label="Local"
                 type="text"
                 value={form.local}
                 onChange={(e) => set('local', e.target.value)}
@@ -237,8 +238,8 @@ function ModalHospedagem({ hospedagem, funcionarios, onClose, onSaved }: ModalPr
           {/* Cidade + Estado */}
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Cidade</label>
-              <input
+              <label htmlFor="hospedagempage-cidade" className="block text-sm font-medium text-gray-700 mb-1">Cidade</label>
+              <input id="hospedagempage-cidade" aria-label="Cidade"
                 type="text"
                 value={form.cidade}
                 onChange={(e) => set('cidade', e.target.value)}
@@ -246,8 +247,8 @@ function ModalHospedagem({ hospedagem, funcionarios, onClose, onSaved }: ModalPr
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Estado</label>
-              <input
+              <label htmlFor="hospedagempage-estado" className="block text-sm font-medium text-gray-700 mb-1">Estado</label>
+              <input id="hospedagempage-estado" aria-label="Estado"
                 type="text"
                 value={form.estado}
                 onChange={(e) => set('estado', e.target.value)}
@@ -260,8 +261,8 @@ function ModalHospedagem({ hospedagem, funcionarios, onClose, onSaved }: ModalPr
           {/* Datas */}
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Check-in *</label>
-              <input
+              <label htmlFor="hospedagempage-check-in" className="block text-sm font-medium text-gray-700 mb-1">Check-in *</label>
+              <input id="hospedagempage-check-in" aria-label="Check-in"
                 type="date"
                 value={form.data_checkin}
                 onChange={(e) => set('data_checkin', e.target.value)}
@@ -269,8 +270,8 @@ function ModalHospedagem({ hospedagem, funcionarios, onClose, onSaved }: ModalPr
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Check-out</label>
-              <input
+              <label htmlFor="hospedagempage-check-out" className="block text-sm font-medium text-gray-700 mb-1">Check-out</label>
+              <input id="hospedagempage-check-out" aria-label="Check-out"
                 type="date"
                 value={form.data_checkout ?? ''}
                 onChange={(e) => set('data_checkout', e.target.value)}
@@ -282,8 +283,8 @@ function ModalHospedagem({ hospedagem, funcionarios, onClose, onSaved }: ModalPr
           {/* Quarto + Custo */}
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Nº Quarto</label>
-              <input
+              <label htmlFor="hospedagempage-no-quarto" className="block text-sm font-medium text-gray-700 mb-1">Nº Quarto</label>
+              <input id="hospedagempage-no-quarto" aria-label="Nº Quarto"
                 type="text"
                 value={form.numero_quarto}
                 onChange={(e) => set('numero_quarto', e.target.value)}
@@ -292,8 +293,8 @@ function ModalHospedagem({ hospedagem, funcionarios, onClose, onSaved }: ModalPr
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Custo/diária</label>
-              <input
+              <label htmlFor="hospedagempage-custo-diaria" className="block text-sm font-medium text-gray-700 mb-1">Custo/diária</label>
+              <input id="hospedagempage-custo-diaria" aria-label="Custo/diária"
                 type="number"
                 min={0}
                 step={0.01}
@@ -307,8 +308,8 @@ function ModalHospedagem({ hospedagem, funcionarios, onClose, onSaved }: ModalPr
 
           {/* Observações */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Observações</label>
-            <textarea
+            <label htmlFor="hospedagempage-observacoes" className="block text-sm font-medium text-gray-700 mb-1">Observações</label>
+            <textarea id="hospedagempage-observacoes" aria-label="Observações"
               value={form.observacoes}
               onChange={(e) => set('observacoes', e.target.value)}
               rows={2}
@@ -334,7 +335,7 @@ function ModalHospedagem({ hospedagem, funcionarios, onClose, onSaved }: ModalPr
           </div>
         </form>
       </div>
-    </div>
+    </ModalOverlay>
   );
 }
 
@@ -438,7 +439,7 @@ export default function HospedagemPage() {
             <h1 className="text-2xl font-bold text-gray-900">Hospedagem</h1>
             <p className="text-sm text-gray-500 mt-0.5">Acomodações de tripulantes em missão</p>
           </div>
-          <button
+          <button type="button"
             onClick={() => setModal({ open: true, data: {} })}
             className="flex items-center gap-2 bg-primary hover:bg-primary/90 text-white px-4 py-2 rounded-xl text-sm font-medium transition-colors"
           >
@@ -493,7 +494,7 @@ export default function HospedagemPage() {
               </option>
             ))}
           </select>
-          <button
+          <button type="button"
             onClick={carregar}
             disabled={loading}
             title="Atualizar"
@@ -511,7 +512,7 @@ export default function HospedagemPage() {
             <div className="p-12 text-center">
               <Building2 className="w-10 h-10 text-gray-300 mx-auto mb-3" />
               <p className="text-gray-500 text-sm">Nenhuma hospedagem encontrada</p>
-              <button
+              <button type="button"
                 onClick={() => setModal({ open: true, data: {} })}
                 className="mt-3 text-blue-600 hover:underline text-sm"
               >
@@ -523,13 +524,13 @@ export default function HospedagemPage() {
               <table className="w-full text-sm">
                 <thead>
                   <tr className="bg-gray-50 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">
-                    <th className="px-4 py-3">Tripulante</th>
-                    <th className="px-4 py-3">Tipo</th>
-                    <th className="px-4 py-3">Local</th>
-                    <th className="px-4 py-3">Check-in</th>
-                    <th className="px-4 py-3">Check-out</th>
-                    <th className="px-4 py-3">Custo/dia</th>
-                    <th className="px-4 py-3 text-right">Ações</th>
+                    <th scope="col" className="px-4 py-3">Tripulante</th>
+                    <th scope="col" className="px-4 py-3">Tipo</th>
+                    <th scope="col" className="px-4 py-3">Local</th>
+                    <th scope="col" className="px-4 py-3">Check-in</th>
+                    <th scope="col" className="px-4 py-3">Check-out</th>
+                    <th scope="col" className="px-4 py-3">Custo/dia</th>
+                    <th scope="col" className="px-4 py-3 text-right">Ações</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
@@ -584,7 +585,7 @@ export default function HospedagemPage() {
                         <td className="px-4 py-3">
                           <div className="flex items-center justify-end gap-1">
                             {ativo && (
-                              <button
+                              <button type="button"
                                 onClick={() => handleCheckout(h)}
                                 title="Registrar checkout"
                                 className="p-1.5 text-gray-400 hover:text-orange-600 hover:bg-orange-50 rounded-lg transition-colors"
@@ -592,7 +593,7 @@ export default function HospedagemPage() {
                                 <LogOut className="w-4 h-4" />
                               </button>
                             )}
-                            <button
+                            <button type="button"
                               onClick={() => setModal({ open: true, data: h })}
                               title="Editar"
                               className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"

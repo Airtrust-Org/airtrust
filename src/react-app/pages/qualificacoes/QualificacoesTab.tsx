@@ -105,10 +105,10 @@ export const QualificacoesTab: React.FC<QualificacoesTabProps> = ({
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {/* Filtro: Nome */}
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-2">Nome</label>
+            <label htmlFor="qualificacoestab-nome" className="block text-sm font-medium text-slate-700 mb-2">Nome</label>
             <div className="relative">
               <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
-              <input
+              <input id="qualificacoestab-nome" aria-label="Nome"
                 type="text"
                 placeholder="Buscar qualificação..."
                 value={filtroNome}
@@ -120,8 +120,8 @@ export const QualificacoesTab: React.FC<QualificacoesTabProps> = ({
 
           {/* Filtro: Categoria */}
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-2">Categoria</label>
-            <select
+            <label htmlFor="qualificacoestab-categoria" className="block text-sm font-medium text-slate-700 mb-2">Categoria</label>
+            <select id="qualificacoestab-categoria" aria-label="Categoria"
               value={filtroCategoria}
               onChange={(e) => setFiltroCategoria(e.target.value)}
               className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/50 bg-white"
@@ -150,22 +150,22 @@ export const QualificacoesTab: React.FC<QualificacoesTabProps> = ({
         <table className="w-full">
           <thead>
             <tr className="border-b border-slate-200 bg-slate-50">
-              <th className="px-6 py-3 text-left text-xs font-semibold text-slate-700 uppercase tracking-wider w-12">
+              <th scope="col" className="px-6 py-3 text-left text-xs font-semibold text-slate-700 uppercase tracking-wider w-12">
                 Ações
               </th>
-              <th className="px-6 py-3 text-left text-xs font-semibold text-slate-700 uppercase tracking-wider">
+              <th scope="col" className="px-6 py-3 text-left text-xs font-semibold text-slate-700 uppercase tracking-wider">
                 Nome
               </th>
-              <th className="px-6 py-3 text-left text-xs font-semibold text-slate-700 uppercase tracking-wider">
+              <th scope="col" className="px-6 py-3 text-left text-xs font-semibold text-slate-700 uppercase tracking-wider">
                 Código
               </th>
-              <th className="px-6 py-3 text-left text-xs font-semibold text-slate-700 uppercase tracking-wider">
+              <th scope="col" className="px-6 py-3 text-left text-xs font-semibold text-slate-700 uppercase tracking-wider">
                 Categoria
               </th>
-              <th className="px-6 py-3 text-left text-xs font-semibold text-slate-700 uppercase tracking-wider">
+              <th scope="col" className="px-6 py-3 text-left text-xs font-semibold text-slate-700 uppercase tracking-wider">
                 Validade
               </th>
-              <th className="px-6 py-3 text-left text-xs font-semibold text-slate-700 uppercase tracking-wider">
+              <th scope="col" className="px-6 py-3 text-left text-xs font-semibold text-slate-700 uppercase tracking-wider">
                 Descrição
               </th>
             </tr>

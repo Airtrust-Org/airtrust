@@ -18,6 +18,7 @@ import FrontendUpdateNotice from '@/react-app/components/FrontendUpdateNotice';
 import { installChunkErrorListeners, lazyWithRetry } from '@/react-app/utils/lazyWithRetry';
 import GlobalConfirmDialogHost from '@/react-app/components/modals/GlobalConfirmDialogHost';
 import GlobalAlertDialogHost from '@/react-app/components/modals/GlobalAlertDialogHost';
+import GlobalPromptDialogHost from '@/react-app/components/modals/GlobalPromptDialogHost';
 import { initializeThemePreference } from '@/react-app/theme/theme';
 const InstallAppPage = lazyWithRetry(
   () => import('@/react-app/pages/InstallAppPage'),
@@ -166,6 +167,7 @@ createRoot(document.getElementById('root')!).render(
         <App />
         <GlobalConfirmDialogHost />
         <GlobalAlertDialogHost />
+        <GlobalPromptDialogHost />
         <FrontendUpdateNotice />
       </>
     )}

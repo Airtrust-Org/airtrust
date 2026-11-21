@@ -299,10 +299,10 @@ Emergência Completa,4,AVANCADO,Treinamento situações de emergência,MAN-005|M
 
       {/* Textarea */}
       <div className="mb-4">
-        <label className="block text-sm font-medium text-gray-700 mb-2">
+        <label htmlFor="importarsimuladorescsv-conteudo-csv" className="block text-sm font-medium text-gray-700 mb-2">
           Conteúdo CSV
         </label>
-        <textarea
+        <textarea id="importarsimuladorescsv-conteudo-csv" aria-label="Conteúdo CSV"
           value={csvContent}
           onChange={(e) => {
             setCsvContent(e.target.value);
@@ -341,7 +341,7 @@ Emergência Completa,4,AVANCADO,Treinamento situações de emergência,MAN-005|M
               <thead className="bg-gray-50">
                 <tr>
                   {Object.keys(previewDados[0]).map(header => (
-                    <th key={header} className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">
+                    <th scope="col" key={header} className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">
                       {header}
                     </th>
                   ))}

@@ -61,20 +61,20 @@ function normalizeResultado(raw: unknown): NotaValor {
 function TripulanteBadge({ tripulante }: { tripulante?: Tripulante }) {
   if (!tripulante || tripulante === 'AB') {
     return (
-      <span className="inline-flex items-center justify-center bg-violet-50 text-violet-600 border border-violet-200 rounded-md px-1.5 py-0.5 text-[10px] font-semibold shrink-0">
+      <span className="inline-flex items-center justify-center bg-violet-50 text-violet-600 border border-violet-200 rounded-md px-1.5 py-0.5 text-xs font-semibold shrink-0">
         AB
       </span>
     );
   }
   if (tripulante === 'A') {
     return (
-      <span className="inline-flex items-center justify-center bg-blue-50 text-blue-600 border border-blue-200 rounded-md px-1.5 py-0.5 text-[10px] font-semibold shrink-0">
+      <span className="inline-flex items-center justify-center bg-blue-50 text-blue-600 border border-blue-200 rounded-md px-1.5 py-0.5 text-xs font-semibold shrink-0">
         A
       </span>
     );
   }
   return (
-    <span className="inline-flex items-center justify-center bg-orange-50 text-orange-600 border border-orange-200 rounded-md px-1.5 py-0.5 text-[10px] font-semibold shrink-0">
+    <span className="inline-flex items-center justify-center bg-orange-50 text-orange-600 border border-orange-200 rounded-md px-1.5 py-0.5 text-xs font-semibold shrink-0">
       B
     </span>
   );
@@ -361,7 +361,7 @@ export default function ModalAvaliarFicha({
                     {man.descricao}
                   </p>
                 )}
-                <p className="text-[10px] font-mono text-gray-400 mt-1 uppercase tracking-wide">
+                <p className="text-xs font-mono text-gray-400 mt-1 uppercase tracking-wide">
                   {man.codigo}
                 </p>
               </div>
@@ -408,7 +408,7 @@ export default function ModalAvaliarFicha({
         </div>
 
         {/* Observações */}
-        <textarea
+        <textarea aria-label="Observações desta manobra (opcional)"
           value={man.observacoes}
           onChange={(e) => handleObservacaoChange(man.ordem, e.target.value)}
           placeholder="Observações desta manobra (opcional)"
@@ -468,7 +468,7 @@ export default function ModalAvaliarFicha({
               ) : null}
               Finalizar
             </button>
-            <button
+            <button aria-label="Fechar"
               onClick={onClose}
               disabled={salvando}
               className="p-1.5 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition"
@@ -511,7 +511,7 @@ export default function ModalAvaliarFicha({
           <div className="grid grid-cols-2 gap-px bg-gray-100">
             {/* Avaliador */}
             <div className="bg-white px-5 py-3">
-              <p className="text-[10px] font-medium text-gray-400 uppercase tracking-wider">
+              <p className="text-xs font-medium text-gray-400 uppercase tracking-wider">
                 Avaliador
               </p>
               <p className="text-sm font-medium text-gray-900 mt-0.5 truncate">
@@ -520,7 +520,7 @@ export default function ModalAvaliarFicha({
             </div>
             {/* Avaliado */}
             <div className="bg-white px-5 py-3">
-              <p className="text-[10px] font-medium text-gray-400 uppercase tracking-wider">
+              <p className="text-xs font-medium text-gray-400 uppercase tracking-wider">
                 Avaliado{funcaoLabel ? ` · ${funcaoLabel}` : ''}
               </p>
               <div className="flex items-center gap-2 mt-0.5">
@@ -528,12 +528,12 @@ export default function ModalAvaliarFicha({
                   {fichaContexto.participante_nome || '—'}
                 </p>
                 {fichaContexto.participante_funcao === 'PIC' && (
-                  <span className="inline-flex items-center justify-center bg-blue-50 text-blue-600 border border-blue-200 rounded-md px-1.5 py-0.5 text-[10px] font-semibold">
+                  <span className="inline-flex items-center justify-center bg-blue-50 text-blue-600 border border-blue-200 rounded-md px-1.5 py-0.5 text-xs font-semibold">
                     A
                   </span>
                 )}
                 {fichaContexto.participante_funcao === 'SIC' && (
-                  <span className="inline-flex items-center justify-center bg-orange-50 text-orange-600 border border-orange-200 rounded-md px-1.5 py-0.5 text-[10px] font-semibold">
+                  <span className="inline-flex items-center justify-center bg-orange-50 text-orange-600 border border-orange-200 rounded-md px-1.5 py-0.5 text-xs font-semibold">
                     B
                   </span>
                 )}
@@ -547,7 +547,7 @@ export default function ModalAvaliarFicha({
           <div className="flex flex-col sm:flex-row sm:flex-wrap sm:items-center gap-x-6 gap-y-3">
             {/* Notas */}
             <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-xs text-gray-500">
-              <span className="font-medium text-gray-400 uppercase tracking-wider text-[10px] shrink-0">
+              <span className="font-medium text-gray-400 uppercase tracking-wider text-xs shrink-0">
                 Notas
               </span>
               <span className="flex items-center gap-1.5">
@@ -570,23 +570,23 @@ export default function ModalAvaliarFicha({
 
             {/* PF */}
             <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-gray-500">
-              <span className="font-medium text-gray-400 uppercase tracking-wider text-[10px] shrink-0">
+              <span className="font-medium text-gray-400 uppercase tracking-wider text-xs shrink-0">
                 PF
               </span>
               <span className="flex items-center gap-1.5">
-                <span className="inline-flex items-center justify-center bg-blue-50 text-blue-600 border border-blue-200 rounded-md px-1.5 py-0.5 text-[10px] font-semibold">
+                <span className="inline-flex items-center justify-center bg-blue-50 text-blue-600 border border-blue-200 rounded-md px-1.5 py-0.5 text-xs font-semibold">
                   A
                 </span>
                 Tripulante A
               </span>
               <span className="flex items-center gap-1.5">
-                <span className="inline-flex items-center justify-center bg-orange-50 text-orange-600 border border-orange-200 rounded-md px-1.5 py-0.5 text-[10px] font-semibold">
+                <span className="inline-flex items-center justify-center bg-orange-50 text-orange-600 border border-orange-200 rounded-md px-1.5 py-0.5 text-xs font-semibold">
                   B
                 </span>
                 Tripulante B
               </span>
               <span className="flex items-center gap-1.5">
-                <span className="inline-flex items-center justify-center bg-violet-50 text-violet-600 border border-violet-200 rounded-md px-1.5 py-0.5 text-[10px] font-semibold">
+                <span className="inline-flex items-center justify-center bg-violet-50 text-violet-600 border border-violet-200 rounded-md px-1.5 py-0.5 text-xs font-semibold">
                   AB
                 </span>
                 Ambos
@@ -611,10 +611,10 @@ export default function ModalAvaliarFicha({
 
             {/* Observações Gerais */}
             <div className="bg-white rounded-xl border border-gray-100 p-5">
-              <label className="block text-sm font-semibold text-gray-900 mb-3">
+              <label htmlFor="modalavaliarficha-observacoes-gerais-da-sessao" className="block text-sm font-semibold text-gray-900 mb-3">
                 Observações Gerais da Sessão
               </label>
-              <textarea
+              <textarea id="modalavaliarficha-observacoes-gerais-da-sessao" aria-label="Observações Gerais da Sessão"
                 value={observacoesGerais}
                 onChange={(e) => setObservacoesGerais(e.target.value)}
                 placeholder="Adicione observações gerais sobre o desempenho na sessão..."

@@ -11,6 +11,7 @@ import { SimuladoresCard, EmptyState } from '../../components/SimuladoresLayout'
 import { Plus, Users, Trash2 } from 'lucide-react';
 import { RowActionsMenu } from '@/react-app/components/UI/RowActionsMenu';
 import { confirmDialog } from '@/react-app/utils/confirmDialog';
+import { ModalOverlay } from '@/react-app/components/modals/ModalOverlay';
 
 interface Instrutor {
   id: number;
@@ -172,19 +173,19 @@ export default function CrudInstrutores() {
       </div>
       {!carregando && (
         <SimuladoresCard padding="none">
-          <table className="min-w-full divide-y divide-slate-200">
+          <div className="overflow-x-auto"><table className="min-w-full divide-y divide-slate-200">
             <thead className="bg-slate-50">
               <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase">
+                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase">
                   Nome
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase">
+                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase">
                   Habilitações
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase">
+                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase">
                   Observações
                 </th>
-                <th className="px-6 py-3 text-right text-xs font-medium text-slate-500 uppercase">
+                <th scope="col" className="px-6 py-3 text-right text-xs font-medium text-slate-500 uppercase">
                   Ações
                 </th>
               </tr>
@@ -226,7 +227,7 @@ export default function CrudInstrutores() {
                 </tr>
               ))}
             </tbody>
-          </table>
+          </table></div>
 
           {instrutores.length === 0 && (
             <EmptyState
@@ -240,7 +241,7 @@ export default function CrudInstrutores() {
 
       {/* Modal */}
       {modalAberto && (
-        <div className="fixed inset-0 z-modal flex items-center justify-center bg-black/50">
+        <ModalOverlay className="fixed inset-0 z-modal flex items-center justify-center bg-black/50">
           <div className="w-full max-w-md rounded-lg bg-white p-6 shadow-xl">
             <h3 className="text-lg font-bold text-slate-900 mb-4">
               {instrutorEditando ? 'Editar Instrutor' : 'Novo Instrutor'}
@@ -248,10 +249,10 @@ export default function CrudInstrutores() {
 
             <div className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">
+                <label htmlFor="index-funcionario" className="block text-sm font-medium text-slate-700 mb-1">
                   Funcionário <span className="text-red-500">*</span>
                 </label>
-                <select
+                <select id="index-funcionario" aria-label="Funcionário"
                   value={formData.funcionario_id}
                   onChange={(e) => setFormData({ ...formData, funcionario_id: e.target.value })}
                   className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
@@ -266,10 +267,10 @@ export default function CrudInstrutores() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">
+                <label htmlFor="index-habilitacoes" className="block text-sm font-medium text-slate-700 mb-1">
                   Habilitações
                 </label>
-                <input
+                <input id="index-habilitacoes" aria-label="Habilitações"
                   type="text"
                   value={formData.habilitacoes}
                   onChange={(e) => setFormData({ ...formData, habilitacoes: e.target.value })}
@@ -279,8 +280,8 @@ export default function CrudInstrutores() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Observações</label>
-                <textarea
+                <label htmlFor="index-observacoes" className="block text-sm font-medium text-slate-700 mb-1">Observações</label>
+                <textarea id="index-observacoes" aria-label="Observações"
                   value={formData.observacoes}
                   onChange={(e) => setFormData({ ...formData, observacoes: e.target.value })}
                   className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
@@ -306,7 +307,7 @@ export default function CrudInstrutores() {
               </button>
             </div>
           </div>
-        </div>
+        </ModalOverlay>
       )}
     </div>
   );

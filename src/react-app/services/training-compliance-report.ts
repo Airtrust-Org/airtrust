@@ -134,6 +134,7 @@ export async function generateTrainingCompliancePdf(
 ): Promise<{ base64: string; filename: string; blob: Blob }> {
   const { jsPDF } = await import('jspdf');
   const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+  doc.setLanguage?.('pt-BR');
   const generatedAt = context.generatedAt || new Date();
   const width = doc.internal.pageSize.getWidth();
   const height = doc.internal.pageSize.getHeight();

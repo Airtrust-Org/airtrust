@@ -3,6 +3,7 @@ import { BellRing, Mail, MessageSquare, RefreshCw, Send } from 'lucide-react';
 import { Modal } from '@/components/ui/Modal';
 import { showToast } from '@/react-app/utils/toast';
 import { API_BASE_URL, getAccessToken } from '@/react-app/config/api';
+import { confirmDialog } from '@/react-app/utils/confirmDialog';
 
 type AlertaCanal = {
   tipo: 'email' | 'whatsapp';
@@ -155,10 +156,8 @@ Por favor, providencie a renovação quando aplicável.`;
 
       if (res.status === 409 && data?.code === 'ALERTA_ALREADY_SENT_TODAY'
           && data?.reenvio_permitido === true && !reenviarHoje) {
-        const confirmado = window.confirm(
-          'O funcionário já recebeu este alerta hoje pelos canais selecionados. '
-          + 'Deseja enviar novamente? Este reenvio será registrado no histórico.',
-        );
+        const confirmado = (await confirmDialog('O funcionário já recebeu este alerta hoje pelos canais selecionados. '
+          + 'Deseja enviar novamente? Este reenvio será registrado no histórico.'));
         if (confirmado) {
           await handleEnviar(true);
         } else {
@@ -355,10 +354,10 @@ Por favor, providencie a renovação quando aplicável.`;
 
         {/* Mensagem editável */}
         <div>
-          <label className="mb-2 block text-sm font-medium text-slate-700">
+          <label htmlFor="modalalertaead-mensagem-do-alerta" className="mb-2 block text-sm font-medium text-slate-700">
             Mensagem do Alerta
           </label>
-          <textarea
+          <textarea id="modalalertaead-mensagem-do-alerta" aria-label="Mensagem do Alerta"
             value={mensagem}
             onChange={(e) => setMensagem(e.target.value)}
             rows={8}

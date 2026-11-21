@@ -180,7 +180,7 @@ export function FrmsSignalGrid({
             className={`rounded-xl border p-3 ${TONE_CHIP[signal.tone]}`}
             aria-label={ariaLabel(signal)}
           >
-            <div className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wide">
+            <div className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wide">
               <span className={`h-1.5 w-1.5 flex-none rounded-full ${TONE_DOT[signal.tone]}`} aria-hidden="true" />
               {signal.label}
             </div>

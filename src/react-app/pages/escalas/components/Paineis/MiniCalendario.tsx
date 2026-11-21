@@ -70,13 +70,13 @@ export default function MiniCalendario({
     <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-3 w-full max-w-[240px]">
       {/* Header */}
       <div className="flex items-center justify-between mb-2">
-        <button onClick={prevMonth} className="p-1 hover:bg-gray-100 rounded transition-colors">
+        <button aria-label="Mês anterior" onClick={prevMonth} className="p-1 hover:bg-gray-100 rounded transition-colors">
           <ChevronLeft className="w-4 h-4 text-gray-500" />
         </button>
         <span className="text-xs font-semibold text-gray-700">
           {MESES_CURTOS[mes - 1]} {ano}
         </span>
-        <button onClick={nextMonth} className="p-1 hover:bg-gray-100 rounded transition-colors">
+        <button aria-label="Próximo mês" onClick={nextMonth} className="p-1 hover:bg-gray-100 rounded transition-colors">
           <ChevronRight className="w-4 h-4 text-gray-500" />
         </button>
       </div>
@@ -84,7 +84,7 @@ export default function MiniCalendario({
       {/* Days of week */}
       <div className="grid grid-cols-7 gap-0 mb-1">
         {DIAS_SEMANA.map((d, i) => (
-          <div key={i} className="text-center text-[9px] font-medium text-gray-400 py-0.5">
+          <div key={i} className="text-center text-xs font-medium text-gray-400 py-0.5">
             {d}
           </div>
         ))}
@@ -117,7 +117,7 @@ export default function MiniCalendario({
               key={d}
               onClick={() => onSelectDate?.(dateStr)}
               className={[
-                'w-full aspect-square flex items-center justify-center rounded-md text-[10px] font-medium transition-all',
+                'w-full aspect-square flex items-center justify-center rounded-md text-xs font-medium transition-all',
                 isSelected ? 'ring-2 ring-blue-500 bg-blue-100' : '',
                 isToday && !isSelected ? 'ring-1 ring-blue-300' : '',
                 density,

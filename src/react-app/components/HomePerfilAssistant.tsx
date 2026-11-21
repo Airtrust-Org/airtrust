@@ -161,7 +161,7 @@ function StatCard({
 
   return (
     <div className={`rounded-2xl border px-4 py-3 ${tones[tone]}`}>
-      <p className="text-[11px] font-semibold uppercase tracking-[0.18em] opacity-70">{label}</p>
+      <p className="text-xs font-semibold uppercase tracking-[0.18em] opacity-70">{label}</p>
       <p className="mt-2 text-2xl font-semibold leading-none">{value}</p>
     </div>
   );
@@ -382,7 +382,7 @@ export default function HomePerfilAssistant() {
         <div className="rounded-[28px] border border-slate-200 bg-white/90 p-4 shadow-sm sm:p-5">
           <div className="flex flex-wrap gap-2">
             {(meta?.suggestions || QUICK_PROMPTS).slice(0, 3).map((prompt) => (
-              <button
+              <button type="button"
                 key={prompt}
                 onClick={() => void enviarMensagem(prompt)}
                 disabled={loading}
@@ -463,7 +463,7 @@ export default function HomePerfilAssistant() {
             }}
             className="mt-4 flex flex-col gap-3 sm:flex-row"
           >
-            <input
+            <input aria-label="Pergunte sobre operação, compliance, alertas, treinamento ou fichas"
               value={input}
               onChange={(event) => setInput(event.target.value)}
               placeholder="Pergunte sobre operação, compliance, alertas, treinamento ou fichas"
@@ -506,7 +506,7 @@ export default function HomePerfilAssistant() {
                       </p>
                     </div>
                     {item.status ? (
-                      <span className="rounded-full bg-white px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
+                      <span className="rounded-full bg-white px-2.5 py-1 text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
                         {item.status}
                       </span>
                     ) : null}
@@ -557,7 +557,7 @@ export default function HomePerfilAssistant() {
                           {alerta.tripulanteNome || 'Tripulante não identificado'}
                         </p>
                         <span
-                          className={`rounded-full border px-2 py-0.5 text-[11px] font-semibold uppercase tracking-[0.14em] ${getCriticidadeClasses(alerta.criticidade)}`}
+                          className={`rounded-full border px-2 py-0.5 text-xs font-semibold uppercase tracking-[0.14em] ${getCriticidadeClasses(alerta.criticidade)}`}
                         >
                           {alerta.criticidade}
                         </span>
@@ -612,7 +612,7 @@ export default function HomePerfilAssistant() {
                         <p className="text-sm font-semibold text-slate-900">
                           {ficha.participante_nome}
                         </p>
-                        <span className="rounded-full bg-white px-2 py-0.5 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
+                        <span className="rounded-full bg-white px-2 py-0.5 text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
                           {ficha.papel}
                         </span>
                       </div>

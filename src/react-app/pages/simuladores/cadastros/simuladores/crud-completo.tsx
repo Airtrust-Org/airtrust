@@ -10,6 +10,7 @@ import { Input } from '@/react-app/components/UI/Input';
 import { Plus, Trash2, Inbox, ArrowLeft } from 'lucide-react';
 import { RowActionsMenu } from '@/react-app/components/UI/RowActionsMenu';
 import { confirmDialog } from '@/react-app/utils/confirmDialog';
+import { ModalOverlay } from '@/react-app/components/modals/ModalOverlay';
 
 interface Simulador {
   id: number;
@@ -242,22 +243,22 @@ export default function CrudSimuladores({ embedded = false, onBack }: Props = {}
         <table className="w-full">
           <thead className="bg-gray-50 dark:bg-slate-800 border-b border-gray-200 dark:border-slate-700">
             <tr>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-slate-400 uppercase">
+              <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-slate-400 uppercase">
                 Nome
               </th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-slate-400 uppercase">
+              <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-slate-400 uppercase">
                 Equipamento
               </th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-slate-400 uppercase">
+              <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-slate-400 uppercase">
                 Localização
               </th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-slate-400 uppercase">
+              <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-slate-400 uppercase">
                 Empresa
               </th>
-              <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 dark:text-slate-400 uppercase">
+              <th scope="col" className="px-4 py-3 text-center text-xs font-medium text-gray-500 dark:text-slate-400 uppercase">
                 Status
               </th>
-              <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 dark:text-slate-400 uppercase">
+              <th scope="col" className="px-4 py-3 text-center text-xs font-medium text-gray-500 dark:text-slate-400 uppercase">
                 Ações
               </th>
             </tr>
@@ -322,22 +323,22 @@ export default function CrudSimuladores({ embedded = false, onBack }: Props = {}
 
       {/* Modal */}
       {showModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 animate-fade-in" onClick={fecharModal}>
+        <ModalOverlay className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 animate-fade-in" onClick={fecharModal}>
           <div className="bg-white dark:bg-slate-900 rounded-lg max-w-lg w-full animate-scale-in max-h-[calc(100dvh-2rem)] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
             <div className="p-6 border-b border-gray-200 dark:border-slate-700">
               <h3 className="text-lg font-semibold text-gray-900 dark:text-slate-100">{editando ? 'Editar' : 'Novo'} Simulador</h3>
             </div>
             <div className="p-6 space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">Nome <span className="text-red-500">*</span></label>
-                <Input
+                <label htmlFor="crud-completo-nome" className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">Nome <span className="text-red-500">*</span></label>
+                <Input id="crud-completo-nome" aria-label="Nome"
                   value={formData.nome || ''}
                   onChange={(e) => setFormData({ ...formData, nome: e.target.value })}
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">Equipamento <span className="text-red-500">*</span></label>
-                <select
+                <label htmlFor="crud-completo-equipamento" className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">Equipamento <span className="text-red-500">*</span></label>
+                <select id="crud-completo-equipamento" aria-label="Equipamento"
                   className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md bg-white dark:bg-slate-800 text-gray-900 dark:text-slate-100"
                   value={formData.tipo || ''}
                   onChange={(e) =>
@@ -354,25 +355,25 @@ export default function CrudSimuladores({ embedded = false, onBack }: Props = {}
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">
+                  <label htmlFor="crud-completo-localizacao" className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">
                     Localização
                   </label>
-                  <Input
+                  <Input id="crud-completo-localizacao" aria-label="Localização"
                     value={formData.localizacao || ''}
                     onChange={(e) => setFormData({ ...formData, localizacao: e.target.value })}
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">Empresa</label>
-                  <Input
+                  <label htmlFor="crud-completo-empresa" className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">Empresa</label>
+                  <Input id="crud-completo-empresa" aria-label="Empresa"
                     value={formData.fabricante || ''}
                     onChange={(e) => setFormData({ ...formData, fabricante: e.target.value })}
                   />
                 </div>
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">Status</label>
-                <select
+                <label htmlFor="crud-completo-status" className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">Status</label>
+                <select id="crud-completo-status" aria-label="Status"
                   className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md bg-white dark:bg-slate-800 text-gray-900 dark:text-slate-100"
                   value={formData.status || 'ATIVO'}
                   onChange={(e) =>
@@ -385,8 +386,8 @@ export default function CrudSimuladores({ embedded = false, onBack }: Props = {}
                 </select>
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">Observações</label>
-                <textarea
+                <label htmlFor="crud-completo-observacoes" className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">Observações</label>
+                <textarea id="crud-completo-observacoes" aria-label="Observações"
                   className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md bg-white dark:bg-slate-800 text-gray-900 dark:text-slate-100"
                   value={formData.observacoes || ''}
                   onChange={(e) => setFormData({ ...formData, observacoes: e.target.value })}
@@ -403,7 +404,7 @@ export default function CrudSimuladores({ embedded = false, onBack }: Props = {}
               </Button>
             </div>
           </div>
-        </div>
+        </ModalOverlay>
       )}
     </div>
   );

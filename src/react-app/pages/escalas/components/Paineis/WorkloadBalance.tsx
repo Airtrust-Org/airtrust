@@ -123,18 +123,18 @@ export default function WorkloadBalance({ tripulacoes, eventos, diasNoMes }: Wor
           </span>
           <div>
             <h3 className="text-sm font-semibold text-slate-800">Equilíbrio de Carga</h3>
-            <p className="text-[11px] text-slate-500">Distribuição mensal por tipo de atribuição</p>
+            <p className="text-xs text-slate-500">Distribuição mensal por tipo de atribuição</p>
           </div>
         </div>
-        <div className="text-right text-[11px] text-slate-500">
+        <div className="text-right text-xs text-slate-500">
           <p>Média: {avgVoo}d</p>
           <p>σ: {workloadStats.stdDev}</p>
         </div>
       </div>
 
       <div className="border-b border-slate-200 bg-slate-50/80 px-4 py-3">
-        <p className="text-[11px] font-medium text-slate-700">{workloadStats.recomendacao}</p>
-        <p className="mt-1 text-[11px] text-slate-500">
+        <p className="text-xs font-medium text-slate-700">{workloadStats.recomendacao}</p>
+        <p className="mt-1 text-xs text-slate-500">
           Faixa atual: {workloadStats.minVoo}d a {workloadStats.maxVoo}d de voo por tripulante.
         </p>
       </div>
@@ -159,14 +159,14 @@ export default function WorkloadBalance({ tripulacoes, eventos, diasNoMes }: Wor
                     <span className="max-w-[140px] truncate text-xs font-medium text-slate-800">
                       {w.nome}
                     </span>
-                    <span className="rounded-full border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-[9px] text-slate-500">
+                    <span className="rounded-full border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-xs text-slate-500">
                       {w.papel}
                     </span>
                   </div>
                   <div className="flex items-center gap-2">
-                    <span className="text-[10px] text-slate-500">{w.percentual}%</span>
+                    <span className="text-xs text-slate-500">{w.percentual}%</span>
                     {deviation !== 0 && (
-                      <span className={`text-[10px] font-medium ${deviationColor}`}>
+                      <span className={`text-xs font-medium ${deviationColor}`}>
                         {deviation > 0 ? '+' : ''}
                         {deviation}d
                       </span>
@@ -234,7 +234,7 @@ export default function WorkloadBalance({ tripulacoes, eventos, diasNoMes }: Wor
             className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1"
           >
             <div className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: l.color }} />
-            <span className="text-[10px] text-slate-500">{l.label}</span>
+            <span className="text-xs text-slate-500">{l.label}</span>
           </div>
         ))}
       </div>

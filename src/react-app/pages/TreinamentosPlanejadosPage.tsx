@@ -67,6 +67,7 @@ import {
 } from '@/react-app/hooks/useTreinamentosPlanejados';
 import { normalizeTimeInput } from '@/react-app/lib/time-input';
 import { getTodayYmdInTz, formatWithSystemTZ } from '@/react-app/utils/timezone';
+import { confirmDialog } from '@/react-app/utils/confirmDialog';
 
 type AbaAtiva = 'calendario' | 'quadro' | 'auditoria';
 
@@ -1461,9 +1462,7 @@ export default function TreinamentosPlanejadosPage({
     treinamento: TreinamentoPlanejado,
     options: { fecharDetalhes?: boolean } = {},
   ) {
-    const ok = window.confirm(
-      `Excluir a turma planejada "${getEventoTitulo(treinamento)}"? Esta ação cancela a turma e remove o planejamento relacionado.`,
-    );
+    const ok = (await confirmDialog(`Excluir a turma planejada "${getEventoTitulo(treinamento)}"? Esta ação cancela a turma e remove o planejamento relacionado.`, { confirmText: 'Excluir' }));
     if (!ok) return;
 
     try {
@@ -1982,7 +1981,7 @@ export default function TreinamentosPlanejadosPage({
               </option>
             ))}
           </select>
-          <input
+          <input aria-label="Buscar..."
             type="search"
             value={busca}
             onChange={(event) => setBusca(event.target.value)}
@@ -2103,7 +2102,7 @@ export default function TreinamentosPlanejadosPage({
                             {cell.date.slice(-2)}
                           </span>
                           {eventos.length > 0 && (
-                            <span className="text-[11px] font-medium text-slate-500">
+                            <span className="text-xs font-medium text-slate-500">
                               {eventos.length} evento(s)
                             </span>
                           )}
@@ -2124,14 +2123,14 @@ export default function TreinamentosPlanejadosPage({
                                 </p>
                                 <StatusBadge status={evento.status} />
                               </div>
-                              <p className="mt-0.5 text-[11px] text-slate-500">
+                              <p className="mt-0.5 text-xs text-slate-500">
                                 {formatHourRange(evento.hora_inicio, evento.hora_fim)}
                               </p>
                             </button>
                           ))}
 
                           {eventos.length > 2 && (
-                            <p className="px-1 text-[11px] font-medium text-slate-500">
+                            <p className="px-1 text-xs font-medium text-slate-500">
                               +{eventos.length - 2} evento(s) neste dia
                             </p>
                           )}
@@ -2194,15 +2193,15 @@ export default function TreinamentosPlanejadosPage({
                   >
                     <thead className="bg-slate-50 text-xs font-semibold uppercase tracking-[0.12em] text-slate-500 sticky top-0 z-[1]">
                       <tr>
-                        <th className="px-4 py-3 text-left w-12">Ações</th>
-                        <th className="px-4 py-3 text-left">Data</th>
-                        <th className="px-4 py-3 text-left">Horário</th>
-                        <th className="px-4 py-3 text-left">Fonte</th>
-                        <th className="px-4 py-3 text-left">Treinamento / Qualificação</th>
-                        <th className="px-4 py-3 text-left">Participantes</th>
-                        <th className="px-4 py-3 text-left">Instrutor</th>
-                        <th className="px-4 py-3 text-left">Equipamento / Local</th>
-                        <th className="px-4 py-3 text-left">Status</th>
+                        <th scope="col" className="px-4 py-3 text-left w-12">Ações</th>
+                        <th scope="col" className="px-4 py-3 text-left">Data</th>
+                        <th scope="col" className="px-4 py-3 text-left">Horário</th>
+                        <th scope="col" className="px-4 py-3 text-left">Fonte</th>
+                        <th scope="col" className="px-4 py-3 text-left">Treinamento / Qualificação</th>
+                        <th scope="col" className="px-4 py-3 text-left">Participantes</th>
+                        <th scope="col" className="px-4 py-3 text-left">Instrutor</th>
+                        <th scope="col" className="px-4 py-3 text-left">Equipamento / Local</th>
+                        <th scope="col" className="px-4 py-3 text-left">Status</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100 bg-white">
@@ -2944,7 +2943,7 @@ export default function TreinamentosPlanejadosPage({
                     </p>
                   ) : null}
                 </div>
-                <input
+                <input aria-label="Buscar por nome, guerra, matricula"
                   type="search"
                   value={buscaConvocados}
                   onChange={(event) => setBuscaConvocados(event.target.value)}
@@ -3334,10 +3333,10 @@ export default function TreinamentosPlanejadosPage({
                       <table className="min-w-full divide-y divide-slate-200 text-sm">
                         <thead>
                           <tr className="text-left text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">
-                            <th className="px-3 py-3">Participante</th>
-                            <th className="px-3 py-3">Status diario</th>
-                            <th className="px-3 py-3">Minutos</th>
-                            <th className="px-3 py-3">Conclusao</th>
+                            <th scope="col" className="px-3 py-3">Participante</th>
+                            <th scope="col" className="px-3 py-3">Status diario</th>
+                            <th scope="col" className="px-3 py-3">Minutos</th>
+                            <th scope="col" className="px-3 py-3">Conclusao</th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100">
@@ -3513,11 +3512,11 @@ export default function TreinamentosPlanejadosPage({
                       <table className="min-w-full divide-y divide-slate-200 text-sm">
                         <thead>
                           <tr className="text-left text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">
-                            <th className="px-3 py-3">Participante</th>
-                            <th className="px-3 py-3">Situação atual</th>
-                            <th className="px-3 py-3">Presenca</th>
-                            <th className="px-3 py-3">Resultado</th>
-                            <th className="px-3 py-3">Histórico</th>
+                            <th scope="col" className="px-3 py-3">Participante</th>
+                            <th scope="col" className="px-3 py-3">Situação atual</th>
+                            <th scope="col" className="px-3 py-3">Presenca</th>
+                            <th scope="col" className="px-3 py-3">Resultado</th>
+                            <th scope="col" className="px-3 py-3">Histórico</th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100">
@@ -3643,7 +3642,7 @@ export default function TreinamentosPlanejadosPage({
                                         <label className="block text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
                                           Data de conclusão
                                         </label>
-                                        <input
+                                        <input aria-label="Data de conclusão"
                                           type="date"
                                           value={draft.data_conclusao_efetiva || ''}
                                           max={today}
@@ -4090,11 +4089,11 @@ export default function TreinamentosPlanejadosPage({
                 <table className="min-w-full divide-y divide-slate-200 text-sm">
                   <thead className="bg-slate-50 text-left text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">
                     <tr>
-                      <th className="px-3 py-3">Tripulante</th>
-                      <th className="px-3 py-3">E-mail</th>
-                      <th className="px-3 py-3">Status</th>
-                      <th className="px-3 py-3">Motivo</th>
-                      <th className="px-3 py-3 text-right">Ação</th>
+                      <th scope="col" className="px-3 py-3">Tripulante</th>
+                      <th scope="col" className="px-3 py-3">E-mail</th>
+                      <th scope="col" className="px-3 py-3">Status</th>
+                      <th scope="col" className="px-3 py-3">Motivo</th>
+                      <th scope="col" className="px-3 py-3 text-right">Ação</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 bg-white">

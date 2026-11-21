@@ -977,7 +977,7 @@ export default function GradeGantt({
   return (
     <div className="w-full space-y-4 overflow-visible" data-testid="grade-gantt">
       {isRefreshingAlocacao && (
-        <div className="inline-flex items-center gap-2 rounded-full border border-sky-200 bg-sky-50 px-3 py-1 text-[11px] font-semibold text-sky-700 shadow-sm">
+        <div className="inline-flex items-center gap-2 rounded-full border border-sky-200 bg-sky-50 px-3 py-1 text-xs font-semibold text-sky-700 shadow-sm">
           <Clock3 className="h-3.5 w-3.5 animate-spin" />
           Atualizando alocações e cobertura...
         </div>
@@ -1056,11 +1056,11 @@ export default function GradeGantt({
                             <CabecalhoDiasSituacao diasDoMes={diasFiltrados} q1Fim={q1Fim} />
                           )}
                           <tr className="border-b border-slate-200 bg-slate-50">
-                            <th
+                            <th scope="col"
                               className="sticky left-0 z-10 bg-slate-50 border-r border-slate-200 px-3 py-1 text-left"
                               colSpan={diasFiltrados.length + 1}
                             >
-                              <span className="text-[10px] font-bold uppercase tracking-wide text-slate-500">
+                              <span className="text-xs font-bold uppercase tracking-wide text-slate-500">
                                 {modelo}
                               </span>
                             </th>

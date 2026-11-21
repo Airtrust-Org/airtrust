@@ -281,16 +281,16 @@ export default function Aeronaves() {
             <table className="min-w-full divide-y divide-gray-200">
               <thead className="bg-neutral-50">
                 <tr>
-                  <th className=" py-3 text-left text-xs font-medium text-neutral-500 uppercase tracking-wider">
+                  <th scope="col" className=" py-3 text-left text-xs font-medium text-neutral-500 uppercase tracking-wider">
                     Prefixo
                   </th>
-                  <th className=" py-3 text-left text-xs font-medium text-neutral-500 uppercase tracking-wider">
+                  <th scope="col" className=" py-3 text-left text-xs font-medium text-neutral-500 uppercase tracking-wider">
                     Modelo
                   </th>
-                  <th className=" py-3 text-left text-xs font-medium text-neutral-500 uppercase tracking-wider">
+                  <th scope="col" className=" py-3 text-left text-xs font-medium text-neutral-500 uppercase tracking-wider">
                     Peso vazio
                   </th>
-                  <th className=" py-3 text-right text-xs font-medium text-neutral-500 uppercase tracking-wider">
+                  <th scope="col" className=" py-3 text-right text-xs font-medium text-neutral-500 uppercase tracking-wider">
                     Ações
                   </th>
                 </tr>
@@ -345,8 +345,8 @@ export default function Aeronaves() {
       >
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-neutral-700 mb-1">Modelo *</label>
-            <input
+            <label htmlFor="aeronaves-modelo" className="block text-sm font-medium text-neutral-700 mb-1">Modelo *</label>
+            <input id="aeronaves-modelo" aria-label="Modelo"
               type="text"
               required
               value={formData.modelo}
@@ -357,8 +357,8 @@ export default function Aeronaves() {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-neutral-700 mb-1">Prefixo</label>
-            <input
+            <label htmlFor="aeronaves-prefixo" className="block text-sm font-medium text-neutral-700 mb-1">Prefixo</label>
+            <input id="aeronaves-prefixo" aria-label="Prefixo"
               type="text"
               value={formData.prefixo || ''}
               onChange={(e) => setFormData({ ...formData, prefixo: e.target.value.toUpperCase() })}
@@ -369,10 +369,10 @@ export default function Aeronaves() {
 
           <div className="grid grid-cols-[1fr_120px] gap-3">
             <div>
-              <label className="block text-sm font-medium text-neutral-700 mb-1">
+              <label htmlFor="aeronaves-peso-vazio" className="block text-sm font-medium text-neutral-700 mb-1">
                 Peso vazio *
               </label>
-              <input
+              <input id="aeronaves-peso-vazio" aria-label="Peso vazio"
                 type="number"
                 min="0.01"
                 step="0.01"
@@ -388,8 +388,8 @@ export default function Aeronaves() {
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-neutral-700 mb-1">Unidade *</label>
-              <select
+              <label htmlFor="aeronaves-unidade" className="block text-sm font-medium text-neutral-700 mb-1">Unidade *</label>
+              <select id="aeronaves-unidade" aria-label="Unidade"
                 required
                 value={formData.unidade_peso || 'LB'}
                 onChange={(e) => setFormData({ ...formData, unidade_peso: e.target.value })}
@@ -420,8 +420,8 @@ export default function Aeronaves() {
       >
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-neutral-700 mb-1">Modelo *</label>
-            <input
+            <label htmlFor="aeronaves-modelo-2" className="block text-sm font-medium text-neutral-700 mb-1">Modelo *</label>
+            <input id="aeronaves-modelo-2" aria-label="Modelo"
               type="text"
               required
               value={formData.modelo}
@@ -431,8 +431,8 @@ export default function Aeronaves() {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-neutral-700 mb-1">Prefixo</label>
-            <input
+            <label htmlFor="aeronaves-prefixo-2" className="block text-sm font-medium text-neutral-700 mb-1">Prefixo</label>
+            <input id="aeronaves-prefixo-2" aria-label="Prefixo"
               type="text"
               value={formData.prefixo || ''}
               onChange={(e) => setFormData({ ...formData, prefixo: e.target.value.toUpperCase() })}
@@ -442,10 +442,10 @@ export default function Aeronaves() {
 
           <div className="grid grid-cols-[1fr_120px] gap-3">
             <div>
-              <label className="block text-sm font-medium text-neutral-700 mb-1">
+              <label htmlFor="aeronaves-peso-vazio-2" className="block text-sm font-medium text-neutral-700 mb-1">
                 Peso vazio *
               </label>
-              <input
+              <input id="aeronaves-peso-vazio-2" aria-label="Peso vazio"
                 type="number"
                 min="0.01"
                 step="0.01"
@@ -461,8 +461,8 @@ export default function Aeronaves() {
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-neutral-700 mb-1">Unidade *</label>
-              <select
+              <label htmlFor="aeronaves-unidade-2" className="block text-sm font-medium text-neutral-700 mb-1">Unidade *</label>
+              <select id="aeronaves-unidade-2" aria-label="Unidade"
                 required
                 value={formData.unidade_peso || 'LB'}
                 onChange={(e) => setFormData({ ...formData, unidade_peso: e.target.value })}

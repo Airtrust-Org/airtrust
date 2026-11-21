@@ -268,9 +268,9 @@ export default function SimuladoresDashboard() {
                   <table className="w-full min-w-[420px] text-xs">
                     <thead className="bg-gray-50">
                       <tr>
-                        <th className="px-2 py-1 text-left">Simulador</th>
-                        <th className="px-2 py-1 text-left">Tipo</th>
-                        <th className="px-2 py-1 text-right">Horas</th>
+                        <th scope="col" className="px-2 py-1 text-left">Simulador</th>
+                        <th scope="col" className="px-2 py-1 text-left">Tipo</th>
+                        <th scope="col" className="px-2 py-1 text-right">Horas</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -310,9 +310,9 @@ export default function SimuladoresDashboard() {
                   <table className="w-full min-w-[420px] text-xs">
                     <thead className="bg-gray-50">
                       <tr>
-                        <th className="px-2 py-1 text-left">Tipo</th>
-                        <th className="px-2 py-1 text-right">Sessões</th>
-                        <th className="px-2 py-1 text-right">Horas</th>
+                        <th scope="col" className="px-2 py-1 text-left">Tipo</th>
+                        <th scope="col" className="px-2 py-1 text-right">Sessões</th>
+                        <th scope="col" className="px-2 py-1 text-right">Horas</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -364,14 +364,14 @@ export default function SimuladoresDashboard() {
                 <table className="w-full min-w-[760px] text-xs">
                   <thead className="bg-gray-50">
                     <tr>
-                      <th className="px-2 py-1 text-left">Matrícula</th>
-                      <th className="px-2 py-1 text-left">Nome</th>
-                      <th className="px-2 py-1 text-left">Função</th>
-                      <th className="px-2 py-1 text-right">Sessões</th>
-                      <th className="px-2 py-1 text-right">Horas</th>
-                      <th className="px-2 py-1 text-right">Aprovados</th>
-                      <th className="px-2 py-1 text-right">Reprovados</th>
-                      <th className="px-2 py-1 text-right">Faltas</th>
+                      <th scope="col" className="px-2 py-1 text-left">Matrícula</th>
+                      <th scope="col" className="px-2 py-1 text-left">Nome</th>
+                      <th scope="col" className="px-2 py-1 text-left">Função</th>
+                      <th scope="col" className="px-2 py-1 text-right">Sessões</th>
+                      <th scope="col" className="px-2 py-1 text-right">Horas</th>
+                      <th scope="col" className="px-2 py-1 text-right">Aprovados</th>
+                      <th scope="col" className="px-2 py-1 text-right">Reprovados</th>
+                      <th scope="col" className="px-2 py-1 text-right">Faltas</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -416,11 +416,11 @@ export default function SimuladoresDashboard() {
                 <table className="w-full min-w-[560px] text-xs">
                   <thead className="bg-gray-50">
                     <tr>
-                      <th className="px-2 py-1 text-left">Tipo</th>
-                      <th className="px-2 py-1 text-right">Sessões</th>
-                      <th className="px-2 py-1 text-right">Aprovados</th>
-                      <th className="px-2 py-1 text-right">Reprovados</th>
-                      <th className="px-2 py-1 text-right">Aprovação %</th>
+                      <th scope="col" className="px-2 py-1 text-left">Tipo</th>
+                      <th scope="col" className="px-2 py-1 text-right">Sessões</th>
+                      <th scope="col" className="px-2 py-1 text-right">Aprovados</th>
+                      <th scope="col" className="px-2 py-1 text-right">Reprovados</th>
+                      <th scope="col" className="px-2 py-1 text-right">Aprovação %</th>
                     </tr>
                   </thead>
                   <tbody>

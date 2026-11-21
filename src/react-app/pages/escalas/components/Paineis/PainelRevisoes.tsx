@@ -51,7 +51,7 @@ export default function PainelRevisoes({ escalaId, onClose, onComparar, onVerCom
               : 'Todas as publicações desta escala'}
           </p>
         </div>
-        <button
+        <button aria-label="Fechar"
           type="button"
           onClick={onClose}
           className="flex h-7 w-7 items-center justify-center rounded-md text-slate-400 hover:bg-slate-100 hover:text-slate-700"
@@ -97,7 +97,7 @@ export default function PainelRevisoes({ escalaId, onClose, onComparar, onVerCom
                 </div>
                 <div className="flex items-center gap-1.5 shrink-0">
                   {isLatest && (
-                    <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold text-emerald-700">
+                    <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-semibold text-emerald-700">
                       Atual
                     </span>
                   )}
@@ -105,7 +105,7 @@ export default function PainelRevisoes({ escalaId, onClose, onComparar, onVerCom
                     <button
                       type="button"
                       onClick={() => onVerCompleto(rev.revisao)}
-                      className="flex items-center gap-1 rounded-md px-2 py-0.5 text-[10px] font-semibold border border-slate-200 text-slate-500 hover:bg-slate-100 hover:text-slate-700 transition-colors"
+                      className="flex items-center gap-1 rounded-md px-2 py-0.5 text-xs font-semibold border border-slate-200 text-slate-500 hover:bg-slate-100 hover:text-slate-700 transition-colors"
                       title={`Ver conteúdo completo de ${label}`}
                     >
                       <Eye className="h-3 w-3" />
@@ -118,7 +118,7 @@ export default function PainelRevisoes({ escalaId, onClose, onComparar, onVerCom
                       onClick={() => {
                         onComparar(rev.revisao);
                       }}
-                      className={`flex items-center gap-1 rounded-md px-2 py-0.5 text-[10px] font-semibold border transition-colors ${
+                      className={`flex items-center gap-1 rounded-md px-2 py-0.5 text-xs font-semibold border transition-colors ${
                         isLatest
                           ? 'border-emerald-300 text-emerald-700 hover:bg-emerald-100'
                           : 'border-slate-200 text-slate-500 hover:bg-slate-100 hover:text-slate-700'
@@ -144,7 +144,7 @@ export default function PainelRevisoes({ escalaId, onClose, onComparar, onVerCom
 
       {revisoes && revisoes.length > 1 && onComparar && (
         <div className="border-t border-slate-100 px-4 py-2.5">
-          <p className="text-[10px] text-slate-400 text-center">
+          <p className="text-xs text-slate-400 text-center">
             Clique em <strong>Ver diff</strong> para comparar qualquer revisão com o estado atual
           </p>
         </div>

@@ -2,6 +2,7 @@ import { useState, useRef } from 'react';
 import { X, Upload, FileText, Download, CheckCircle, AlertTriangle } from 'lucide-react';
 import { toast } from 'sonner';
 import { useImportacao, type MergeMode } from '../../hooks/useImportacao';
+import { ModalOverlay } from '@/react-app/components/modals/ModalOverlay';
 
 interface ModalImportacaoProps {
   entidade: 'funcionarios' | 'qualificacoes_tipos' | 'qualificacoes_historico';
@@ -149,7 +150,7 @@ export function ModalImportacao({ entidade, onClose, onSucesso }: ModalImportaca
   };
 
   return (
-    <div
+    <ModalOverlay
       className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
       onClick={onClose}
     >
@@ -236,7 +237,7 @@ export function ModalImportacao({ entidade, onClose, onSucesso }: ModalImportaca
               {entidade === 'qualificacoes_historico' && (
                 <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-4">
                   <h4 className="font-semibold text-emerald-900 mb-2">
-                    📋 Campos do Histórico (Simplificado)
+                    <span aria-hidden="true">📋</span> Campos do Histórico (Simplificado)
                   </h4>
                   <div className="text-sm text-emerald-800 space-y-2">
                     <p className="font-medium">Apenas 3 campos obrigatórios:</p>
@@ -254,7 +255,7 @@ export function ModalImportacao({ entidade, onClose, onSucesso }: ModalImportaca
                       </li>
                     </ul>
                     <div className="mt-3 pt-3 border-t border-emerald-300">
-                      <p className="font-medium text-emerald-900">✨ Cálculo Automático:</p>
+                      <p className="font-medium text-emerald-900"><span aria-hidden="true">✨</span> Cálculo Automático:</p>
                       <ul className="ml-4 mt-1 space-y-1">
                         <li>• Nome do funcionário (via CPF)</li>
                         <li>• Nome da qualificação (via código)</li>
@@ -264,7 +265,7 @@ export function ModalImportacao({ entidade, onClose, onSucesso }: ModalImportaca
                       </ul>
                     </div>
                     <div className="mt-3 pt-3 border-t border-emerald-300">
-                      <p className="font-medium text-emerald-900">🔗 Integração Ativa:</p>
+                      <p className="font-medium text-emerald-900"><span aria-hidden="true">🔗</span> Integração Ativa:</p>
                       <p className="mt-1">
                         Quando funcionários ou tipos de qualificação são atualizados, os dados do
                         histórico refletem as mudanças automaticamente!
@@ -385,16 +386,16 @@ export function ModalImportacao({ entidade, onClose, onSucesso }: ModalImportaca
                       </h3>
                     </div>
                     <div className="max-h-64 overflow-y-auto">
-                      <table className="min-w-full divide-y divide-red-100">
+                      <div className="overflow-x-auto"><table className="min-w-full divide-y divide-red-100">
                         <thead className="bg-red-50 sticky top-0">
                           <tr>
-                            <th className="px-4 py-3 text-left text-xs font-medium text-red-800 uppercase">
+                            <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-red-800 uppercase">
                               Linha
                             </th>
-                            <th className="px-4 py-3 text-left text-xs font-medium text-red-800 uppercase">
+                            <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-red-800 uppercase">
                               Ação
                             </th>
-                            <th className="px-4 py-3 text-left text-xs font-medium text-red-800 uppercase">
+                            <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-red-800 uppercase">
                               Mensagem
                             </th>
                           </tr>
@@ -420,7 +421,7 @@ export function ModalImportacao({ entidade, onClose, onSucesso }: ModalImportaca
                             ));
                           })()}
                         </tbody>
-                      </table>
+                      </table></div>
                     </div>
                     {validacao.erros > 20 && (
                       <div className="bg-red-50 px-4 py-3 border-t flex items-center justify-between">
@@ -500,6 +501,6 @@ export function ModalImportacao({ entidade, onClose, onSucesso }: ModalImportaca
           )}
         </div>
       </div>
-    </div>
+    </ModalOverlay>
   );
 }

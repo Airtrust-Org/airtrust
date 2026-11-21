@@ -41,7 +41,7 @@ export const DebugApiBase: React.FC = () => {
 
   return (
     <div style={{ position: 'fixed', bottom: 8, right: 8, zIndex: 9999 }}>
-      <div className="text-[10px] font-mono bg-black/80 text-white p-2 rounded shadow-lg space-y-1 max-w-xs">
+      <div className="text-xs font-mono bg-black/80 text-white p-2 rounded shadow-lg space-y-1 max-w-xs">
         <div>API_BASE_URL:</div>
         <div className="truncate" title={API_BASE_URL}>
           {API_BASE_URL}

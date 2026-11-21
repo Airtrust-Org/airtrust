@@ -529,9 +529,9 @@ export default function ImportarQualificacoes({ onImportSuccess }: ImportarQuali
                     <table className="w-full text-xs">
                       <thead className="border-b border-red-300">
                         <tr>
-                          <th className="text-left p-1">Linha</th>
-                          <th className="text-left p-1">Campo</th>
-                          <th className="text-left p-1">Erro</th>
+                          <th scope="col" className="text-left p-1">Linha</th>
+                          <th scope="col" className="text-left p-1">Campo</th>
+                          <th scope="col" className="text-left p-1">Erro</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -562,7 +562,7 @@ export default function ImportarQualificacoes({ onImportSuccess }: ImportarQuali
                     <thead className="bg-gray-200">
                       <tr>
                         {Object.keys(preview[0]).map((key) => (
-                          <th key={key} className="px-3 py-2 text-left border">
+                          <th scope="col" key={key} className="px-3 py-2 text-left border">
                             {key}
                           </th>
                         ))}
@@ -644,9 +644,9 @@ export default function ImportarQualificacoes({ onImportSuccess }: ImportarQuali
                     <table className="w-full text-sm">
                       <thead>
                         <tr className="border-b border-red-200">
-                          <th className="text-left p-2">Linha</th>
-                          <th className="text-left p-2">Campo</th>
-                          <th className="text-left p-2">Erro</th>
+                          <th scope="col" className="text-left p-2">Linha</th>
+                          <th scope="col" className="text-left p-2">Campo</th>
+                          <th scope="col" className="text-left p-2">Erro</th>
                         </tr>
                       </thead>
                       <tbody>

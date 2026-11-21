@@ -127,7 +127,7 @@ export default function UploadDocumentos({
 
   return (
     <div className="space-y-4">
-      <h3 className="text-lg font-semibold">📤 Enviar Documento</h3>
+      <h3 className="text-lg font-semibold"><span aria-hidden="true">📤</span> Enviar Documento</h3>
 
       {/* Info Box */}
       <div className="bg-primary/10 border border-blue-200 rounded-lg p-3 flex gap-3">
@@ -157,7 +157,7 @@ export default function UploadDocumentos({
               <p className="font-semibold text-gray-900 truncate">{arquivo.name}</p>
               <p className="text-sm text-gray-500">{(arquivo.size / 1024).toFixed(2)} KB</p>
             </div>
-            <button
+            <button aria-label="Fechar"
               onClick={() => setArquivo(null)}
               className="text-red-600 hover:text-red-800 flex-shrink-0"
             >
@@ -184,8 +184,8 @@ export default function UploadDocumentos({
 
       {/* Tipo de Documento */}
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-2">Tipo de Documento *</label>
-        <select
+        <label htmlFor="uploaddocumentos-tipo-de-documento" className="block text-sm font-medium text-gray-700 mb-2">Tipo de Documento *</label>
+        <select id="uploaddocumentos-tipo-de-documento" aria-label="Tipo de Documento"
           value={tipoDocumento}
           onChange={(e) => setTipoDocumento(e.target.value)}
           className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
@@ -201,8 +201,8 @@ export default function UploadDocumentos({
 
       {/* Descrição */}
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-2">Descrição (opcional)</label>
-        <textarea
+        <label htmlFor="uploaddocumentos-descricao-opcional" className="block text-sm font-medium text-gray-700 mb-2">Descrição (opcional)</label>
+        <textarea id="uploaddocumentos-descricao-opcional" aria-label="Descrição (opcional)"
           value={descricao}
           onChange={(e) => setDescricao(e.target.value)}
           rows={3}

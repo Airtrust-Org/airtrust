@@ -215,37 +215,37 @@ export default function ControleVoosCoordenacaoFila() {
                 <table className="w-full text-sm">
                   <thead className="border-b border-slate-200 bg-slate-50 dark:border-slate-700 dark:bg-slate-800">
                     <tr>
-                      <th className="px-4 py-3 text-left font-medium text-slate-600 dark:text-slate-300">
+                      <th scope="col" className="px-4 py-3 text-left font-medium text-slate-600 dark:text-slate-300">
                         Data
                       </th>
-                      <th className="px-4 py-3 text-left font-medium text-slate-600 dark:text-slate-300">
+                      <th scope="col" className="px-4 py-3 text-left font-medium text-slate-600 dark:text-slate-300">
                         RDV
                       </th>
-                      <th className="px-4 py-3 text-left font-medium text-slate-600 dark:text-slate-300">
+                      <th scope="col" className="px-4 py-3 text-left font-medium text-slate-600 dark:text-slate-300">
                         Aeronave / modelo
                       </th>
-                      <th className="px-4 py-3 text-left font-medium text-slate-600 dark:text-slate-300">
+                      <th scope="col" className="px-4 py-3 text-left font-medium text-slate-600 dark:text-slate-300">
                         Rota operacional
                       </th>
-                      <th className="px-4 py-3 text-left font-medium text-slate-600 dark:text-slate-300">
+                      <th scope="col" className="px-4 py-3 text-left font-medium text-slate-600 dark:text-slate-300">
                         Status RDV
                       </th>
-                      <th className="px-4 py-3 text-left font-medium text-slate-600 dark:text-slate-300">
+                      <th scope="col" className="px-4 py-3 text-left font-medium text-slate-600 dark:text-slate-300">
                         Próxima ação / responsável
                       </th>
-                      <th className="px-4 py-3 text-left font-medium text-slate-600 dark:text-slate-300">
+                      <th scope="col" className="px-4 py-3 text-left font-medium text-slate-600 dark:text-slate-300">
                         Status do voo
                       </th>
-                      <th className="px-4 py-3 text-left font-medium text-slate-600 dark:text-slate-300">
+                      <th scope="col" className="px-4 py-3 text-left font-medium text-slate-600 dark:text-slate-300">
                         Enviado em
                       </th>
-                      <th className="px-4 py-3 text-left font-medium text-slate-600 dark:text-slate-300">
+                      <th scope="col" className="px-4 py-3 text-left font-medium text-slate-600 dark:text-slate-300">
                         Última atualização no servidor
                       </th>
-                      <th className="px-4 py-3 text-left font-medium text-slate-600 dark:text-slate-300">
+                      <th scope="col" className="px-4 py-3 text-left font-medium text-slate-600 dark:text-slate-300">
                         Justificativa
                       </th>
-                      <th className="px-4 py-3 w-24" />
+                      <th scope="col" className="px-4 py-3 w-24" />
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 dark:divide-slate-800">

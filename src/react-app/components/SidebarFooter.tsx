@@ -15,7 +15,7 @@ export function SidebarFooter() {
   const version = resolveFrontendVersion();
 
   return (
-    <div className="mt-auto border-t border-gray-200 px-4 py-2 text-[10px] text-gray-400">
+    <div className="mt-auto border-t border-gray-200 px-4 py-2 text-xs text-gray-400">
       <p className="truncate font-mono">AirTrust · Front {version}</p>
     </div>
   );

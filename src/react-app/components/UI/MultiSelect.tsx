@@ -106,7 +106,7 @@ export function MultiSelect({
       >
         <span className="truncate max-w-[180px]">{displayLabel}</span>
         {!noneSelected && (
-          <span className="inline-flex items-center justify-center rounded-full bg-primary/10 px-1.5 py-0.5 text-[11px] font-semibold text-primary">
+          <span className="inline-flex items-center justify-center rounded-full bg-primary/10 px-1.5 py-0.5 text-xs font-semibold text-primary">
             {selected.length}
           </span>
         )}
@@ -125,7 +125,7 @@ export function MultiSelect({
           {/* Search */}
           <div className="flex items-center border-b border-slate-200 px-3 py-2 dark:border-slate-700">
             <Search className="w-3.5 h-3.5 text-slate-400 mr-2 shrink-0" />
-            <input
+            <input aria-label="Buscar..."
               ref={inputRef}
               type="text"
               placeholder="Buscar..."

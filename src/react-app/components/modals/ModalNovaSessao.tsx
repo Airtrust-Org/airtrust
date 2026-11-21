@@ -42,6 +42,7 @@ import SharedSessionForm, {
   type SharedSessionFormState,
   type SharedSessionStep,
 } from './SharedSessionForm';
+import { ModalOverlay } from '@/react-app/components/modals/ModalOverlay';
 
 interface ModeloAeronave {
   id: number;
@@ -1811,7 +1812,7 @@ export default function ModalNovaSessao({
         : 'Criar Sessão';
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-modal p-4">
+    <ModalOverlay className="fixed inset-0 bg-black/50 flex items-center justify-center z-modal p-4">
       <AlertModal
         isOpen={conflitoModal.isOpen}
         onClose={() => setConflitoModal({ isOpen: false, message: '' })}
@@ -1833,7 +1834,7 @@ export default function ModalNovaSessao({
                 : 'Configure a sessão e as manobras serão carregadas automaticamente'}
             </p>
           </div>
-          <button
+          <button aria-label="Fechar"
             onClick={onClose}
             className="p-2 hover:bg-slate-100 rounded-lg transition"
             disabled={loading}
@@ -1914,7 +1915,7 @@ export default function ModalNovaSessao({
                     : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-50'
                 }`}
               >
-                🖥️ Simulador
+                <span aria-hidden="true">🖥️</span> Simulador
               </button>
               <button
                 type="button"
@@ -1926,7 +1927,7 @@ export default function ModalNovaSessao({
                     : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-50'
                 }`}
               >
-                ✈️ Aeronave Real
+                <span aria-hidden="true">✈️</span> Aeronave Real
               </button>
             </div>
             {modoCompartilhado && (
@@ -1938,10 +1939,10 @@ export default function ModalNovaSessao({
 
           {/* 1️⃣ EQUIPAMENTO */}
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-2">
+            <label htmlFor="modalnovasessao-1-equipamento" className="block text-sm font-medium text-slate-700 mb-2">
               1. Equipamento <span className="text-red-500">*</span>
             </label>
-            <select
+            <select id="modalnovasessao-1-equipamento" aria-label="1. Equipamento"
               value={aeronaveId || ''}
               onChange={(e) => {
                 const id = Number(e.target.value);
@@ -1963,10 +1964,10 @@ export default function ModalNovaSessao({
           {/* 2️⃣ SIMULADOR ou AERONAVE REAL */}
           {tipoDispositivo === 'SIMULADOR' ? (
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-2">
+              <label htmlFor="modalnovasessao-2-simulador" className="block text-sm font-medium text-slate-700 mb-2">
                 2. Simulador <span className="text-red-500">*</span>
               </label>
-              <select
+              <select id="modalnovasessao-2-simulador" aria-label="2. Simulador"
                 value={simuladorId || ''}
                 onChange={(e) => handleSimuladorChange(Number(e.target.value))}
                 className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary"
@@ -1996,10 +1997,10 @@ export default function ModalNovaSessao({
             </div>
           ) : (
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-2">
+              <label htmlFor="modalnovasessao-2-aeronave" className="block text-sm font-medium text-slate-700 mb-2">
                 2. Aeronave <span className="text-red-500">*</span>
               </label>
-              <select
+              <select id="modalnovasessao-2-aeronave" aria-label="2. Aeronave"
                 value={aeronaveRealId || ''}
                 onChange={(e) => handleAeronaveRealChange(Number(e.target.value))}
                 className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary"
@@ -2016,7 +2017,7 @@ export default function ModalNovaSessao({
               </select>
               {aeronaveId && aeronavesReaisFiltradas.length === 0 && (
                 <p className="text-xs text-amber-600 mt-1">
-                  ⚠️ Nenhuma aeronave cadastrada para este modelo
+                  <span aria-hidden="true">⚠️</span> Nenhuma aeronave cadastrada para este modelo
                 </p>
               )}
             </div>
@@ -2028,10 +2029,10 @@ export default function ModalNovaSessao({
           <>
           {/* 3️⃣ TIPO DE SESSÃO */}
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-2">
+            <label htmlFor="modalnovasessao-3-tipo-de-sessao" className="block text-sm font-medium text-slate-700 mb-2">
               3. Tipo de Sessão <span className="text-red-500">*</span>
             </label>
-            <select
+            <select id="modalnovasessao-3-tipo-de-sessao" aria-label="3. Tipo de Sessão"
               value={tipoSessaoId || ''}
               onChange={(e) => handleTipoSessaoChange(Number(e.target.value))}
               className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary"
@@ -2092,7 +2093,7 @@ export default function ModalNovaSessao({
               // Show an editable text input so the user can see/change the theme
               // without a false "no models" error blocking the form.
               <div className="space-y-1.5">
-                <input
+                <input aria-label="Tema da sessão"
                   type="text"
                   value={temaSessao}
                   onChange={(e) => setTemaSessao(e.target.value)}
@@ -2102,7 +2103,7 @@ export default function ModalNovaSessao({
                   data-testid="tema-sessao-legado-input"
                 />
                 <p className="text-xs text-amber-600">
-                  ⚠️ Tema preservado da sessão. Modelo original não encontrado nos cadastros atuais — verifique
+                  <span aria-hidden="true">⚠️</span> Tema preservado da sessão. Modelo original não encontrado nos cadastros atuais — verifique
                   em <strong>Gestão → Modelos de Sessão</strong>.
                 </p>
               </div>
@@ -2124,10 +2125,10 @@ export default function ModalNovaSessao({
           {/* 4. DATA E HORÁRIOS */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-2">
+              <label htmlFor="modalnovasessao-data" className="block text-sm font-medium text-slate-700 mb-2">
                 Data <span className="text-red-500">*</span>
               </label>
-              <input
+              <input id="modalnovasessao-data" aria-label="Data"
                 type="date"
                 value={data}
                 onChange={(e) => {
@@ -2144,14 +2145,14 @@ export default function ModalNovaSessao({
                 }`}
                 disabled={loading}
               />
-              {dataInvalida && <p className="text-xs text-red-600 mt-1">⚠️ Data não existente</p>}
+              {dataInvalida && <p className="text-xs text-red-600 mt-1"><span aria-hidden="true">⚠️</span> Data não existente</p>}
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-2">
+              <label htmlFor="modalnovasessao-horario-inicio" className="block text-sm font-medium text-slate-700 mb-2">
                 Horário Início <span className="text-red-500">*</span>
               </label>
-              <TimeInput
+              <TimeInput id="modalnovasessao-horario-inicio"
                 value={horarioInicio}
                 onChange={(v) => {
                   setHorarioInicio(v);
@@ -2166,10 +2167,10 @@ export default function ModalNovaSessao({
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-2">
+              <label htmlFor="modalnovasessao-horario-fim" className="block text-sm font-medium text-slate-700 mb-2">
                 Horário Fim <span className="text-red-500">*</span>
               </label>
-              <TimeInput
+              <TimeInput id="modalnovasessao-horario-fim"
                 value={horarioFim}
                 onChange={(v) => {
                   setHorarioFim(v);
@@ -2183,10 +2184,10 @@ export default function ModalNovaSessao({
 
           {/* 5. INSTRUTOR */}
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-2">
+            <label htmlFor="modalnovasessao-instrutor" className="block text-sm font-medium text-slate-700 mb-2">
               Instrutor <span className="text-red-500">*</span>
             </label>
-            <select
+            <select id="modalnovasessao-instrutor" aria-label="Instrutor"
               value={instrutorId || ''}
               onChange={(e) => setInstrutorId(Number(e.target.value))}
               className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary"
@@ -2201,7 +2202,7 @@ export default function ModalNovaSessao({
             </select>
             {instrutores.length === 0 && (
               <p className="text-xs text-amber-600 mt-1">
-                ⚠️ Nenhum instrutor encontrado. Configure instrutores em Configurações.
+                <span aria-hidden="true">⚠️</span> Nenhum instrutor encontrado. Configure instrutores em Configurações.
               </p>
             )}
           </div>
@@ -2213,10 +2214,10 @@ export default function ModalNovaSessao({
           {/* 5.1 EXAMINADOR (OPCIONAL) + CHECKS */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-2">
+              <label htmlFor="modalnovasessao-examinador-opcional" className="block text-sm font-medium text-slate-700 mb-2">
                 Examinador (opcional)
               </label>
-              <select
+              <select id="modalnovasessao-examinador-opcional" aria-label="Examinador (opcional)"
                 value={examinadorId || ''}
                 onChange={(e) => {
                   const v = e.target.value ? Number(e.target.value) : null;
@@ -2285,7 +2286,7 @@ export default function ModalNovaSessao({
               </div>
               {examinadorId && checksSelecionados.length === 0 && (
                 <p className="text-xs text-amber-700 mt-1">
-                  ⚠️ Se há examinador, selecione ao menos 1 check.
+                  <span aria-hidden="true">⚠️</span> Se há examinador, selecione ao menos 1 check.
                 </p>
               )}
             </div>
@@ -2408,10 +2409,10 @@ export default function ModalNovaSessao({
             </div>
           )}
           {/* 7. OBSERVAÇÕES (OPCIONAL) */}
-            <label className="block text-sm font-medium text-slate-700 mb-2">
+            <label htmlFor="modalnovasessao-observacoes-opcional" className="block text-sm font-medium text-slate-700 mb-2">
               Observações (opcional)
             </label>
-            <textarea
+            <textarea id="modalnovasessao-observacoes-opcional" aria-label="Observações (opcional)"
               value={observacoes}
               onChange={(e) => setObservacoes(e.target.value)}
               placeholder="Informações adicionais sobre a sessão..."
@@ -2528,6 +2529,6 @@ export default function ModalNovaSessao({
         title="Excluir Sessão"
         message="Tem certeza que deseja excluir esta sessão de treinamento? Esta ação não pode ser desfeita."
       />
-    </div>
+    </ModalOverlay>
   );
 }

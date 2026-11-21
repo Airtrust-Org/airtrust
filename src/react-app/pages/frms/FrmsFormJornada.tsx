@@ -13,6 +13,7 @@ import { toast } from 'sonner';
 import { emitirEventoModulo } from '@/react-app/lib/moduloBus';
 import TimeInput from '@/react-app/components/TimeInput';
 import { normalizeTimeInput } from '@/react-app/lib/time-input';
+import { ModalOverlay } from '@/react-app/components/modals/ModalOverlay';
 
 function getTodayLocalKey(): string {
   const now = new Date();
@@ -242,7 +243,7 @@ export default function FrmsFormJornada({
   };
 
   return (
-    <div className="fixed inset-0 z-modal flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
+    <ModalOverlay className="fixed inset-0 z-modal flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
       <div className="w-full max-w-lg rounded-2xl bg-white shadow-2xl max-h-[calc(100dvh-2rem)] overflow-y-auto">
         {/* Header */}
         <div className="flex items-center justify-between border-b border-gray-100 px-6 py-4">
@@ -254,7 +255,7 @@ export default function FrmsFormJornada({
               <p className="text-sm text-primary font-medium mt-0.5">{tripulanteNome}</p>
             )}
           </div>
-          <button onClick={onClose} className="rounded-lg p-1 hover:bg-gray-100 transition-colors">
+          <button aria-label="Fechar" type="button" onClick={onClose} className="rounded-lg p-1 hover:bg-gray-100 transition-colors">
             <X className="h-5 w-5 text-gray-400" />
           </button>
         </div>
@@ -263,8 +264,8 @@ export default function FrmsFormJornada({
           {/* Data + Status */}
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs font-medium text-gray-500 mb-1">Data</label>
-              <input
+              <label htmlFor="frmsformjornada-data" className="block text-xs font-medium text-gray-500 mb-1">Data</label>
+              <input id="frmsformjornada-data" aria-label="Data"
                 type="date"
                 value={data}
                 onChange={(e) => setData(e.target.value)}
@@ -273,9 +274,9 @@ export default function FrmsFormJornada({
               />
             </div>
             <div>
-              <label className="block text-xs font-medium text-gray-500 mb-1">Status</label>
+              <label htmlFor="frmsformjornada-status" className="block text-xs font-medium text-gray-500 mb-1">Status</label>
               <div className="relative">
-                <select
+                <select id="frmsformjornada-status" aria-label="Status"
                   value={status}
                   onChange={(e) => setStatus(e.target.value)}
                   className="w-full appearance-none rounded-lg border border-gray-200 pl-3 pr-8 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-primary/40 cursor-pointer"
@@ -296,20 +297,20 @@ export default function FrmsFormJornada({
             <>
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs font-medium text-gray-500 mb-1">
+                  <label htmlFor="frmsformjornada-hora-apresentacao" className="block text-xs font-medium text-gray-500 mb-1">
                     Hora Apresentação
                   </label>
-                  <TimeInput
+                  <TimeInput id="frmsformjornada-hora-apresentacao"
                     value={horaApres}
                     onChange={setHoraApres}
                     className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/40"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-gray-500 mb-1">
+                  <label htmlFor="frmsformjornada-hora-termino" className="block text-xs font-medium text-gray-500 mb-1">
                     Hora Término
                   </label>
-                  <TimeInput
+                  <TimeInput id="frmsformjornada-hora-termino"
                     value={horaTerm}
                     onChange={setHoraTerm}
                     className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/40"
@@ -319,10 +320,10 @@ export default function FrmsFormJornada({
 
               <div className="grid grid-cols-3 gap-4">
                 <div>
-                  <label className="block text-xs font-medium text-gray-500 mb-1">
+                  <label htmlFor="frmsformjornada-horas-de-voo" className="block text-xs font-medium text-gray-500 mb-1">
                     Horas de Voo
                   </label>
-                  <input
+                  <input id="frmsformjornada-horas-de-voo" aria-label="Horas de Voo"
                     type="text"
                     inputMode="numeric"
                     value={horasVoo}
@@ -339,8 +340,8 @@ export default function FrmsFormJornada({
 
           {/* Observação */}
           <div>
-            <label className="block text-xs font-medium text-gray-500 mb-1">Observação</label>
-            <textarea
+            <label htmlFor="frmsformjornada-observacao" className="block text-xs font-medium text-gray-500 mb-1">Observação</label>
+            <textarea id="frmsformjornada-observacao" aria-label="Observação"
               value={observacao}
               onChange={(e) => setObservacao(e.target.value)}
               rows={2}
@@ -358,7 +359,7 @@ export default function FrmsFormJornada({
                 ) : (
                   <Info className="h-3.5 w-3.5 text-gray-400" />
                 )}
-                <span className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider">
+                <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
                   {loadingPreview ? 'Calculando projeção...' : 'Projeção de limites'}
                 </span>
               </div>
@@ -396,7 +397,7 @@ export default function FrmsFormJornada({
                     );
                   })}
                   {preview.alertas.length === 0 && preview.violacoes.length === 0 && (
-                    <p className="text-xs text-emerald-600">✓ Dentro dos limites operacionais</p>
+                    <p className="text-xs text-emerald-600"><span aria-hidden="true">✓</span> Dentro dos limites operacionais</p>
                   )}
                 </>
               )}
@@ -462,6 +463,6 @@ export default function FrmsFormJornada({
           </div>
         </form>
       </div>
-    </div>
+    </ModalOverlay>
   );
 }

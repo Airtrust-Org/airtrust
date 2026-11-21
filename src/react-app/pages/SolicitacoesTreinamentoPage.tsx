@@ -35,6 +35,7 @@ import {
   type TipoTreinamentoType,
   type PrioridadeType,
 } from '@/react-app/hooks/useSolicitacoesTreinamento';
+import { ModalOverlay } from '@/react-app/components/modals/ModalOverlay';
 
 // ── helpers de estilo ────────────────────────────────────────────────────────
 
@@ -151,7 +152,7 @@ function CriarModal({ onClose, selfId, canAdmin }: CriarModalProps) {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+    <ModalOverlay className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
       <div
         className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-xl max-h-[calc(100dvh-2rem)] overflow-y-auto"
         data-testid="solicitacao-criar-modal"
@@ -162,8 +163,8 @@ function CriarModal({ onClose, selfId, canAdmin }: CriarModalProps) {
         <form onSubmit={handleSubmit} className="space-y-4" data-testid="solicitacao-form">
           {canAdmin && (
             <div>
-              <label className="mb-1 block text-sm font-medium text-slate-700">Solicitante</label>
-              <select
+              <label htmlFor="solicitacoestreinamentopage-solicitante" className="mb-1 block text-sm font-medium text-slate-700">Solicitante</label>
+              <select id="solicitacoestreinamentopage-solicitante" aria-label="Solicitante"
                 value={solicitanteId}
                 onChange={(e) => setSolicitanteId(Number(e.target.value))}
                 className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -181,8 +182,8 @@ function CriarModal({ onClose, selfId, canAdmin }: CriarModalProps) {
           )}
 
           <div>
-            <label className="mb-1 block text-sm font-medium text-slate-700">Qualificação</label>
-            <select
+            <label htmlFor="solicitacoestreinamentopage-qualificacao" className="mb-1 block text-sm font-medium text-slate-700">Qualificação</label>
+            <select id="solicitacoestreinamentopage-qualificacao" aria-label="Qualificação"
               value={qualificacaoId}
               onChange={(e) => {
                 const nextId = e.target.value;
@@ -209,10 +210,10 @@ function CriarModal({ onClose, selfId, canAdmin }: CriarModalProps) {
           </div>
 
           <div>
-            <label className="mb-1 block text-sm font-medium text-slate-700">
+            <label htmlFor="solicitacoestreinamentopage-tipo-de-treinamento" className="mb-1 block text-sm font-medium text-slate-700">
               Tipo de treinamento
             </label>
-            <select
+            <select id="solicitacoestreinamentopage-tipo-de-treinamento" aria-label="Tipo de treinamento"
               value={tipo}
               onChange={(e) => setTipo(e.target.value as TipoTreinamentoType)}
               className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -235,8 +236,8 @@ function CriarModal({ onClose, selfId, canAdmin }: CriarModalProps) {
           </div>
 
           <div>
-            <label className="mb-1 block text-sm font-medium text-slate-700">Título *</label>
-            <input
+            <label htmlFor="solicitacoestreinamentopage-titulo" className="mb-1 block text-sm font-medium text-slate-700">Título *</label>
+            <input id="solicitacoestreinamentopage-titulo" aria-label="Título"
               value={titulo}
               onChange={(e) => setTitulo(e.target.value)}
               placeholder="Ex: Renovação CMA Classe 1"
@@ -248,8 +249,8 @@ function CriarModal({ onClose, selfId, canAdmin }: CriarModalProps) {
 
           <div className="grid gap-4 sm:grid-cols-2">
             <div>
-              <label className="mb-1 block text-sm font-medium text-slate-700">Prioridade</label>
-              <select
+              <label htmlFor="solicitacoestreinamentopage-prioridade" className="mb-1 block text-sm font-medium text-slate-700">Prioridade</label>
+              <select id="solicitacoestreinamentopage-prioridade" aria-label="Prioridade"
                 value={prioridade}
                 onChange={(e) => setPrioridade(e.target.value as PrioridadeType)}
                 className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -263,8 +264,8 @@ function CriarModal({ onClose, selfId, canAdmin }: CriarModalProps) {
               </select>
             </div>
             <div>
-              <label className="mb-1 block text-sm font-medium text-slate-700">Data prevista</label>
-              <input
+              <label htmlFor="solicitacoestreinamentopage-data-prevista" className="mb-1 block text-sm font-medium text-slate-700">Data prevista</label>
+              <input id="solicitacoestreinamentopage-data-prevista" aria-label="Data prevista"
                 type="date"
                 value={dataPrevista}
                 onChange={(e) => setDataPrevista(e.target.value)}
@@ -275,8 +276,8 @@ function CriarModal({ onClose, selfId, canAdmin }: CriarModalProps) {
           </div>
 
           <div>
-            <label className="mb-1 block text-sm font-medium text-slate-700">Justificativa</label>
-            <textarea
+            <label htmlFor="solicitacoestreinamentopage-justificativa" className="mb-1 block text-sm font-medium text-slate-700">Justificativa</label>
+            <textarea id="solicitacoestreinamentopage-justificativa" aria-label="Justificativa"
               value={justificativa}
               onChange={(e) => setJustificativa(e.target.value)}
               rows={3}
@@ -300,7 +301,7 @@ function CriarModal({ onClose, selfId, canAdmin }: CriarModalProps) {
           </div>
         </form>
       </div>
-    </div>
+    </ModalOverlay>
   );
 }
 
@@ -341,7 +342,7 @@ function DetalheModal({ item, canAdmin, onClose }: DetalheModalProps) {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+    <ModalOverlay className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
       <div
         className="w-full max-w-xl rounded-2xl bg-white p-6 shadow-xl max-h-[calc(100dvh-2rem)] overflow-y-auto"
         data-testid="solicitacao-detalhe-modal"
@@ -452,10 +453,10 @@ function DetalheModal({ item, canAdmin, onClose }: DetalheModalProps) {
             {/* Agendar */}
             {item.status === 'APROVADA_OPS' && (
               <div className="space-y-2">
-                <label className="block text-sm font-medium text-slate-700">
+                <label htmlFor="solicitacoestreinamentopage-data-do-treinamento" className="block text-sm font-medium text-slate-700">
                   Data do treinamento
                 </label>
-                <input
+                <input id="solicitacoestreinamentopage-data-do-treinamento" aria-label="Data do treinamento"
                   type="date"
                   value={dataAgendada}
                   onChange={(e) => setDataAgendada(e.target.value)}
@@ -501,7 +502,7 @@ function DetalheModal({ item, canAdmin, onClose }: DetalheModalProps) {
               <div className="space-y-2">
                 {confirmRejeitar ? (
                   <>
-                    <textarea
+                    <textarea aria-label="Motivo da rejeição (opcional)"
                       value={motivo}
                       onChange={(e) => setMotivo(e.target.value)}
                       placeholder="Motivo da rejeição (opcional)"
@@ -548,7 +549,7 @@ function DetalheModal({ item, canAdmin, onClose }: DetalheModalProps) {
           </Button>
         </div>
       </div>
-    </div>
+    </ModalOverlay>
   );
 }
 
@@ -621,7 +622,7 @@ export default function SolicitacoesTreinamentoPage() {
         {/* Filtros */}
         <div className="flex flex-wrap gap-2 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
           {ALL_STATUSES.map((s) => (
-            <button
+            <button type="button"
               key={s.value}
               onClick={() => setFilterStatus(s.value)}
               className={`rounded-full px-3 py-1 text-sm font-medium transition-colors ${
@@ -643,7 +644,7 @@ export default function SolicitacoesTreinamentoPage() {
             <div className="flex flex-col items-center justify-center py-20 text-center">
               <AlertTriangle className="mb-3 h-8 w-8 text-slate-300" />
               <p className="text-sm text-slate-400">Nenhuma solicitação encontrada.</p>
-              <button
+              <button type="button"
                 className="mt-3 text-sm text-blue-600 hover:underline"
                 onClick={() => setShowCriar(true)}
               >
@@ -653,7 +654,7 @@ export default function SolicitacoesTreinamentoPage() {
           ) : (
             <div className="divide-y divide-slate-100">
               {(solicitacoes as Solicitacao[]).map((item) => (
-                <div
+                <div role="button" tabIndex={0} onKeyDown={(e) => { if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); e.currentTarget.click(); } }}
                   key={item.id}
                   className="flex cursor-pointer items-start gap-4 px-5 py-4 hover:bg-slate-50"
                   onClick={() => setDetailItem(item)}

@@ -173,7 +173,7 @@ export default function ModalAlocarTripulante({
               onClick={() => onAlocarAeronave(payloadBase)}
               className="w-full rounded-2xl border border-slate-200 px-4 py-4 text-left transition-colors hover:border-emerald-300 hover:bg-emerald-50 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:border-slate-200 disabled:hover:bg-white"
             >
-              <div className="text-sm font-semibold text-slate-900">🚁 Alocar em Aeronave</div>
+              <div className="text-sm font-semibold text-slate-900"><span aria-hidden="true">🚁</span> Alocar em Aeronave</div>
               <div className="mt-1 text-xs text-slate-500">
                 Designar para PIC ou SIC em uma aeronave da frota.
               </div>
@@ -185,7 +185,7 @@ export default function ModalAlocarTripulante({
               onClick={() => onRegistrarSituacao(payloadBase)}
               className="w-full rounded-2xl border border-slate-200 px-4 py-4 text-left transition-colors hover:border-sky-300 hover:bg-sky-50 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:border-slate-200 disabled:hover:bg-white"
             >
-              <div className="text-sm font-semibold text-slate-900">📋 Registrar Situação</div>
+              <div className="text-sm font-semibold text-slate-900"><span aria-hidden="true">📋</span> Registrar Situação</div>
               <div className="mt-1 text-xs text-slate-500">
                 Férias, simulador, curso, médico, afastamento ou standby.
               </div>

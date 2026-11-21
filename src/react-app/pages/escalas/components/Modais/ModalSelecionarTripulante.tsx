@@ -105,7 +105,7 @@ export default function ModalSelecionarTripulante({ tripulantes, onSelect, onClo
       }
     >
       <div className="space-y-4">
-        <input
+        <input aria-label="Buscar tripulante..."
           type="text"
           value={busca}
           onChange={(event) => setBusca(event.target.value)}
@@ -130,7 +130,7 @@ export default function ModalSelecionarTripulante({ tripulantes, onSelect, onClo
               >
                 <div className="flex items-center justify-between gap-3 border-b border-slate-200 px-4 py-3">
                   <div>
-                    <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
                       Equipamento
                     </p>
                     <p className="text-sm font-semibold text-slate-900">{grupo.modelo}</p>
@@ -150,7 +150,7 @@ export default function ModalSelecionarTripulante({ tripulantes, onSelect, onClo
                       <div key={`${grupo.key}-${funcao}`} className="space-y-2">
                         <div className="flex items-center justify-between px-1">
                           <span
-                            className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${funcao === 'PIC' ? 'bg-fuchsia-100 text-fuchsia-700' : 'bg-sky-100 text-sky-700'}`}
+                            className={`rounded-full px-2 py-0.5 text-xs font-semibold ${funcao === 'PIC' ? 'bg-fuchsia-100 text-fuchsia-700' : 'bg-sky-100 text-sky-700'}`}
                           >
                             {funcao}
                           </span>
@@ -185,7 +185,7 @@ export default function ModalSelecionarTripulante({ tripulantes, onSelect, onClo
                                 </div>
                                 <div className="flex flex-shrink-0 items-center gap-1">
                                   <span
-                                    className={`rounded-full px-1.5 py-0.5 text-[10px] font-bold ${tripulante.quinzena_numero ? getQuinzenaBadgeClasses(tripulante.quinzena_numero) : 'bg-slate-100 text-slate-500'}`}
+                                    className={`rounded-full px-1.5 py-0.5 text-xs font-bold ${tripulante.quinzena_numero ? getQuinzenaBadgeClasses(tripulante.quinzena_numero) : 'bg-slate-100 text-slate-500'}`}
                                   >
                                     {getQuinzenaShortLabel(tripulante.quinzena_numero) ?? 'Sem Q'}
                                   </span>

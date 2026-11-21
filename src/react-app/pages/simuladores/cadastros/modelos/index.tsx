@@ -15,6 +15,7 @@ import { confirmDialog, showAlertDialog } from '@/react-app/utils/confirmDialog'
 
 import ImportarRelacoesInteligente from '../../components/ImportarRelacoes';
 import { Badge, EmptyState, SimuladoresCard } from '../../components/SimuladoresLayout';
+import { ModalOverlay } from '@/react-app/components/modals/ModalOverlay';
 
 interface Modelo {
   id: number;
@@ -471,25 +472,25 @@ export default function CrudModelos({ onBack }: Props = {}) {
           </div>
 
           <SimuladoresCard padding="none">
-            <table className="w-full">
+            <div className="overflow-x-auto"><table className="w-full">
               <thead className="border-b border-slate-200 bg-slate-50">
                 <tr>
-                  <th className="px-4 py-3 text-left text-xs font-medium uppercase text-slate-700">
+                  <th scope="col" className="px-4 py-3 text-left text-xs font-medium uppercase text-slate-700">
                     Codigo
                   </th>
-                  <th className="px-4 py-3 text-left text-xs font-medium uppercase text-slate-700">
+                  <th scope="col" className="px-4 py-3 text-left text-xs font-medium uppercase text-slate-700">
                     Nome
                   </th>
-                  <th className="px-4 py-3 text-left text-xs font-medium uppercase text-slate-700">
+                  <th scope="col" className="px-4 py-3 text-left text-xs font-medium uppercase text-slate-700">
                     Tipo
                   </th>
-                  <th className="px-4 py-3 text-center text-xs font-medium uppercase text-slate-700">
+                  <th scope="col" className="px-4 py-3 text-center text-xs font-medium uppercase text-slate-700">
                     Duracao
                   </th>
-                  <th className="px-4 py-3 text-center text-xs font-medium uppercase text-slate-700">
+                  <th scope="col" className="px-4 py-3 text-center text-xs font-medium uppercase text-slate-700">
                     Manobras
                   </th>
-                  <th className="px-4 py-3 text-right text-xs font-medium uppercase text-slate-700">
+                  <th scope="col" className="px-4 py-3 text-right text-xs font-medium uppercase text-slate-700">
                     Acoes
                   </th>
                 </tr>
@@ -554,7 +555,7 @@ export default function CrudModelos({ onBack }: Props = {}) {
                   </tr>
                 ))}
               </tbody>
-            </table>
+            </table></div>
 
             {modelos.length === 0 && (
               <div className="p-12">
@@ -585,10 +586,10 @@ export default function CrudModelos({ onBack }: Props = {}) {
             <div className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="mb-1 block text-sm font-medium text-slate-700">
+                  <label htmlFor="index-codigo" className="mb-1 block text-sm font-medium text-slate-700">
                     Codigo <span className="text-red-500">*</span>
                   </label>
-                  <input
+                  <input id="index-codigo" aria-label="Codigo"
                     type="text"
                     value={formData.codigo || ''}
                     onChange={(e) => setFormData({ ...formData, codigo: e.target.value })}
@@ -598,8 +599,8 @@ export default function CrudModelos({ onBack }: Props = {}) {
                 </div>
 
                 <div>
-                  <label className="mb-1 block text-sm font-medium text-slate-700">Tipo</label>
-                  <select
+                  <label htmlFor="index-tipo" className="mb-1 block text-sm font-medium text-slate-700">Tipo</label>
+                  <select id="index-tipo" aria-label="Tipo"
                     value={formData.tipo || 'INICIAL'}
                     onChange={(e) =>
                       setFormData({
@@ -616,10 +617,10 @@ export default function CrudModelos({ onBack }: Props = {}) {
               </div>
 
               <div>
-                <label className="mb-1 block text-sm font-medium text-slate-700">
+                <label htmlFor="index-nome" className="mb-1 block text-sm font-medium text-slate-700">
                   Nome <span className="text-red-500">*</span>
                 </label>
-                <input
+                <input id="index-nome" aria-label="Nome"
                   type="text"
                   value={formData.nome || ''}
                   onChange={(e) => setFormData({ ...formData, nome: e.target.value })}
@@ -629,10 +630,10 @@ export default function CrudModelos({ onBack }: Props = {}) {
               </div>
 
               <div>
-                <label className="mb-1 block text-sm font-medium text-slate-700">
+                <label htmlFor="index-duracao-minutos" className="mb-1 block text-sm font-medium text-slate-700">
                   Duracao (minutos) <span className="text-red-500">*</span>
                 </label>
-                <input
+                <input id="index-duracao-minutos" aria-label="Duracao (minutos)"
                   type="number"
                   value={formData.duracao_minutos || 120}
                   onChange={(e) =>
@@ -643,8 +644,8 @@ export default function CrudModelos({ onBack }: Props = {}) {
               </div>
 
               <div>
-                <label className="mb-1 block text-sm font-medium text-slate-700">Descricao</label>
-                <textarea
+                <label htmlFor="index-descricao" className="mb-1 block text-sm font-medium text-slate-700">Descricao</label>
+                <textarea id="index-descricao" aria-label="Descricao"
                   value={formData.descricao || ''}
                   onChange={(e) => setFormData({ ...formData, descricao: e.target.value })}
                   rows={3}
@@ -710,22 +711,22 @@ export default function CrudModelos({ onBack }: Props = {}) {
               </div>
             </div>
 
-            <table className="w-full">
+            <div className="overflow-x-auto"><table className="w-full">
               <thead className="border-b border-slate-200 bg-slate-50">
                 <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium uppercase text-slate-700">
+                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium uppercase text-slate-700">
                     #
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium uppercase text-slate-700">
+                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium uppercase text-slate-700">
                     Codigo
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium uppercase text-slate-700">
+                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium uppercase text-slate-700">
                     Descricao
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium uppercase text-slate-700">
+                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium uppercase text-slate-700">
                     Categoria
                   </th>
-                  <th className="px-6 py-3 text-right text-xs font-medium uppercase text-slate-700">
+                  <th scope="col" className="px-6 py-3 text-right text-xs font-medium uppercase text-slate-700">
                     Acoes
                   </th>
                 </tr>
@@ -756,7 +757,7 @@ export default function CrudModelos({ onBack }: Props = {}) {
                   </tr>
                 ))}
               </tbody>
-            </table>
+            </table></div>
 
             {manobrasDoModelo.length === 0 && (
               <div className="p-12">
@@ -782,7 +783,7 @@ export default function CrudModelos({ onBack }: Props = {}) {
           </SimuladoresCard>
 
           {showAddManobra && (
-            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
+            <ModalOverlay className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
               <div className="mx-4 max-h-[80vh] w-full max-w-2xl overflow-y-auto rounded-lg bg-white shadow-xl">
                 <div className="border-b border-slate-200 p-6">
                   <h3 className="text-xl font-bold text-slate-900">Adicionar Manobra</h3>
@@ -792,10 +793,10 @@ export default function CrudModelos({ onBack }: Props = {}) {
                 </div>
 
                 <div className="p-6">
-                  <label className="mb-2 block text-sm font-medium text-slate-700">
+                  <label htmlFor="index-manobra" className="mb-2 block text-sm font-medium text-slate-700">
                     Manobra <span className="text-red-500">*</span>
                   </label>
-                  <select
+                  <select id="index-manobra" aria-label="Manobra"
                     value={manobraSelecionada || ''}
                     onChange={(e) => setManobraSelecionada(Number(e.target.value))}
                     className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
@@ -830,7 +831,7 @@ export default function CrudModelos({ onBack }: Props = {}) {
                   </button>
                 </div>
               </div>
-            </div>
+            </ModalOverlay>
           )}
         </div>
       )}

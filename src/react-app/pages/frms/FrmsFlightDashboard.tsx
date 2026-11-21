@@ -824,7 +824,7 @@ export default function FrmsFlightDashboard() {
                       >
                         {evidenceLabel.label}
                       </p>
-                      <p className="mt-1 text-[11px] text-slate-500">{item.hora_apresentacao ? `Apresentação ${item.hora_apresentacao}` : 'Apresentação —'}</p>
+                      <p className="mt-1 text-xs text-slate-500">{item.hora_apresentacao ? `Apresentação ${item.hora_apresentacao}` : 'Apresentação —'}</p>
                     </div>
                     <div className="min-w-0">
                       <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300">O que fazer?</p>

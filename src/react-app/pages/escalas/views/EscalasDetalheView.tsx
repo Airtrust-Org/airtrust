@@ -40,6 +40,7 @@ import { useEscalaPageCtx } from '../EscalaPageContext';
 import FiltroQuinzena from '../components/Filtros/FiltroQuinzena';
 import { API_BASE_URL, getAccessToken } from '@/react-app/config/api';
 import { parseSyntheticId } from '../components/EscalaCalendario/GradeTripulantes.utils';
+import { ModalOverlay } from '@/react-app/components/modals/ModalOverlay';
 
 const PainelTripulacoes = lazyWithRetry(
   () => import('../components/Paineis/PainelTripulacoes'),
@@ -578,7 +579,7 @@ export default function EscalasDetalheView() {
                       Escala {escalaAtual.mes}/{escalaAtual.ano}
                     </h2>
                     <span
-                      className={`shrink-0 flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-semibold ${STATUS_CONFIG[escalaAtual.status].className}`}
+                      className={`shrink-0 flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-semibold ${STATUS_CONFIG[escalaAtual.status].className}`}
                     >
                       <span
                         className={`w-1.5 h-1.5 rounded-full ${STATUS_CONFIG[escalaAtual.status].dotColor}`}
@@ -590,7 +591,7 @@ export default function EscalasDetalheView() {
                         type="button"
                         title="Ver histórico de revisões"
                         onClick={() => setShowRevisoes((v) => !v)}
-                        className={`shrink-0 flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-semibold border transition-colors ${
+                        className={`shrink-0 flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-semibold border transition-colors ${
                           showRevisoes
                             ? 'bg-slate-800 text-white border-slate-800 dark:border-slate-600 dark:bg-slate-700'
                             : 'bg-slate-100 text-slate-600 border-slate-200 hover:bg-slate-200 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700'
@@ -604,7 +605,7 @@ export default function EscalasDetalheView() {
                     )}
                     {escalaAtual.status !== 'publicada' &&
                       (escalaAtual.numero_revisao ?? 0) > 0 && (
-                        <span className="shrink-0 flex items-center gap-1 rounded-md border border-slate-200 bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">
+                        <span className="shrink-0 flex items-center gap-1 rounded-md border border-slate-200 bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">
                           <History className="w-3 h-3" />
                           Revisão {escalaAtual.numero_revisao}
                         </span>
@@ -612,7 +613,7 @@ export default function EscalasDetalheView() {
                     {/* Elaborador / Aprovador */}
                     {escalaAtual.criado_por_nome && (
                       <span
-                        className="hidden shrink-0 items-center gap-1 rounded-md border border-blue-200 bg-blue-50 px-2 py-0.5 text-[10px] font-medium text-blue-700 dark:border-blue-500/30 dark:bg-blue-500/10 dark:text-blue-200 xl:inline-flex"
+                        className="hidden shrink-0 items-center gap-1 rounded-md border border-blue-200 bg-blue-50 px-2 py-0.5 text-xs font-medium text-blue-700 dark:border-blue-500/30 dark:bg-blue-500/10 dark:text-blue-200 xl:inline-flex"
                         title="Elaborador da escala"
                       >
                         Elab: {escalaAtual.criado_por_nome}
@@ -620,7 +621,7 @@ export default function EscalasDetalheView() {
                     )}
                     {escalaAtual.aprovado_por_nome && (
                       <span
-                        className="hidden shrink-0 items-center gap-1 rounded-md border border-green-200 bg-green-50 px-2 py-0.5 text-[10px] font-medium text-green-700 dark:border-green-500/30 dark:bg-green-500/10 dark:text-green-200 xl:inline-flex"
+                        className="hidden shrink-0 items-center gap-1 rounded-md border border-green-200 bg-green-50 px-2 py-0.5 text-xs font-medium text-green-700 dark:border-green-500/30 dark:bg-green-500/10 dark:text-green-200 xl:inline-flex"
                         title={`Aprovado em ${escalaAtual.aprovado_em ? new Date(escalaAtual.aprovado_em).toLocaleDateString('pt-BR') : '—'}`}
                       >
                         Aprov: {escalaAtual.aprovado_por_nome}
@@ -796,7 +797,7 @@ export default function EscalasDetalheView() {
                       <div className="absolute right-0 mt-1 z-50 min-w-[220px] space-y-0.5 rounded-xl border border-slate-200 bg-white p-1.5 text-xs shadow-lg dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200">
                         {podeGerenciarOperacoes && exibirAcoesOperacionais && (
                           <>
-                            <div className="px-2 py-1 text-[10px] font-semibold text-slate-400 uppercase">
+                            <div className="px-2 py-1 text-xs font-semibold text-slate-400 uppercase">
                               Ações
                             </div>
                             {escalaAtual?.status === 'publicada' ? (
@@ -863,7 +864,7 @@ export default function EscalasDetalheView() {
                                 >
                                   <span>Verificar Conflitos</span>
                                   {totalConflitos > 0 && (
-                                    <span className="bg-red-100 text-red-700 text-[10px] font-bold rounded-full px-1.5 py-px">
+                                    <span className="bg-red-100 text-red-700 text-xs font-bold rounded-full px-1.5 py-px">
                                       {totalConflitos}
                                     </span>
                                   )}
@@ -872,7 +873,7 @@ export default function EscalasDetalheView() {
                             )}
                           </>
                         )}
-                        <div className="px-2 py-1 text-[10px] font-semibold text-slate-400 uppercase">
+                        <div className="px-2 py-1 text-xs font-semibold text-slate-400 uppercase">
                           Views
                         </div>
                         <button
@@ -893,7 +894,7 @@ export default function EscalasDetalheView() {
                         >
                           Minha Escala
                         </button>
-                        <div className="px-2 py-1 text-[10px] font-semibold text-slate-400 uppercase">
+                        <div className="px-2 py-1 text-xs font-semibold text-slate-400 uppercase">
                           Análises
                         </div>
                         <button
@@ -923,7 +924,7 @@ export default function EscalasDetalheView() {
                         >
                           Verificar FDP
                         </button>
-                        <div className="px-2 py-1 text-[10px] font-semibold text-slate-400 uppercase">
+                        <div className="px-2 py-1 text-xs font-semibold text-slate-400 uppercase">
                           Dados
                         </div>
                         <button
@@ -969,7 +970,7 @@ export default function EscalasDetalheView() {
                           escalaAtual.status === 'publicada') && (
                           <>
                             <div className="my-1 border-t border-slate-100" />
-                            <div className="px-2 py-1 text-[10px] font-semibold text-slate-400 uppercase">
+                            <div className="px-2 py-1 text-xs font-semibold text-slate-400 uppercase">
                               Fluxo de Status
                             </div>
                             {escalaAtual.status === 'em_revisao' && (
@@ -1046,7 +1047,7 @@ export default function EscalasDetalheView() {
               <h3 className="text-xs font-semibold uppercase tracking-wide text-indigo-700 dark:text-indigo-300">
                 Quinzenas — {escalaAtual?.ano}
               </h3>
-              <button
+              <button aria-label="Fechar"
                 onClick={() => setPainelQuinzenas(false)}
                 className="text-slate-400 hover:text-slate-600 dark:text-slate-500 dark:hover:text-slate-200"
               >
@@ -1070,7 +1071,7 @@ export default function EscalasDetalheView() {
                         {MESES_CURTOS[q.mes - 1]}
                         <span
                           className={[
-                            'ml-1 px-1 py-0.5 rounded text-[10px] font-bold',
+                            'ml-1 px-1 py-0.5 rounded text-xs font-bold',
                             q.numero === 1
                               ? 'bg-sky-100 text-sky-700'
                               : 'bg-violet-100 text-violet-700',
@@ -1079,8 +1080,8 @@ export default function EscalasDetalheView() {
                           Q{q.numero}
                         </span>
                       </div>
-                      <label className="block text-[10px] text-slate-500 dark:text-slate-400">Início</label>
-                      <input
+                      <label className="block text-xs text-slate-500 dark:text-slate-400">Início</label>
+                      <input aria-label="Início"
                         type="date"
                         value={di}
                         onChange={(e) =>
@@ -1089,10 +1090,10 @@ export default function EscalasDetalheView() {
                             [q.id]: { data_inicio: e.target.value, data_fim: df },
                           }))
                         }
-                        className="mb-1 w-full rounded border border-slate-200 px-1 py-0.5 text-[11px] focus:outline-none focus:ring-1 focus:ring-indigo-400 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
+                        className="mb-1 w-full rounded border border-slate-200 px-1 py-0.5 text-xs focus:outline-none focus:ring-1 focus:ring-indigo-400 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
                       />
-                      <label className="block text-[10px] text-slate-500 dark:text-slate-400">Fim</label>
-                      <input
+                      <label className="block text-xs text-slate-500 dark:text-slate-400">Fim</label>
+                      <input aria-label="Fim"
                         type="date"
                         value={df}
                         onChange={(e) =>
@@ -1101,13 +1102,13 @@ export default function EscalasDetalheView() {
                             [q.id]: { data_inicio: di, data_fim: e.target.value },
                           }))
                         }
-                        className="mb-1.5 w-full rounded border border-slate-200 px-1 py-0.5 text-[11px] focus:outline-none focus:ring-1 focus:ring-indigo-400 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
+                        className="mb-1.5 w-full rounded border border-slate-200 px-1 py-0.5 text-xs focus:outline-none focus:ring-1 focus:ring-indigo-400 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
                       />
                       {isDirty && (
                         <button
                           onClick={() => handleSaveQuinzena(q, { data_inicio: di, data_fim: df })}
                           disabled={savingQid === q.id}
-                          className="w-full bg-indigo-600 text-white rounded py-0.5 text-[10px] font-semibold hover:bg-indigo-700 disabled:opacity-50"
+                          className="w-full bg-indigo-600 text-white rounded py-0.5 text-xs font-semibold hover:bg-indigo-700 disabled:opacity-50"
                         >
                           {savingQid === q.id ? '...' : 'Salvar'}
                         </button>
@@ -1152,7 +1153,7 @@ export default function EscalasDetalheView() {
 
                     <div className="relative flex-1 min-w-[140px] max-w-xs">
                       <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
-                      <input
+                      <input aria-label="Filtrar tripulante..."
                         type="text"
                         placeholder="Filtrar tripulante..."
                         value={filtroNome}
@@ -1176,7 +1177,7 @@ export default function EscalasDetalheView() {
                     {resumoCoberturaTripulantes.pendentes > 0 && (
                       <button
                         onClick={() => setVisaoGrade('tripulante')}
-                        className="flex-shrink-0 flex items-center gap-1 text-[10px] text-red-700 bg-red-50 border border-red-200 rounded-md px-1.5 py-0.5 hover:bg-red-100 whitespace-nowrap"
+                        className="flex-shrink-0 flex items-center gap-1 text-xs text-red-700 bg-red-50 border border-red-200 rounded-md px-1.5 py-0.5 hover:bg-red-100 whitespace-nowrap"
                         title="Resolver pendências de alocação"
                       >
                         <AlertTriangle className="h-3 w-3" />
@@ -1578,7 +1579,7 @@ export default function EscalasDetalheView() {
                 <div className="p-3 space-y-3">
                   <div className="flex items-center justify-between">
                     <h3 className="text-sm font-semibold text-gray-800 dark:text-slate-100">Disponibilidade</h3>
-                    <button
+                    <button aria-label="Fechar"
                       onClick={() => setPainelAberto(null)}
                       className="rounded p-1 hover:bg-gray-100 dark:hover:bg-slate-800"
                     >
@@ -1619,7 +1620,7 @@ export default function EscalasDetalheView() {
                 <div className="p-3 space-y-3">
                   <div className="flex items-center justify-between">
                     <h3 className="text-sm font-semibold text-gray-800 dark:text-slate-100">Carga de Trabalho</h3>
-                    <button
+                    <button aria-label="Fechar"
                       onClick={() => setPainelAberto(null)}
                       className="rounded p-1 hover:bg-gray-100 dark:hover:bg-slate-800"
                     >
@@ -1645,7 +1646,7 @@ export default function EscalasDetalheView() {
             <button
               type="button"
               onClick={() => setLegendaVisible((v) => !v)}
-              className="ml-auto flex items-center gap-1 rounded px-2 py-0.5 text-[10px] font-semibold text-slate-400 transition-colors hover:bg-slate-50 hover:text-slate-600 dark:text-slate-500 dark:hover:bg-slate-800 dark:hover:text-slate-200"
+              className="ml-auto flex items-center gap-1 rounded px-2 py-0.5 text-xs font-semibold text-slate-400 transition-colors hover:bg-slate-50 hover:text-slate-600 dark:text-slate-500 dark:hover:bg-slate-800 dark:hover:text-slate-200"
             >
               {legendaVisible ? 'Ocultar legenda' : 'Legenda'}
               {legendaVisible ? (
@@ -1864,7 +1865,7 @@ export default function EscalasDetalheView() {
 
         {/* Confirmação de remoção de alocação */}
         {confirmarRemoverAlocacao && (
-          <div className="fixed inset-0 z-modal flex items-center justify-center bg-black/30">
+          <ModalOverlay className="fixed inset-0 z-modal flex items-center justify-center bg-black/30">
             <div className="mx-4 w-full max-w-sm space-y-4 rounded-2xl bg-white p-4 shadow-xl dark:bg-slate-900">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 bg-red-100 rounded-full flex items-center justify-center">
@@ -1909,11 +1910,11 @@ export default function EscalasDetalheView() {
                 </button>
               </div>
             </div>
-          </div>
+          </ModalOverlay>
         )}
 
         {confirmarRemoverSituacao && (
-          <div className="fixed inset-0 z-modal flex items-center justify-center bg-black/30">
+          <ModalOverlay className="fixed inset-0 z-modal flex items-center justify-center bg-black/30">
             <div className="mx-4 w-full max-w-sm space-y-4 rounded-2xl bg-white p-4 shadow-xl dark:bg-slate-900">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 bg-amber-100 rounded-full flex items-center justify-center">
@@ -1954,12 +1955,12 @@ export default function EscalasDetalheView() {
                 </button>
               </div>
             </div>
-          </div>
+          </ModalOverlay>
         )}
 
         {/* Modal FDP / Fadiga */}
         {fdpModalAberto && (
-          <div className="fixed inset-0 z-modal flex items-center justify-center bg-black/40">
+          <ModalOverlay className="fixed inset-0 z-modal flex items-center justify-center bg-black/40">
             <div className="mx-4 w-full max-w-lg overflow-hidden rounded-xl bg-white shadow-2xl dark:bg-slate-900">
               <div className="flex items-center justify-between border-b border-slate-200 px-5 py-4 dark:border-slate-800">
                 <div className="flex items-center gap-2">
@@ -1968,7 +1969,7 @@ export default function EscalasDetalheView() {
                     FDP / Limite de Fadiga — {MESES[(escalaAtual?.mes ?? 1) - 1]} {escalaAtual?.ano}
                   </h2>
                 </div>
-                <button
+                <button aria-label="Fechar"
                   onClick={() => setFdpModalAberto(false)}
                   className="text-slate-400 hover:text-slate-600 dark:text-slate-500 dark:hover:text-slate-200"
                 >
@@ -2000,10 +2001,10 @@ export default function EscalasDetalheView() {
                           <p className="truncate text-sm font-semibold text-slate-800 dark:text-slate-100">{a.nome}</p>
                           <p className="mt-0.5 text-xs text-red-700 dark:text-red-200">{a.alerta}</p>
                           <div className="mt-1 flex gap-3">
-                            <span className="text-[11px] text-slate-500 dark:text-slate-400">
+                            <span className="text-xs text-slate-500 dark:text-slate-400">
                               Total dias voo: <strong>{a.diasVoo}</strong>
                             </span>
-                            <span className="text-[11px] text-slate-500 dark:text-slate-400">
+                            <span className="text-xs text-slate-500 dark:text-slate-400">
                               Max consecutivo: <strong>{a.maxConsec}</strong>
                             </span>
                           </div>
@@ -2022,7 +2023,7 @@ export default function EscalasDetalheView() {
                 </button>
               </div>
             </div>
-          </div>
+          </ModalOverlay>
         )}
 
         {/* Vista por Tripulante modal */}
@@ -2091,7 +2092,7 @@ export default function EscalasDetalheView() {
 
         {/* Histórico de Revisões */}
         {showRevisoes && escalaAtual && (
-          <div className="fixed inset-0 z-modal bg-black/40 flex items-center justify-center p-4">
+          <ModalOverlay className="fixed inset-0 z-modal bg-black/40 flex items-center justify-center p-4">
             <div className="flex max-h-[70vh] w-full max-w-md flex-col overflow-hidden rounded-2xl bg-white shadow-2xl dark:bg-slate-900">
               <Suspense fallback={panelFallback}>
                 <PainelRevisoes
@@ -2109,7 +2110,7 @@ export default function EscalasDetalheView() {
                 />
               </Suspense>
             </div>
-          </div>
+          </ModalOverlay>
         )}
       </div>
     </AppLayout>

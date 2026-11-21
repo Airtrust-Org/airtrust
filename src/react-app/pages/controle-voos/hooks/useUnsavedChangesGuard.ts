@@ -30,6 +30,8 @@ export function useUnsavedChangesGuard(
         navigate(to);
         return true;
       }
+      // Navegação síncrona: o retorno booleano precisa ser conhecido na hora.
+      // eslint-disable-next-line no-alert
       const ok = window.confirm(message);
       if (ok) navigate(to);
       return ok;
@@ -41,6 +43,8 @@ export function useUnsavedChangesGuard(
   useEffect(() => {
     if (!when) return;
     const onPopState = () => {
+      // popstate não pode ser adiado: o histórico já mudou quando o evento dispara.
+      // eslint-disable-next-line no-alert
       if (!window.confirm(message)) {
         window.history.pushState(null, '', window.location.href);
       }

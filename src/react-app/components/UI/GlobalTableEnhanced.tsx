@@ -468,7 +468,7 @@ export const GlobalTableEnhanced: React.FC<GlobalTablePropsEnhanced> = ({
           >
             <tr>
               {displayColumns.map((col) => (
-                <th
+                <th scope="col"
                   key={col.key}
                   draggable={enableColumnReorder && col.sortable !== false}
                   onDragStart={(e) => handleColumnDragStart(e, col.key)}
@@ -537,7 +537,7 @@ export const GlobalTableEnhanced: React.FC<GlobalTablePropsEnhanced> = ({
                   : { background: '', border: '' };
 
                 return (
-                  <tr
+                  <tr tabIndex={0} onKeyDown={(e) => { if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); e.currentTarget.click(); } }}
                     key={String(item[idKey] || index)}
                     onClick={() => onRowClick?.(item)}
                     className={`

@@ -18,6 +18,7 @@ import {
   type QuinzenaEscala,
   type SituacaoTipo,
 } from '../../hooks/queries/useEscalasQuery';
+import { confirmDialog } from '@/react-app/utils/confirmDialog';
 
 const TIPOS_SITUACAO_PADRAO: SituacaoTipo[] = [
   {
@@ -451,7 +452,7 @@ export default function ModalNovaSituacao({
 
   async function handleRemover() {
     if (!situacaoInicial?.id) return;
-    if (!window.confirm('Remover esta situação da escala?')) return;
+    if (!(await confirmDialog('Remover esta situação da escala?', { confirmText: 'Remover' }))) return;
 
     try {
       await removerSituacao.mutateAsync(situacaoInicial.id);
@@ -554,7 +555,7 @@ export default function ModalNovaSituacao({
                 {quinzenaFixaTripulante && (
                   <div className="flex flex-wrap items-center gap-2">
                     <span
-                      className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${getQuinzenaBadgeClasses(quinzenaFixaTripulante.numero)}`}
+                      className={`rounded-full px-2 py-0.5 text-xs font-semibold ${getQuinzenaBadgeClasses(quinzenaFixaTripulante.numero)}`}
                     >
                       {getQuinzenaShortLabel(quinzenaFixaTripulante.numero) || 'Quinzena fixa'}
                     </span>
@@ -591,7 +592,7 @@ export default function ModalNovaSituacao({
                     className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900"
                   />
                   {dataInicio && (
-                    <span className="mt-1 block px-1 text-[11px] font-medium text-slate-500">
+                    <span className="mt-1 block px-1 text-xs font-medium text-slate-500">
                       {fmtDateShort(dataInicio)}
                     </span>
                   )}
@@ -609,7 +610,7 @@ export default function ModalNovaSituacao({
                     className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900"
                   />
                   {dataFim && (
-                    <span className="mt-1 block px-1 text-[11px] font-medium text-slate-500">
+                    <span className="mt-1 block px-1 text-xs font-medium text-slate-500">
                       {fmtDateShort(dataFim)}
                     </span>
                   )}
@@ -624,10 +625,10 @@ export default function ModalNovaSituacao({
             </div>
 
             <div className="rounded-2xl border border-slate-200 bg-white p-4">
-              <label className="mb-2 block text-xs font-semibold uppercase tracking-wide text-slate-500">
+              <label htmlFor="modalnovasituacao-observacao" className="mb-2 block text-xs font-semibold uppercase tracking-wide text-slate-500">
                 Observação
               </label>
-              <textarea
+              <textarea id="modalnovasituacao-observacao" aria-label="Observação"
                 value={observacoes}
                 onChange={(event) => setObservacoes(event.target.value)}
                 rows={4}
@@ -641,13 +642,13 @@ export default function ModalNovaSituacao({
             {funcionarioId && (
               <div className="rounded-2xl border border-sky-200 bg-sky-50 p-4">
                 <div className="mb-3 flex items-center justify-between gap-3">
-                  <p className="text-[10px] font-semibold uppercase tracking-wide text-sky-600">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-sky-600">
                     Tripulante selecionado
                   </p>
                   <button
                     type="button"
                     onClick={() => setMostrarSeletorTripulante((value) => !value)}
-                    className="rounded-lg border border-sky-200 bg-white px-2.5 py-1 text-[11px] font-semibold text-sky-700 hover:bg-sky-100"
+                    className="rounded-lg border border-sky-200 bg-white px-2.5 py-1 text-xs font-semibold text-sky-700 hover:bg-sky-100"
                   >
                     {mostrarSeletorTripulante ? 'Ocultar lista' : 'Trocar tripulante'}
                   </button>
@@ -668,19 +669,19 @@ export default function ModalNovaSituacao({
                       {quinzenaFixaTripulante && (
                         <div className="mt-2 flex flex-wrap items-center gap-2">
                           <span
-                            className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${getQuinzenaBadgeClasses(quinzenaFixaTripulante.numero)}`}
+                            className={`rounded-full px-2 py-0.5 text-xs font-semibold ${getQuinzenaBadgeClasses(quinzenaFixaTripulante.numero)}`}
                           >
                             {getQuinzenaShortLabel(quinzenaFixaTripulante.numero) ||
                               'Quinzena fixa'}
                           </span>
-                          <span className="text-[11px] text-slate-500">
+                          <span className="text-xs text-slate-500">
                             Base sugerida: {fmtDateShort(quinzenaFixaTripulante.data_inicio)} →{' '}
                             {fmtDateShort(quinzenaFixaTripulante.data_fim)}
                           </span>
                         </div>
                       )}
                     </div>
-                    <span className="shrink-0 rounded-full bg-sky-100 px-2 py-0.5 text-[10px] font-semibold text-sky-700">
+                    <span className="shrink-0 rounded-full bg-sky-100 px-2 py-0.5 text-xs font-semibold text-sky-700">
                       {tripulanteEmFoco.role || '—'}
                     </span>
                   </div>
@@ -697,7 +698,7 @@ export default function ModalNovaSituacao({
               </label>
               {mostrarSeletorTripulante && (
                 <>
-                  <input
+                  <input aria-label="Busca por nome ou matrícula..."
                     type="text"
                     value={busca}
                     onChange={(event) => setBusca(event.target.value)}
@@ -739,14 +740,14 @@ export default function ModalNovaSituacao({
                               </div>
                             </div>
                             <span
-                              className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${selecionado ? 'bg-white/15 text-white' : indisponivel ? 'bg-red-50 text-red-700' : 'bg-emerald-50 text-emerald-700'}`}
+                              className={`rounded-full px-2 py-0.5 text-xs font-semibold ${selecionado ? 'bg-white/15 text-white' : indisponivel ? 'bg-red-50 text-red-700' : 'bg-emerald-50 text-emerald-700'}`}
                             >
                               {indisponivel ? 'Indisponível' : 'Disponível'}
                             </span>
                           </div>
                           {tripulante.motivo_bloqueio && (
                             <div
-                              className={`mt-1 text-[11px] ${selecionado ? 'text-white/80' : 'text-slate-500'}`}
+                              className={`mt-1 text-xs ${selecionado ? 'text-white/80' : 'text-slate-500'}`}
                             >
                               {tripulante.motivo_bloqueio}
                             </div>

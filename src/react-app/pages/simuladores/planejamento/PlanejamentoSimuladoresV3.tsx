@@ -985,6 +985,7 @@ export default function PlanejamentoSimuladoresV3() {
       setExporting(true);
       const { jsPDF } = await import('jspdf');
       const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+      doc.setLanguage?.('pt-BR');
       const pageWidth = doc.internal.pageSize.getWidth();
       const pageHeight = doc.internal.pageSize.getHeight();
       const margin = 12;
@@ -1331,7 +1332,7 @@ export default function PlanejamentoSimuladoresV3() {
             </div>
           </label>
           <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 dark:border-slate-800 dark:bg-slate-900/50">
-            <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+            <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">
               Regra da empresa
             </div>
             <div className="mt-1 text-sm font-medium text-slate-800 dark:text-slate-100">
@@ -1766,13 +1767,13 @@ export default function PlanejamentoSimuladoresV3() {
                                   </div>
                                   <div className="mt-0.5 text-xs text-slate-600 dark:text-slate-300">
                                     {session.session_name} · {session.session_code}
-                                    <span className="block text-[11px] text-slate-500">
+                                    <span className="block text-xs text-slate-500">
                                       Obrigação individual:{' '}
                                       {session.training_program_name || session.qualification_name}
                                     </span>
                                   </div>
                                   {sessionCoverageLabel(session) && (
-                                    <div className="mt-1 inline-flex rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-semibold text-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-300">
+                                    <div className="mt-1 inline-flex rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-semibold text-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-300">
                                       {sessionCoverageLabel(session)}
                                     </div>
                                   )}
@@ -1822,7 +1823,7 @@ export default function PlanejamentoSimuladoresV3() {
                                   </option>
                                 ))}
                             </select>
-                            <span className="text-[11px] text-slate-500">
+                            <span className="text-xs text-slate-500">
                               A escala e a disponibilidade dos dois pilotos serão validadas na confirmação.
                             </span>
                           </label>
@@ -1930,7 +1931,7 @@ export default function PlanejamentoSimuladoresV3() {
                       {alternative.label}
                     </div>
                     {alternative.recommended && (
-                      <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold uppercase text-emerald-800">
+                      <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-bold uppercase text-emerald-800">
                         Recomendado
                       </span>
                     )}

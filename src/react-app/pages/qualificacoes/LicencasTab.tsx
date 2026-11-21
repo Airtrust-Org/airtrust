@@ -218,7 +218,7 @@ export function LicencasTab() {
           <div className="flex-1">
             <div className="relative">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-text-light" />
-              <input
+              <input aria-label="Buscar por número, funcionário ou tipo..."
                 type="text"
                 placeholder="Buscar por número, funcionário ou tipo..."
                 value={filtros.busca}

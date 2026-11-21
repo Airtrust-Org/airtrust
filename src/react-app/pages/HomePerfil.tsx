@@ -339,15 +339,15 @@ export default function HomePerfil({ homeProfile, funcionarioContext = null }: H
               </p>
               <div className="mt-3 grid gap-3 sm:grid-cols-3">
                 <div>
-                  <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Setor</p>
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Setor</p>
                   <p className="mt-1 text-sm font-medium text-slate-700">{funcionarioContext.setor || '-'}</p>
                 </div>
                 <div>
-                  <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Funcao</p>
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Funcao</p>
                   <p className="mt-1 text-sm font-medium text-slate-700">{funcionarioContext.funcao || '-'}</p>
                 </div>
                 <div>
-                  <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Cargo</p>
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Cargo</p>
                   <p className="mt-1 text-sm font-medium text-slate-700">{funcionarioContext.cargo || '-'}</p>
                 </div>
               </div>

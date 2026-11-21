@@ -50,6 +50,7 @@
     "zustand": "^5.0.11"
   },
   "devDependencies": {
+    "@axe-core/playwright": "^4.10.2",
     "@cloudflare/vite-plugin": "^1.12.0",
     "@eslint/js": "9.25.1",
     "@getmocha/vite-plugins": "^3.0.13",
@@ -73,6 +74,7 @@
     "concurrently": "^9.2.1",
     "esbuild": "^0.28.2",
     "eslint": "^9.39.1",
+    "eslint-plugin-jsx-a11y": "^6.10.2",
     "eslint-plugin-react-hooks": "5.2.0",
     "eslint-plugin-react-refresh": "0.4.19",
     "globals": "17.14.0",
@@ -135,6 +137,7 @@
     "test:all": "npm run test:run && npm run test:worker",
     "test:coverage": "vitest run --coverage",
     "test:e2e": "playwright test",
+    "test:e2e:a11y": "playwright test -c playwright.a11y.config.ts",
     "test:e2e:lms-exam": "playwright test --config=e2e/ci/lms-exam/lms-exam-browser.config.ts",
     "test:e2e:ui": "playwright test --ui",
     "test:e2e:headed": "playwright test --headed",

@@ -4,6 +4,7 @@ import { toast } from 'sonner';
 import { API_BASE_URL, getAccessToken } from '@/react-app/config/api';
 import { FileText, Download, Eye, Trash2, Calendar, AlertCircle } from 'lucide-react';
 import { previewPdfBeforeDownload } from '@/react-app/utils/pdfPreview';
+import { ModalOverlay } from '@/react-app/components/modals/ModalOverlay';
 
 interface Certificado {
   id: number;
@@ -241,7 +242,7 @@ export default function AbaCertificados({ funcionarioId }: AbaCertificadosProps)
 
       {/* Modal de Confirmação de Delete */}
       {showConfirmDelete && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+        <ModalOverlay className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-lg shadow-lg max-w-sm w-full p-6">
             <div className="flex items-center gap-3 mb-4">
               <AlertCircle className="h-6 w-6 text-red-600" />
@@ -277,7 +278,7 @@ export default function AbaCertificados({ funcionarioId }: AbaCertificadosProps)
               </button>
             </div>
           </div>
-        </div>
+        </ModalOverlay>
       )}
     </div>
   );

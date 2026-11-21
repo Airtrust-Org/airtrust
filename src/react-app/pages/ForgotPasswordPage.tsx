@@ -89,7 +89,7 @@ export default function ForgotPasswordPage() {
                 <span className="mb-1.5 block text-sm font-medium">E-mail</span>
                 <span className="flex min-h-11 items-center gap-2 rounded-lg border border-[var(--at-border-strong)] bg-[var(--at-bg-field)] px-3 focus-within:ring-2 focus-within:ring-[var(--at-focus)]">
                   <Mail className="h-4 w-4 text-[var(--at-text-subtle)]" aria-hidden="true" />
-                  <input
+                  <input aria-label="seu@email.com"
                     type="email"
                     value={email}
                     onChange={(event) => setEmail(event.target.value)}

@@ -310,7 +310,7 @@ export default function ModalAdicionarTripulacao({
 
   useEffect(() => {
     if (!alocacaoSelecionada) return;
-    setFuncao(alocacaoSelecionada.funcao);
+    if (alocacaoSelecionada.funcao) setFuncao(alocacaoSelecionada.funcao);
     setDataInicio(alocacaoSelecionada.data_inicio);
     setDataFim(alocacaoSelecionada.data_fim);
     setObservacoes(alocacaoSelecionada.observacoes || '');
@@ -1136,7 +1136,7 @@ export default function ModalAdicionarTripulacao({
                     <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">
                       Slots da aeronave
                     </div>
-                    <span className="rounded-full border border-sky-200 bg-sky-50 px-3 py-1 text-[11px] font-semibold text-sky-700">
+                    <span className="rounded-full border border-sky-200 bg-sky-50 px-3 py-1 text-xs font-semibold text-sky-700">
                       {slotsPreparados}/{slotsGerenciaisOrdenados.length} preparados
                     </span>
                   </div>
@@ -1165,11 +1165,11 @@ export default function ModalAdicionarTripulacao({
                           className={`rounded-xl border px-3 py-2 text-left transition-colors ${ativo ? funcaoToken.selectedCardClassName : draft ? 'border-sky-300 bg-sky-50 text-slate-800 hover:bg-sky-100' : slot.atual ? 'border-emerald-200 bg-emerald-50 text-slate-800 hover:bg-emerald-100' : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'}`}
                         >
                           <div className="flex items-center gap-2">
-                            <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-700">
+                            <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-700">
                               {slot.quinzena.numero}Q
                             </span>
                             <span
-                              className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${ativo ? 'bg-white/15 text-white' : funcaoToken.badgeClassName}`}
+                              className={`rounded-full px-2 py-0.5 text-xs font-semibold ${ativo ? 'bg-white/15 text-white' : funcaoToken.badgeClassName}`}
                             >
                               {slot.funcao}
                             </span>
@@ -1181,25 +1181,25 @@ export default function ModalAdicionarTripulacao({
                           </div>
                           {draft && (
                             <div
-                              className={`mt-1 text-[11px] ${ativo ? funcaoToken.selectedMutedTextClassName : 'text-sky-700'}`}
+                              className={`mt-1 text-xs ${ativo ? funcaoToken.selectedMutedTextClassName : 'text-sky-700'}`}
                             >
                               Pré-salvo aguardando gravação
                             </div>
                           )}
                           {!draft && !slot.atual && (
-                            <div className="mt-1 text-[11px] text-slate-500">
+                            <div className="mt-1 text-xs text-slate-500">
                               Clique para preencher este slot
                             </div>
                           )}
                           {slot.atual && !draft && (
                             <div
-                              className={`mt-1 text-[11px] ${ativo ? funcaoToken.selectedMutedTextClassName : 'text-emerald-700'}`}
+                              className={`mt-1 text-xs ${ativo ? funcaoToken.selectedMutedTextClassName : 'text-emerald-700'}`}
                             >
                               Já gravado. Clique para trocar o tripulante
                             </div>
                           )}
                           <div
-                            className={`mt-1 text-[11px] ${ativo ? 'text-slate-200' : 'text-slate-500'}`}
+                            className={`mt-1 text-xs ${ativo ? 'text-slate-200' : 'text-slate-500'}`}
                           >
                             {fmtDateRange(slot.quinzena.data_inicio, slot.quinzena.data_fim)}
                           </div>
@@ -1261,7 +1261,7 @@ export default function ModalAdicionarTripulacao({
                           className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900"
                         />
                         {dataInicio && (
-                          <span className="mt-1 block px-1 text-[11px] font-medium text-slate-500">
+                          <span className="mt-1 block px-1 text-xs font-medium text-slate-500">
                             {fmtDateShort(dataInicio)}
                           </span>
                         )}
@@ -1277,7 +1277,7 @@ export default function ModalAdicionarTripulacao({
                           className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900"
                         />
                         {dataFim && (
-                          <span className="mt-1 block px-1 text-[11px] font-medium text-slate-500">
+                          <span className="mt-1 block px-1 text-xs font-medium text-slate-500">
                             {fmtDateShort(dataFim)}
                           </span>
                         )}
@@ -1326,7 +1326,7 @@ export default function ModalAdicionarTripulacao({
                             </div>
                           </div>
                           <span
-                            className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${ativo ? 'bg-white/15 text-white' : funcaoToken.badgeClassName}`}
+                            className={`rounded-full px-2 py-0.5 text-xs font-semibold ${ativo ? 'bg-white/15 text-white' : funcaoToken.badgeClassName}`}
                           >
                             {slot.funcao}
                           </span>
@@ -1381,10 +1381,10 @@ export default function ModalAdicionarTripulacao({
           )}
 
           <div className="rounded-2xl border border-slate-200 bg-white p-4">
-            <label className="mb-2 block text-xs font-semibold uppercase tracking-wide text-slate-500">
+            <label htmlFor="modaladicionartripulacao-observacao-operacional" className="mb-2 block text-xs font-semibold uppercase tracking-wide text-slate-500">
               Observação operacional
             </label>
-            <textarea
+            <textarea id="modaladicionartripulacao-observacao-operacional" aria-label="Observação operacional"
               value={observacoes}
               onChange={(event) => setObservacoes(event.target.value)}
               rows={modoGestaoAeronave ? 2 : 3}
@@ -1463,7 +1463,7 @@ export default function ModalAdicionarTripulacao({
                       </div>
                     </div>
                     <span
-                      className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${funcaoVisual.badgeClassName}`}
+                      className={`rounded-full px-2 py-0.5 text-xs font-semibold ${funcaoVisual.badgeClassName}`}
                     >
                       {tripulanteSelecionado.role || 'Tripulante'}
                     </span>
@@ -1473,7 +1473,7 @@ export default function ModalAdicionarTripulacao({
                     <div className="flex flex-wrap items-center gap-2">
                       <span
                         className={cn(
-                          'rounded-full px-2 py-0.5 text-[10px] font-semibold',
+                          'rounded-full px-2 py-0.5 text-xs font-semibold',
                           getQuinzenaBadgeClasses(quinzenaSelecionada?.numero || null),
                         )}
                       >
@@ -1492,7 +1492,7 @@ export default function ModalAdicionarTripulacao({
                       {tripulanteSelecionado.habilitacoes.map((habilitacao) => (
                         <span
                           key={`${habilitacao.modelo_id}-${habilitacao.modelo_codigo}`}
-                          className="rounded-full bg-slate-200 px-2 py-1 text-[11px] font-semibold text-slate-700"
+                          className="rounded-full bg-slate-200 px-2 py-1 text-xs font-semibold text-slate-700"
                         >
                           {habilitacao.modelo_codigo}
                         </span>
@@ -1636,14 +1636,14 @@ export default function ModalAdicionarTripulacao({
                               {tripulante.nome_guerra || tripulante.nome}
                             </div>
                             <span
-                              className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${selecionado ? 'bg-white/15 text-white' : funcaoVisual.badgeClassName}`}
+                              className={`rounded-full px-2 py-0.5 text-xs font-semibold ${selecionado ? 'bg-white/15 text-white' : funcaoVisual.badgeClassName}`}
                             >
                               {tripulante.role}
                             </span>
                           </div>
                           {tripulante.nome_guerra && (
                             <div
-                              className={`text-[11px] ${selecionado ? funcaoVisual.selectedMutedTextClassName : 'text-slate-400'}`}
+                              className={`text-xs ${selecionado ? funcaoVisual.selectedMutedTextClassName : 'text-slate-400'}`}
                             >
                               {tripulante.nome}
                             </div>
@@ -1652,18 +1652,18 @@ export default function ModalAdicionarTripulacao({
                         <div className="flex flex-wrap justify-end gap-1">
                           {tripulante.cma_valido ? (
                             <span
-                              className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${selecionado ? 'bg-white/15 text-white' : 'bg-emerald-50 text-emerald-700'}`}
+                              className={`rounded-full px-2 py-0.5 text-xs font-semibold ${selecionado ? 'bg-white/15 text-white' : 'bg-emerald-50 text-emerald-700'}`}
                             >
                               CMA ok
                             </span>
                           ) : (
-                            <span className="rounded-full bg-red-50 px-2 py-0.5 text-[11px] font-semibold text-red-700">
+                            <span className="rounded-full bg-red-50 px-2 py-0.5 text-xs font-semibold text-red-700">
                               CMA vencida
                             </span>
                           )}
                           {tripulante.frms_status && (
                             <span
-                              className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${selecionado ? 'bg-white/15 text-white' : tripulante.frms_status === 'critico' ? 'bg-red-50 text-red-700' : tripulante.frms_status === 'atencao' ? 'bg-amber-50 text-amber-700' : 'bg-slate-100 text-slate-600'}`}
+                              className={`rounded-full px-2 py-0.5 text-xs font-semibold ${selecionado ? 'bg-white/15 text-white' : tripulante.frms_status === 'critico' ? 'bg-red-50 text-red-700' : tripulante.frms_status === 'atencao' ? 'bg-amber-50 text-amber-700' : 'bg-slate-100 text-slate-600'}`}
                             >
                               Indicador FRMS legado {tripulante.frms_score ?? '—'}
                             </span>

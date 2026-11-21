@@ -113,10 +113,10 @@ export default function FormSimulador() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               {/* Nome */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                <label htmlFor="formulariosimulador-nome-do-simulador" className="block text-sm font-medium text-gray-700 mb-2">
                   Nome do Simulador *
                 </label>
-                <input
+                <input id="formulariosimulador-nome-do-simulador" aria-label="Nome do Simulador"
                   type="text"
                   value={dados.nome}
                   onChange={(e) => setDados({ ...dados, nome: e.target.value })}
@@ -128,8 +128,8 @@ export default function FormSimulador() {
 
               {/* Modelo */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Modelo *</label>
-                <input
+                <label htmlFor="formulariosimulador-modelo" className="block text-sm font-medium text-gray-700 mb-2">Modelo *</label>
+                <input id="formulariosimulador-modelo" aria-label="Modelo"
                   type="text"
                   value={dados.modelo}
                   onChange={(e) => setDados({ ...dados, modelo: e.target.value })}
@@ -141,8 +141,8 @@ export default function FormSimulador() {
 
               {/* Tipo */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Tipo *</label>
-                <select
+                <label htmlFor="formulariosimulador-tipo" className="block text-sm font-medium text-gray-700 mb-2">Tipo *</label>
+                <select id="formulariosimulador-tipo" aria-label="Tipo"
                   value={dados.tipo}
                   onChange={(e) => setDados({ ...dados, tipo: e.target.value })}
                   className="w-full  py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-primary"
@@ -155,8 +155,8 @@ export default function FormSimulador() {
 
               {/* Fabricante */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Fabricante</label>
-                <input
+                <label htmlFor="formulariosimulador-fabricante" className="block text-sm font-medium text-gray-700 mb-2">Fabricante</label>
+                <input id="formulariosimulador-fabricante" aria-label="Fabricante"
                   type="text"
                   value={dados.fabricante}
                   onChange={(e) => setDados({ ...dados, fabricante: e.target.value })}
@@ -167,10 +167,10 @@ export default function FormSimulador() {
 
               {/* Localização */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                <label htmlFor="formulariosimulador-localizacao" className="block text-sm font-medium text-gray-700 mb-2">
                   Localização *
                 </label>
-                <input
+                <input id="formulariosimulador-localizacao" aria-label="Localização"
                   type="text"
                   value={dados.localizacao}
                   onChange={(e) => setDados({ ...dados, localizacao: e.target.value })}
@@ -182,10 +182,10 @@ export default function FormSimulador() {
 
               {/* Capacidade */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                <label htmlFor="formulariosimulador-capacidade-alunos" className="block text-sm font-medium text-gray-700 mb-2">
                   Capacidade (alunos) *
                 </label>
-                <input
+                <input id="formulariosimulador-capacidade-alunos" aria-label="Capacidade (alunos)"
                   type="number"
                   min="1"
                   max="10"
@@ -200,8 +200,8 @@ export default function FormSimulador() {
 
               {/* Status */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Status</label>
-                <select
+                <label htmlFor="formulariosimulador-status" className="block text-sm font-medium text-gray-700 mb-2">Status</label>
+                <select id="formulariosimulador-status" aria-label="Status"
                   value={dados.status}
                   onChange={(e) => setDados({ ...dados, status: e.target.value })}
                   className="w-full  py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-primary"
@@ -215,8 +215,8 @@ export default function FormSimulador() {
 
             {/* Observações */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Observações</label>
-              <textarea
+              <label htmlFor="formulariosimulador-observacoes" className="block text-sm font-medium text-gray-700 mb-2">Observações</label>
+              <textarea id="formulariosimulador-observacoes" aria-label="Observações"
                 value={dados.observacoes}
                 onChange={(e) => setDados({ ...dados, observacoes: e.target.value })}
                 rows={4}

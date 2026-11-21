@@ -196,7 +196,7 @@ export default function PastaVirtualGeral() {
             className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400"
             size={20}
           />
-          <input
+          <input aria-label="Buscar arquivos..."
             type="text"
             placeholder="Buscar arquivos..."
             value={filtro}
@@ -244,7 +244,7 @@ export default function PastaVirtualGeral() {
                   <Download size={16} />
                   Baixar
                 </button>
-                <button
+                <button aria-label="Excluir"
                   onClick={() => handleDelete(arquivo)}
                   className="px-3 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700"
                 >

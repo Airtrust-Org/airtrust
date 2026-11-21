@@ -44,7 +44,7 @@ function buildHtml(plain: string): string {
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;');
   const withBreaks = escaped.replace(/\n/g, '<br/>');
-  return `<html><body style="font-family:Arial,sans-serif;font-size:14px;color:#333;line-height:1.6;max-width:600px;margin:0 auto;padding:20px">${withBreaks}</body></html>`;
+  return `<html lang="pt-BR"><body style="font-family:Arial,sans-serif;font-size:14px;color:#333;line-height:1.6;max-width:600px;margin:0 auto;padding:20px">${withBreaks}</body></html>`;
 }
 
 // ---------------------------------------------------------------------------

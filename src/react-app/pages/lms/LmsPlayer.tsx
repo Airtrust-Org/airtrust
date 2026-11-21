@@ -33,6 +33,7 @@ import {
   parseGranularDiagnostic,
   type LmsGranularDiagnostic,
 } from '@/react-app/utils/lmsDiagnosticContract';
+import { confirmDialog } from '@/react-app/utils/confirmDialog';
 
 /**
  * Sanitiza um código/razão de diagnóstico vindo de lms:completion-error.
@@ -1119,9 +1120,7 @@ export default function LmsPlayer() {
 
   async function startVerifiedNewEdition() {
     if (!newEditionRequired || !editionMismatch || !isTenantAdmin || startingNewEdition) return;
-    const confirmed = window.confirm(
-      `Esta é uma reinscrição excepcional, e NÃO a retomada normal. Deseja abrir um novo ciclo auditado? A matrícula anterior manterá seu histórico, mas o progresso (${displayProgress}%) não será creditado automaticamente na nova edição com ${editionMismatch.active_total} unidades.`,
-    );
+    const confirmed = (await confirmDialog(`Esta é uma reinscrição excepcional, e NÃO a retomada normal. Deseja abrir um novo ciclo auditado? A matrícula anterior manterá seu histórico, mas o progresso (${displayProgress}%) não será creditado automaticamente na nova edição com ${editionMismatch.active_total} unidades.`));
     if (!confirmed) return;
     setStartingNewEdition(true);
     try {
@@ -1146,11 +1145,9 @@ export default function LmsPlayer() {
 
   async function preserveAndResumeActiveEdition() {
     if (startingNewEdition) return;
-    const confirmed = window.confirm(
-      isTenantAdmin
+    const confirmed = (await confirmDialog(isTenantAdmin
         ? 'O histórico será arquivado e as unidades já alcançadas serão reconhecidas na edição atual, preservando o percentual anterior. Notas e aprovações de avaliações não serão transferidas. Continuar?'
-        : 'Este curso foi atualizado. Seu progresso anterior será reconhecido administrativamente; a nova edição abrirá na posição sugerida, sem exigir que você refaça as unidades anteriores. Avaliações e certificados exigirão os requisitos vigentes. Continuar?',
-    );
+        : 'Este curso foi atualizado. Seu progresso anterior será reconhecido administrativamente; a nova edição abrirá na posição sugerida, sem exigir que você refaça as unidades anteriores. Avaliações e certificados exigirão os requisitos vigentes. Continuar?'));
     if (!confirmed) return;
     setStartingNewEdition(true);
     const controller = new AbortController();
@@ -1180,9 +1177,7 @@ export default function LmsPlayer() {
 
   async function recoverMissingScormInteractions() {
     if (!id || recoveringInteractions || newEditionRequired || effectiveReviewMode) return;
-    if (!window.confirm(
-      'O AirTrust verificará o pacote ativo e reabrirá somente os cenários obrigatórios sem resposta registrada. As demais respostas e o histórico serão preservados. Continuar?',
-    )) return;
+    if (!(await confirmDialog('O AirTrust verificará o pacote ativo e reabrirá somente os cenários obrigatórios sem resposta registrada. As demais respostas e o histórico serão preservados. Continuar?'))) return;
     setRecoveringInteractions(true);
     // Unload the prior SCO before changing its persisted cursor. Otherwise
     // its pagehide/beforeunload commit can race and overwrite the just-repaired
@@ -1308,12 +1303,10 @@ export default function LmsPlayer() {
     );
   }
 
-  function handleLeave() {
+  async function handleLeave() {
     const shouldConfirm = !isCompletedState;
     if (shouldConfirm) {
-      const confirmed = window.confirm(
-        'O AirTrust ainda não confirmou a conclusão deste curso. Deseja sair mesmo assim?',
-      );
+      const confirmed = (await confirmDialog('O AirTrust ainda não confirmou a conclusão deste curso. Deseja sair mesmo assim?'));
       if (!confirmed) return;
     }
 
@@ -1532,7 +1525,7 @@ export default function LmsPlayer() {
 
           <div className="min-w-0 flex-1">
             <p className="truncate text-sm font-semibold">{matricula.titulo ?? 'Curso SCORM'}</p>
-            <p className="truncate text-[11px] text-white/60">
+            <p className="truncate text-xs text-white/60">
               {liveLocation || persistedLocation
                 ? `Onde você está: ${liveLocation ?? persistedLocation}`
                 : 'Onde você está: início do curso'}
@@ -1635,7 +1628,7 @@ export default function LmsPlayer() {
           <Eye className="h-4 w-4 text-blue-400 flex-shrink-0" />
           <div>
             <p className="text-xs font-medium text-blue-300">Modo consulta — somente leitura</p>
-            <p className="text-[10px] text-blue-400/70">
+            <p className="text-xs text-blue-400/70">
               {examConsultation
                 ? 'Consulta durante a prova final: esta aba não altera o progresso nem a tentativa.'
                 : 'Você está consultando o treinamento. O progresso não será alterado.'}
@@ -1893,7 +1886,7 @@ export default function LmsPlayer() {
               {completionMessage || 'Conclusão recebida, mas ainda não confirmada pelo servidor.'}
             </div>
             {completionState === 'error' && completionErrorInfo?.code ? (
-              <div className="mb-2 font-mono text-[10px] uppercase tracking-wide text-amber-200/80">
+              <div className="mb-2 font-mono text-xs uppercase tracking-wide text-amber-200/80">
                 Código de diagnóstico: {completionErrorInfo.code}
                 {completionErrorInfo.reason && completionErrorInfo.reason !== completionErrorInfo.code
                   ? ` · ${completionErrorInfo.reason}`

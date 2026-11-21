@@ -94,7 +94,7 @@ export default function AceitarConvite() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
+    <main className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
       <div className="w-full max-w-md bg-white border border-slate-200 rounded-2xl shadow-sm p-6">
         <div className="flex justify-center mb-6">
           <img src={logoSrc} alt={settings.appName || 'AirTrust'} className="h-10 object-contain" />
@@ -162,6 +162,6 @@ export default function AceitarConvite() {
           </>
         )}
       </div>
-    </div>
+    </main>
   );
 }
