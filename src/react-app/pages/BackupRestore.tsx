@@ -443,7 +443,7 @@ const BackupRestorePage = () => {
         {/* PAINEL IMPORTAÇÃO */}
         <PageSection title="Importar Dados" icon={<Upload className="text-green-700" />}>
           <div className="border-2 border-dashed border-neutral-300 rounded-lg p-5 text-center hover:border-green-400 hover:bg-green-50 transition-colors">
-            <input
+            <input aria-label="Selecionar arquivo"
               type="file"
               accept=".zip,.json"
               onChange={selecionarArquivo}

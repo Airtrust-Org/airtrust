@@ -324,7 +324,7 @@ export default function LimparDados() {
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   {t('settings.danger.clean.modal.inputLabel')}
                 </label>
-                <input
+                <input aria-label={t('settings.danger.clean.modal.inputPlaceholder')}
                   type="text"
                   value={confirmacao}
                   onChange={(e) => setConfirmacao(e.target.value)}

@@ -300,7 +300,7 @@ export default function ModalFeriasAfastamentoGlobal({ onClose, onSaved }: Props
                   )}
                 </div>
                 <div>
-                  <input
+                  <input aria-label="Data"
                     type="date"
                     value={dataFim}
                     onChange={(event) => {

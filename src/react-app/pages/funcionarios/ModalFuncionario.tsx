@@ -1392,7 +1392,7 @@ export default function ModalFuncionario({
                     <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
                       Vencimento ICAO {formData.nivel_icao === '6' && '(Ilimitada)'}
                     </label>
-                    <input
+                    <input aria-label="Data"
                       type="date"
                       name="validade_icao"
                       value={formData.validade_icao}
@@ -1433,7 +1433,7 @@ export default function ModalFuncionario({
                     <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
                       Vencimento CMA ({cmaRegraVencimentoLabel})
                     </label>
-                    <input
+                    <input aria-label="Data"
                       type="date"
                       name="validade_cma"
                       value={formData.validade_cma}

@@ -194,7 +194,7 @@ export default function CadernetaHorasVoo({ funcionarioId, funcionarioNome, canE
                   <Clock3 className="w-4 h-4" /> Lancamentos
                 </h4>
                 <div className="flex gap-2">
-                  <input
+                  <input aria-label="Data de início dos lançamentos"
                     type="date"
                     className="border rounded px-2 py-1 text-sm"
                     value={String(filters.data_inicio || '')}
@@ -206,7 +206,7 @@ export default function CadernetaHorasVoo({ funcionarioId, funcionarioNome, canE
                       }))
                     }
                   />
-                  <input
+                  <input aria-label="Data final dos lançamentos"
                     type="date"
                     className="border rounded px-2 py-1 text-sm"
                     value={String(filters.data_fim || '')}

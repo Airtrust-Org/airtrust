@@ -404,14 +404,14 @@ export default function FrmsRelatorios() {
           ) : tipo === 'alertas-historico' ? (
             <div className="flex flex-wrap items-center gap-4">
               <span className="text-xs font-medium text-gray-500">Período:</span>
-              <input
+              <input aria-label="Data inicial do período"
                 type="date"
                 value={periodoInicio}
                 onChange={(e) => setPeriodoInicio(e.target.value)}
                 className="rounded-lg border border-gray-200 px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
               />
               <span className="text-gray-400">até</span>
-              <input
+              <input aria-label="Data final do período"
                 type="date"
                 value={periodoFim}
                 onChange={(e) => setPeriodoFim(e.target.value)}

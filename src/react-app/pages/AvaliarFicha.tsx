@@ -384,6 +384,7 @@ const AvaliarFicha: React.FC = () => {
                         className="flex-1 h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-600"
                       />
                       <input
+                        aria-label="Pontuação da manobra"
                         type="number"
                         min="0"
                         max="10"

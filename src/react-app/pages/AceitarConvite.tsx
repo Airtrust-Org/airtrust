@@ -122,7 +122,7 @@ export default function AceitarConvite() {
                 <label className="block text-sm text-slate-700 mb-1">
                   {t('invite.createPassword.newPassword')}
                 </label>
-                <input
+                <input aria-label={t('invite.createPassword.placeholder.password')}
                   type="password"
                   value={senha}
                   onChange={(e) => setSenha(e.target.value)}
@@ -136,7 +136,7 @@ export default function AceitarConvite() {
                 <label className="block text-sm text-slate-700 mb-1">
                   {t('invite.createPassword.confirmPassword')}
                 </label>
-                <input
+                <input aria-label={t('invite.createPassword.placeholder.confirm')}
                   type="password"
                   value={confirmarSenha}
                   onChange={(e) => setConfirmarSenha(e.target.value)}

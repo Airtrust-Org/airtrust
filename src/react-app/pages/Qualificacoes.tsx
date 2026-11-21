@@ -2063,7 +2063,9 @@ export default function Qualificacoes() {
                   className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400"
                   size={14}
                 />
-                <input
+                <input aria-label={activeTab === 'tipos'
+                      ? 'Buscar modelos...'
+                      : 'Buscar por nome, código, qualificação...'}
                   type="text"
                   placeholder={
                     activeTab === 'tipos'

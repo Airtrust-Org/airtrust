@@ -509,7 +509,7 @@ export default function ImportacaoPage() {
               onDrop={handleDrop}
               onClick={() => inputRef.current?.click()}
             >
-              <input
+              <input aria-label="Selecionar arquivo"
                 ref={inputRef}
                 type="file"
                 accept=".csv,.xlsx,.xls"

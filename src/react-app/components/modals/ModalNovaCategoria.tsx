@@ -117,6 +117,7 @@ export function ModalNovaCategoria({ isOpen, onClose, onSave, categoria }: Props
                 className="w-12 h-10 border border-gray-300 rounded-lg cursor-pointer"
               />
               <input
+                aria-label="Cor (código hexadecimal)"
                 type="text"
                 value={form.cor}
                 onChange={(e) => setForm({ ...form, cor: e.target.value })}

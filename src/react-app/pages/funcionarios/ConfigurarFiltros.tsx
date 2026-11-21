@@ -185,7 +185,7 @@ export default function ConfigurarFiltros({
                 )}
 
                 {config.tipo === 'text' && (
-                  <input
+                  <input aria-label={config.label}
                     type="text"
                     placeholder={config.label}
                     value={valores[filtroId] || ''}
@@ -195,7 +195,7 @@ export default function ConfigurarFiltros({
                 )}
 
                 {config.tipo === 'date' && (
-                  <input
+                  <input aria-label="Data"
                     type="date"
                     value={valores[filtroId] || ''}
                     onChange={(e) => handleValorChange(filtroId, e.target.value)}

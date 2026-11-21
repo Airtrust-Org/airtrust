@@ -1526,7 +1526,7 @@ export default function FichaDetalhe() {
                         </p>
                       )}
                       {!confirmed && evaluator && (
-                        <input
+                        <input aria-label="Observações"
                           type="text"
                           value={checksResultados[check.id]?.observacoes || ''}
                           onChange={(e) =>
@@ -1610,7 +1610,7 @@ export default function FichaDetalhe() {
                 <div>
                   <p className="text-xs text-slate-500 uppercase">Modelo</p>
                   {isEditMode && specialDefinition?.kind === 'instructor' ? (
-                    <input
+                    <input aria-label="Modelo"
                       value={ficha.equipamento_utilizado || ''}
                       onChange={(e) =>
                         setFicha((prev) =>
@@ -1657,7 +1657,7 @@ export default function FichaDetalhe() {
                       <div>
                         <p className="text-xs uppercase text-slate-500">Dispositivo/Matrícula</p>
                         {isEditMode ? (
-                          <input
+                          <input aria-label="Dispositivo/Matrícula"
                             value={ficha.dispositivo_identificacao || ''}
                             onChange={(e) =>
                               setFicha((prev) =>
@@ -1677,7 +1677,7 @@ export default function FichaDetalhe() {
                       <div>
                         <p className="text-xs uppercase text-slate-500">Assento de Instrução</p>
                         {isEditMode ? (
-                          <select
+                          <select aria-label="Assento de Instrução"
                             value={ficha.assento_instrucao_utilizado || ''}
                             onChange={(e) =>
                               setFicha((prev) =>

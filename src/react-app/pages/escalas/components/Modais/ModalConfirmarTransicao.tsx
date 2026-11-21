@@ -173,7 +173,7 @@ export default function ModalConfirmarTransicao({ tipo, escalaLabel, onConfirmar
               {cfg.justificativaLabel || 'Observação'}{' '}
               <span className="normal-case font-normal text-slate-400">(opcional)</span>
             </label>
-            <textarea
+            <textarea aria-label="Observação (opcional)"
               value={justificativa}
               onChange={(e) => setJustificativa(e.target.value)}
               rows={3}

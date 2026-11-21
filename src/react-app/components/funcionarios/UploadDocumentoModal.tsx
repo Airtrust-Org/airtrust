@@ -364,7 +364,7 @@ export default function UploadDocumentoModal({
                 <span className="font-normal text-slate-400">(opcional)</span>
               )}
             </label>
-            <input
+            <input aria-label="Data do documento / realização"
               type="date"
               value={dataRealizacao}
               onChange={(e) => setDataRealizacao(e.target.value)}

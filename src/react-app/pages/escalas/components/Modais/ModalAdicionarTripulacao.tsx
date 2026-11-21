@@ -1251,7 +1251,7 @@ export default function ModalAdicionarTripulacao({
                     </div>
                     <div className="grid gap-3 grid-cols-2">
                       <div>
-                        <input
+                        <input aria-label="Data"
                           type="date"
                           value={dataInicio}
                           onChange={(event) => {
@@ -1267,7 +1267,7 @@ export default function ModalAdicionarTripulacao({
                         )}
                       </div>
                       <div>
-                        <input
+                        <input aria-label="Data"
                           type="date"
                           value={dataFim}
                           onChange={(event) => {

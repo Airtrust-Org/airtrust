@@ -1206,7 +1206,7 @@ export default function EvdPage() {
                 <p className="text-xs font-medium text-slate-500">
                   {isDPlusOne ? 'Planejamento D+1' : 'Data selecionada manualmente'}
                 </p>
-                <input
+                <input aria-label="Data"
                   type="date"
                   value={data}
                   onChange={(e) => setData(e.target.value)}

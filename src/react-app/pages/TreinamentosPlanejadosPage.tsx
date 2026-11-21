@@ -1921,7 +1921,7 @@ export default function TreinamentosPlanejadosPage({
 
         {/* Filters bar — same inline format as Histórico */}
         <div className="flex flex-wrap items-center gap-2">
-          <input
+          <input aria-label="Mês"
             type="month"
             value={mesReferencia}
             onChange={(event) => setMesReferencia(event.target.value)}
@@ -1942,6 +1942,7 @@ export default function TreinamentosPlanejadosPage({
             />
           ) : null}
           <select
+            aria-label="Filtrar por status"
             value={statusFiltro}
             onChange={(event) => {
               setStatusFiltro(event.target.value);

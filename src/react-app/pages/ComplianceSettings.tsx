@@ -337,7 +337,7 @@ export function ComplianceSettings() {
                     ? '👤 ID do Funcionário'
                     : '📋 ID do Tipo de Qualificação'}
                 </label>
-                <input
+                <input aria-label={scope === 'funcionario' ? 'Digite o ID do funcionário' : 'Digite o ID do tipo'}
                   type="number"
                   value={entityId}
                   onChange={(e) => setEntityId(e.target.value)}
@@ -595,7 +595,7 @@ export function ComplianceSettings() {
                       {requisitoForm.tipo_recurso === 'curso_lms' && '(ID do curso LMS)'}
                     </span>
                   </label>
-                  <input
+                  <input aria-label={requisitoForm.tipo_recurso === 'curso_lms' ? 'Ex: 42' : 'Ex: ATP, IFR...'}
                     type="text"
                     value={requisitoForm.referencia}
                     onChange={(e) =>

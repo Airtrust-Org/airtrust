@@ -106,7 +106,7 @@ export const ImportarUniversal: React.FC<ImportarUniversalProps> = ({
             Importar CSV
           </>
         )}
-        <input
+        <input aria-label="Selecionar arquivo"
           type="file"
           accept=".csv"
           onChange={handleFileSelect}

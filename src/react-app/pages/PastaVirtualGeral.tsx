@@ -180,7 +180,7 @@ export default function PastaVirtualGeral() {
               Upload Arquivo(s)
             </>
           )}
-          <input
+          <input aria-label="Selecionar arquivo"
             type="file"
             multiple
             onChange={handleUpload}

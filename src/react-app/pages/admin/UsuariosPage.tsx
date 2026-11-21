@@ -2224,7 +2224,7 @@ function ModalLinkConvite({
         </p>
 
         <div className="flex gap-2">
-          <input
+          <input aria-label="Link de convite"
             type="text"
             value={link}
             readOnly

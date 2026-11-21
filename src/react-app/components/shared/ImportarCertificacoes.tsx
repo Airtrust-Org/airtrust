@@ -380,7 +380,7 @@ export default function ImportarCertificacoes({
           <Button variant="primary" onClick={() => fileInputRef.current?.click()} className="mb-4">
             Selecionar Arquivo CSV
           </Button>
-          <input
+          <input aria-label="Selecionar arquivo"
             ref={fileInputRef}
             type="file"
             accept=".csv"

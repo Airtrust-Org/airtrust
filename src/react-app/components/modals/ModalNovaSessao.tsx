@@ -2349,6 +2349,7 @@ export default function ModalNovaSessao({
                       Tripulante {index + 1}
                     </label>
                     <select
+                      aria-label={`Tripulante ${index + 1}`}
                       value={part.funcionario_id || ''}
                       onChange={(e) =>
                         atualizarParticipante(

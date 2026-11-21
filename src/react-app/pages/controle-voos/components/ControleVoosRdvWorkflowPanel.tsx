@@ -115,7 +115,7 @@ function JustificativaPrompt({
       <label className="block text-xs font-medium text-slate-600 dark:text-slate-300">
         {label}
       </label>
-      <textarea
+      <textarea aria-label={placeholder}
         value={texto}
         onChange={(event) => setTexto(event.target.value)}
         placeholder={placeholder}

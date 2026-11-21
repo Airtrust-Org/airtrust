@@ -730,6 +730,7 @@ export function TrainingEnrollmentReconciliation({ setorId, funcaoId }: Props) {
                     </td>
                     <td className="px-3 py-3">
                       <select
+                        aria-label="Ação para a matrícula"
                         value={actions[row.matricula_id] || ''}
                         onChange={(e) =>
                           setActions((old) => ({ ...old, [row.matricula_id]: e.target.value }))

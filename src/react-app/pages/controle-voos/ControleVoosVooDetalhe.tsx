@@ -528,7 +528,7 @@ export default function ControleVoosVooDetalhe() {
                               <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-md border border-cyan-300 bg-cyan-50 px-2.5 py-1.5 text-xs font-semibold text-cyan-800 hover:bg-cyan-100 dark:border-cyan-800 dark:bg-cyan-950/20 dark:text-cyan-300">
                                 <Upload className="h-3.5 w-3.5" />
                                 {uploadingType === type ? 'Enviando…' : current ? 'Substituir' : 'Anexar'}
-                                <input
+                                <input aria-label="Selecionar arquivo"
                                   type="file"
                                   className="sr-only"
                                   accept="application/pdf,image/png,image/jpeg,image/webp,image/heic,image/heif"

@@ -498,7 +498,7 @@ export default function SgsoBowtiePage() {
                       </button>
                     </div>
                     {form.ameacas.map((item, index) => (
-                      <input
+                      <input aria-label={`${item.key} · Ex.: briefing incompleto`}
                         key={item.key}
                         value={item.titulo}
                         onChange={(event) =>
@@ -537,7 +537,7 @@ export default function SgsoBowtiePage() {
                       </button>
                     </div>
                     {form.consequencias.map((item, index) => (
-                      <input
+                      <input aria-label={`${item.key} · Ex.: aproximação instável`}
                         key={item.key}
                         value={item.titulo}
                         onChange={(event) =>

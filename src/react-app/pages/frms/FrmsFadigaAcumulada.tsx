@@ -215,7 +215,7 @@ function ProgressBar({
 
 function MonthPicker({ value, onChange }: { value: string; onChange: (v: string) => void }) {
   return (
-    <input
+    <input aria-label="Mês"
       type="month"
       value={value}
       onChange={(e) => onChange(e.target.value)}

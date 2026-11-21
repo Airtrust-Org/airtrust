@@ -288,7 +288,7 @@ Emergência Completa,4,AVANCADO,Treinamento situações de emergência,MAN-005|M
           </button>
           <p className="text-sm text-gray-500 mt-2">ou cole o conteúdo CSV abaixo</p>
         </div>
-        <input
+        <input aria-label="Selecionar arquivo"
           ref={fileInputRef}
           type="file"
           accept=".csv"

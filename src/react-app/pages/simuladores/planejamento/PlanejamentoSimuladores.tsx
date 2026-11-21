@@ -1618,7 +1618,7 @@ export default function PlanejamentoSimuladores() {
                               : 'janela a definir'}
                         </div>
                         <div className="flex gap-1">
-                          <input
+                          <input aria-label="Data"
                             type="date"
                             className={`${inputClass} w-36 px-2`}
                             value={draft?.janelaInicio || ''}
@@ -1626,7 +1626,7 @@ export default function PlanejamentoSimuladores() {
                               updateDraft(item.id, { janelaInicio: event.target.value })
                             }
                           />
-                          <input
+                          <input aria-label="Data"
                             type="date"
                             className={`${inputClass} w-36 px-2`}
                             value={draft?.janelaFim || ''}
@@ -1637,7 +1637,7 @@ export default function PlanejamentoSimuladores() {
                         </div>
                       </td>
                       <td className="px-3 py-3">
-                        <input
+                        <input aria-label="Data"
                           type="date"
                           className={`${inputClass} w-36 px-2`}
                           value={draft?.dataPrevista || ''}

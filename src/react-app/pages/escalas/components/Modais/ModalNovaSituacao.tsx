@@ -566,7 +566,7 @@ export default function ModalNovaSituacao({
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <input
+                  <input aria-label="Data"
                     type="date"
                     value={dataInicio}
                     onChange={(event) => {
@@ -598,7 +598,7 @@ export default function ModalNovaSituacao({
                   )}
                 </div>
                 <div>
-                  <input
+                  <input aria-label="Data"
                     type="date"
                     value={dataFim}
                     onChange={(event) => {

@@ -937,7 +937,7 @@ export default function FrmsImportacaoFira() {
                       : 'border-gray-300 bg-gray-50 hover:border-blue-400 hover:bg-blue-50/40'
                 }`}
               >
-                <input
+                <input aria-label="Selecionar arquivo"
                   ref={fileInputRef}
                   type="file"
                   multiple

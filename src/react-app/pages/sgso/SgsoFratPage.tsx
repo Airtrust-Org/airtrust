@@ -445,7 +445,7 @@ export default function SgsoFratPage() {
                   ))}
                 </select>
 
-                <input
+                <input aria-label="Data"
                   type="date"
                   value={form.data_operacao}
                   onChange={(event) =>

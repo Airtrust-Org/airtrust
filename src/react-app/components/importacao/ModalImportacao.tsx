@@ -186,7 +186,7 @@ export function ModalImportacao({ entidade, onClose, onSucesso }: ModalImportaca
                 <p className="text-gray-600 mb-4">
                   Clique ou arraste um arquivo .csv, .xlsx ou .xls
                 </p>
-                <input
+                <input aria-label="Selecionar arquivo"
                   ref={fileInputRef}
                   type="file"
                   accept=".csv,.xlsx,.xls"

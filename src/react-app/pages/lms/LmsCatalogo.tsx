@@ -543,7 +543,7 @@ function ContentDropzone({
         if (!disabled) pick(e.dataTransfer.files?.[0] ?? null);
       }}
     >
-      <input
+      <input aria-label="Selecionar arquivo"
         ref={inputRef}
         type="file"
         accept={accept}
@@ -624,7 +624,7 @@ function ThumbnailDropzone({
         if (!disabled) pick(e.dataTransfer.files?.[0] ?? null);
       }}
     >
-      <input
+      <input aria-label="Selecionar arquivo"
         ref={inputRef}
         type="file"
         accept="image/png,image/jpeg,image/webp,image/gif"
