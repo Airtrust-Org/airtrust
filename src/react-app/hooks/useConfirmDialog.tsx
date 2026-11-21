@@ -10,6 +10,8 @@ import { useCallback, useRef, useState } from 'react';
 import { ConfirmDialog, type ConfirmOptions } from '@/react-app/components/modals/ConfirmDialog';
 
 interface PendingConfirm {
+  /** Identidade única do pedido: reinicia o estado do diálogo a cada substituição. */
+  id: number;
   options: ConfirmOptions;
   resolve: (value: boolean) => void;
 }
@@ -21,6 +23,7 @@ interface PendingConfirm {
 export function useConfirmDialog() {
   const [pending, setPending] = useState<PendingConfirm | null>(null);
   const pendingRef = useRef<PendingConfirm | null>(null);
+  const nextIdRef = useRef(0);
 
   const settle = useCallback((value: boolean) => {
     const current = pendingRef.current;
@@ -32,7 +35,8 @@ export function useConfirmDialog() {
   const confirm = useCallback((options: ConfirmOptions) => {
     return new Promise<boolean>((resolve) => {
       pendingRef.current?.resolve(false);
-      const next = { options, resolve };
+      nextIdRef.current += 1;
+      const next = { id: nextIdRef.current, options, resolve };
       pendingRef.current = next;
       setPending(next);
     });
@@ -40,7 +44,7 @@ export function useConfirmDialog() {
 
   const confirmDialog = pending ? (
     <ConfirmDialog
-      key={pending.options.title}
+      key={pending.id}
       isOpen
       {...pending.options}
       onConfirm={() => settle(true)}

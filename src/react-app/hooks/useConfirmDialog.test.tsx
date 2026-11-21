@@ -73,4 +73,41 @@ describe('useConfirmDialog / ConfirmDialog', () => {
     await user.click(confirmButton);
     expect(result).toBe(true);
   });
+
+  it('substituir um pedido pendente reinicia o texto digitado, mesmo com mesmo título e requireText', async () => {
+    const user = userEvent.setup();
+    const results: boolean[] = [];
+
+    function Replace() {
+      const { confirm, confirmDialog } = useConfirmDialog();
+      const options: ConfirmOptions = {
+        title: 'Restaurar backup?',
+        tone: 'danger',
+        requireText: 'RESTAURAR',
+        confirmLabel: 'Restaurar',
+      };
+      return (
+        <>
+          <button type="button" onClick={async () => results.push(await confirm(options))}>
+            Abrir
+          </button>
+          {confirmDialog}
+        </>
+      );
+    }
+
+    render(<Replace />);
+    await user.click(screen.getByRole('button', { name: 'Abrir' }));
+    await user.type(screen.getByLabelText(/Digite/), 'RESTAURAR');
+    expect((screen.getByRole('button', { name: 'Restaurar' }) as HTMLButtonElement).disabled).toBe(false);
+
+    // Segundo pedido com o mesmo título/texto, enquanto o primeiro está aberto
+    const second = screen.getByRole('button', { name: 'Abrir', hidden: true });
+    second.click();
+    await Promise.resolve();
+
+    expect(results).toEqual([false]);
+    expect((screen.getByLabelText(/Digite/) as HTMLInputElement).value).toBe('');
+    expect((screen.getByRole('button', { name: 'Restaurar' }) as HTMLButtonElement).disabled).toBe(true);
+  });
 });
