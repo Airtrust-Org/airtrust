@@ -6,6 +6,7 @@
 import { useState, useEffect, useTransition } from 'react';
 import { getAccessToken } from '@/react-app/config/api';
 import AppLayout from '@/react-app/components/AppLayout';
+import { confirmDialog } from '@/react-app/utils/confirmDialog';
 
 // ========================================
 // TIPOS
@@ -152,7 +153,7 @@ export function ComplianceSettings() {
   };
 
   const deleteRequisito = async (id: number) => {
-    if (!confirm('Remover este requisito de compliance?')) return;
+    if (!(await confirmDialog('Remover este requisito de compliance?', { confirmText: 'Remover' }))) return;
     const token = getAccessToken();
     await apiFetch(`/api/compliance/requisitos/${id}`, {
       method: 'DELETE',

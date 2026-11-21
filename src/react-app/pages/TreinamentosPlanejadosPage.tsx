@@ -67,6 +67,7 @@ import {
 } from '@/react-app/hooks/useTreinamentosPlanejados';
 import { normalizeTimeInput } from '@/react-app/lib/time-input';
 import { getTodayYmdInTz, formatWithSystemTZ } from '@/react-app/utils/timezone';
+import { confirmDialog } from '@/react-app/utils/confirmDialog';
 
 type AbaAtiva = 'calendario' | 'quadro' | 'auditoria';
 
@@ -1461,9 +1462,7 @@ export default function TreinamentosPlanejadosPage({
     treinamento: TreinamentoPlanejado,
     options: { fecharDetalhes?: boolean } = {},
   ) {
-    const ok = window.confirm(
-      `Excluir a turma planejada "${getEventoTitulo(treinamento)}"? Esta ação cancela a turma e remove o planejamento relacionado.`,
-    );
+    const ok = (await confirmDialog(`Excluir a turma planejada "${getEventoTitulo(treinamento)}"? Esta ação cancela a turma e remove o planejamento relacionado.`, { confirmText: 'Excluir' }));
     if (!ok) return;
 
     try {

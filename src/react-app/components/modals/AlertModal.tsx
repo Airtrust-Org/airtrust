@@ -1,4 +1,5 @@
-import { useId } from 'react';
+import { useId, useRef } from 'react';
+import { useModalA11y } from '@/react-app/hooks/useModalA11y';
 import { createPortal } from 'react-dom';
 import { X, AlertTriangle } from 'lucide-react';
 
@@ -20,6 +21,8 @@ export default function AlertModal({
   backdrop = true,
 }: AlertModalProps) {
   const titleId = useId();
+  const dialogRef = useRef<HTMLDivElement>(null);
+  useModalA11y({ isOpen, onClose, dialogRef });
   const messageId = useId();
 
   if (!isOpen) return null;
@@ -32,6 +35,7 @@ export default function AlertModal({
     <div className={containerClass} role="presentation">
       <div
         className="flex max-h-[calc(100dvh-2rem)] w-full max-w-md flex-col rounded-lg bg-white shadow-xl my-auto"
+        ref={dialogRef}
         role="alertdialog"
         aria-modal="true"
         aria-labelledby={titleId}

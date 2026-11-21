@@ -15,6 +15,7 @@ import {
 import { apiJson, frontendErrorMessage } from '@/react-app/lib/api-contract';
 import { fetchWithAuth } from '@/react-app/config/api';
 import { showToast } from '@/react-app/utils/toast';
+import { confirmDialog, showAlertDialog } from '@/react-app/utils/confirmDialog';
 
 type PlanningStatus =
   | 'PROPOSTO'
@@ -581,7 +582,7 @@ export default function PlanejamentoSimuladores() {
 
   
   const handleSubmeter = async (id: number) => {
-    if (!window.confirm('Enviar proposta para aprovação?')) return;
+    if (!(await confirmDialog('Enviar proposta para aprovação?'))) return;
     setActioningId(id);
     try {
       await apiJson(`/api/simuladores/planejamento/${id}/submeter`, { method: 'POST' });
@@ -594,13 +595,13 @@ export default function PlanejamentoSimuladores() {
   };
 
   const handleAprovar = async (id: number) => {
-    if (!window.confirm('Confirma a aprovação desta proposta CAE? O status será alterado para APROVADO.')) return;
+    if (!(await confirmDialog('Confirma a aprovação desta proposta CAE? O status será alterado para APROVADO.'))) return;
     setActioningId(id);
     try {
       await apiJson(`/api/simuladores/planejamento/${id}/aprovar`, { method: 'POST' });
       await load();
     } catch (error: unknown) {
-      alert('Erro ao aprovar proposta: ' + frontendErrorMessage(error));
+      showAlertDialog('Erro ao aprovar proposta: ' + frontendErrorMessage(error));
     } finally {
       setActioningId(null);
     }
@@ -661,7 +662,7 @@ export default function PlanejamentoSimuladores() {
   const handleDevolver = async (id: number) => {
     const obs = devolverObs[id] || '';
     if (!obs) {
-      alert('Informe o motivo da devolução antes de continuar.');
+      showAlertDialog('Informe o motivo da devolução antes de continuar.');
       return;
     }
     setActioningId(id);
@@ -673,7 +674,7 @@ export default function PlanejamentoSimuladores() {
       });
       await load();
     } catch (error: unknown) {
-      alert('Erro ao devolver proposta: ' + frontendErrorMessage(error));
+      showAlertDialog('Erro ao devolver proposta: ' + frontendErrorMessage(error));
     } finally {
       setActioningId(null);
     }

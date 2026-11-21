@@ -76,7 +76,7 @@ export default function ExecutarSessao() {
     }
   };
 
-  const finalizarSessao = () => {
+  const finalizarSessao = async () => {
     const executadas = manobras.filter((m) => m.executada).length;
     const total = manobras.length;
     const percentual = (executadas / total) * 100;

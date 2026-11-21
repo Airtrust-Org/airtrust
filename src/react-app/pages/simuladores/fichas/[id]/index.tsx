@@ -20,7 +20,7 @@ import { toast } from 'sonner';
 import { useParams, useSearchParams, useNavigate } from 'react-router-dom';
 import { API_BASE_URL, getAccessToken } from '@/react-app/config/api';
 import { appFetch } from '@/react-app/lib/app-fetch';
-import { confirmDialog } from '@/react-app/utils/confirmDialog';
+import { confirmDialog, showAlertDialog } from '@/react-app/utils/confirmDialog';
 import { useAuth } from '@/react-app/hooks/useAuth';
 import {
   deveGerarQualificacaoAoAssinar,
@@ -630,9 +630,7 @@ export default function FichaDetalhe() {
         .slice(0, 8)
         .map((manobra) => `${manobra.ordem} - ${manobra.nome || manobra.descricao}`)
         .join('\n');
-      window.alert(
-        `Preencha todas as manobras com uma nota ou NR antes de salvar.\n\nFaltando:\n${mensagem}${manobrasPendentes.length > 8 ? '\n...' : ''}`,
-      );
+      showAlertDialog(`Preencha todas as manobras com uma nota ou NR antes de salvar.\n\nFaltando:\n${mensagem}${manobrasPendentes.length > 8 ? '\n...' : ''}`);
       toast.error('Há manobras sem avaliação. Preencha com nota ou NR antes de salvar.');
       return;
     }
@@ -680,9 +678,7 @@ export default function FichaDetalhe() {
                 `${manobra.ordem} - ${manobra.descricao}`,
             )
             .join('\n');
-          window.alert(
-            `Preencha todas as manobras com uma nota ou NR antes de salvar.\n\nFaltando:\n${mensagem}${missingManobras.length > 8 ? '\n...' : ''}`,
-          );
+          showAlertDialog(`Preencha todas as manobras com uma nota ou NR antes de salvar.\n\nFaltando:\n${mensagem}${missingManobras.length > 8 ? '\n...' : ''}`);
         }
         toast.error(error?.error || 'Erro ao salvar ficha');
       }

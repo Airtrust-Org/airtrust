@@ -18,6 +18,7 @@ import {
   useMatriculaDetalhe,
   useSalvarProgresso,
 } from '@/react-app/hooks/useLms';
+import { confirmDialog } from '@/react-app/utils/confirmDialog';
 
 const CONCLUDE_DELAY_SECONDS = 30;
 
@@ -165,10 +166,10 @@ export default function LmsPlayerPdf() {
     });
   }, [completed, alreadyConcluded, finalizarMatricula, id]);
 
-  const handleLeave = useCallback(() => {
+  const handleLeave = useCallback(async () => {
     const shouldConfirm = !completed && !alreadyConcluded;
     if (shouldConfirm) {
-      const confirmed = window.confirm('O curso ainda não foi concluído. Deseja sair mesmo assim?');
+      const confirmed = (await confirmDialog('O curso ainda não foi concluído. Deseja sair mesmo assim?'));
       if (!confirmed) return;
     }
     navigate('/lms/cursos');

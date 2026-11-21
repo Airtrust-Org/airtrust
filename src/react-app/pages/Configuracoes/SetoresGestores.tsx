@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { fetchWithAuth } from '@/react-app/config/api';
 import { showToast } from '../../utils/toast';
 import { AlertCircle, LoaderCircle, Plus, Trash2 } from 'lucide-react';
+import { confirmDialog } from '@/react-app/utils/confirmDialog';
 
 interface Setor {
   id: number;
@@ -117,7 +118,7 @@ export function SetoresGestores() {
   }
 
   async function handleDeleteAssignment(setorGestorId: number) {
-    if (!confirm('Deseja remover este acesso ao setor?')) return;
+    if (!(await confirmDialog('Deseja remover este acesso ao setor?', { confirmText: 'Remover' }))) return;
 
     try {
       const response = await fetchWithAuth(`/api/setores-gestores/${setorGestorId}`, {

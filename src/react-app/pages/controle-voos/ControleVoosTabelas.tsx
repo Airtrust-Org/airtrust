@@ -20,6 +20,7 @@ import { usePermissions } from '@/react-app/hooks/usePermissions';
 import { apiClient } from '@/react-app/services/apiClient';
 import ControleVoosPageShell from './components/ControleVoosPageShell';
 import ControleVoosPageHeader from './components/ControleVoosPageHeader';
+import { confirmDialog } from '@/react-app/utils/confirmDialog';
 
 type CatalogName = 'pontos' | 'aeroportos' | 'tipos' | 'naturezas' | 'motivos' | 'empresas-abastecimento' | 'contratos' | 'funcoes-bordo' | 'justificativas';
 type CatalogItem = {
@@ -278,7 +279,7 @@ export default function ControleVoosTabelas() {
   async function deleteFlightType(item: CatalogItem) {
     if (!canManage || activeCatalog !== 'tipos') return;
     const label = item.nome || item.codigo || `#${item.id}`;
-    if (!window.confirm(`Excluir o tipo de voo "${label}"? Esta ação só será permitida se ele não estiver em uso por nenhum voo.`)) return;
+    if (!(await confirmDialog(`Excluir o tipo de voo "${label}"? Esta ação só será permitida se ele não estiver em uso por nenhum voo.`, { confirmText: 'Excluir' }))) return;
     setError(null);
     try {
       await apiClient.delete(`/controle-voos/catalogos/tipos/${item.id}`);

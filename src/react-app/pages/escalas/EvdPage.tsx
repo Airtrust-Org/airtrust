@@ -36,7 +36,7 @@ import { apiFetch } from '@/react-app/lib/apiFetch';
 import { getAccessToken } from '@/react-app/config/api';
 import { useMutation } from '@tanstack/react-query';
 import { toast } from 'sonner';
-import { confirmDialog } from '@/react-app/utils/confirmDialog';
+import { confirmDialog, promptDialog } from '@/react-app/utils/confirmDialog';
 import { normalizeTimeInput } from '@/react-app/lib/time-input';
 import { canManageEscalaOperations } from './utils/operationalPermissions';
 import {
@@ -955,11 +955,12 @@ export default function EvdPage() {
       toast.error('Não há itens para publicar neste dia.');
       return;
     }
-    const confirm = window.confirm(
-      `Publicar a escala diária completa de ${formatDateBR(data)}?\nIsso criará uma nova revisão.`,
-    );
+    const confirm = (await confirmDialog(`Publicar a escala diária completa de ${formatDateBR(data)}?\nIsso criará uma nova revisão.`));
     if (!confirm) return;
-    const observacoes = window.prompt('Observações da publicação (opcional):', '');
+    const observacoes = await promptDialog('Observações da publicação (opcional):', {
+      title: 'Publicar escala diária',
+      confirmText: 'Publicar',
+    });
     if (observacoes === null) return;
 
     setPublishingDay(true);
@@ -1074,8 +1075,9 @@ export default function EvdPage() {
       const hasStructured = existingRes.ok && existingJson.success && (existingJson.data || []).length > 0;
 
       if (!hasStructured) {
-        const justificativaTxt = window.prompt(
+        const justificativaTxt = await promptDialog(
           `FRMS requer revisão operacional para este tripulante (referência ${formatDateBR(frmsReferenceDate)}). Informe justificativa operacional estruturada para publicar:`,
+          { title: 'Justificativa operacional', confirmText: 'Publicar', required: true, minLength: 10, helperText: 'Mínimo de 10 caracteres.' },
         );
         if (!justificativaTxt || justificativaTxt.trim().length < 10) {
           toast.error('Justificativa operacional obrigatória (mínimo 10 caracteres).');
@@ -1102,8 +1104,9 @@ export default function EvdPage() {
           publishErr.warnings && publishErr.warnings.length > 0
             ? `\n\n${publishErr.warnings.join('\n')}`
             : '';
-        const justificativaTxt = window.prompt(
+        const justificativaTxt = await promptDialog(
           `${publishErr.message || 'Revisão operacional obrigatória para função PIC.'}${warningLabel}\n\nInforme justificativa operacional estruturada para publicar:`,
+          { title: 'Justificativa operacional', confirmText: 'Publicar', required: true, minLength: 10, helperText: 'Mínimo de 10 caracteres.' },
         );
         if (!justificativaTxt || justificativaTxt.trim().length < 10) {
           toast.error('Justificativa operacional obrigatória (mínimo 10 caracteres).');

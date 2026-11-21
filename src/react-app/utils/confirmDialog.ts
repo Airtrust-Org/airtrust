@@ -36,6 +36,8 @@ export function confirmDialog(
   options: ConfirmDialogOptions = {},
 ): Promise<boolean> {
   if (!confirmDialogHandler) {
+    // Fallback quando o host global ainda não montou (ex.: testes, boot).
+    // eslint-disable-next-line no-alert
     return Promise.resolve(window.confirm(message));
   }
 
@@ -50,6 +52,7 @@ export function confirmDialog(
 
 export function showAlertDialog(message: string, options: AlertDialogOptions = {}) {
   if (!alertDialogHandler) {
+    // eslint-disable-next-line no-alert
     window.alert(message);
     return;
   }
@@ -57,5 +60,50 @@ export function showAlertDialog(message: string, options: AlertDialogOptions = {
   alertDialogHandler({
     message,
     ...options,
+  });
+}
+
+type PromptDialogOptions = {
+  title?: string;
+  confirmText?: string;
+  cancelText?: string;
+  defaultValue?: string;
+  placeholder?: string;
+  /** Texto de ajuda exibido abaixo do campo (ex.: tamanho mínimo). */
+  helperText?: string;
+  /** Quando true, o campo é obrigatório e vazio mantém "Confirmar" desabilitado. */
+  required?: boolean;
+  /** Tamanho mínimo (após trim) para habilitar "Confirmar". */
+  minLength?: number;
+  multiline?: boolean;
+};
+
+export type PromptDialogRequest = PromptDialogOptions & {
+  message: string;
+  resolve: (value: string | null) => void;
+};
+
+type PromptDialogHandler = (request: PromptDialogRequest) => void;
+let promptDialogHandler: PromptDialogHandler | null = null;
+
+export function registerPromptDialogHandler(handler: PromptDialogHandler | null) {
+  promptDialogHandler = handler;
+}
+
+/**
+ * Substituto assíncrono de `window.prompt`. Resolve com o texto digitado ou
+ * `null` quando o usuário cancela.
+ */
+export function promptDialog(
+  message: string,
+  options: PromptDialogOptions = {},
+): Promise<string | null> {
+  if (!promptDialogHandler) {
+    // eslint-disable-next-line no-alert
+    return Promise.resolve(window.prompt(message, options.defaultValue ?? ''));
+  }
+
+  return new Promise<string | null>((resolve) => {
+    promptDialogHandler?.({ message, resolve, ...options });
   });
 }

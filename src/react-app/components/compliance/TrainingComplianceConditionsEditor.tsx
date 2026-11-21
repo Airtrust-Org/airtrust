@@ -4,6 +4,7 @@ import { Pencil, Plus, ShieldCheck, Trash2 } from 'lucide-react';
 import { fetchWithAuth } from '@/react-app/config/api';
 import { usePermissions } from '@/react-app/hooks/usePermissions';
 import { showToast } from '@/react-app/utils/toast';
+import { confirmDialog } from '@/react-app/utils/confirmDialog';
 
 type Condition = {
   id: number;
@@ -534,8 +535,8 @@ export function TrainingComplianceConditionsEditor() {
                   </div>
                   <div className="flex shrink-0 gap-1">
                     <button type="button" aria-label={`Editar ${condition.nome}`} onClick={() => beginEditCondition(condition)} className="rounded-md p-2 text-slate-600 hover:bg-slate-100"><Pencil className="h-4 w-4" /></button>
-                    <button type="button" aria-label={`Excluir ${condition.nome}`} disabled={deleteCondition.isPending} onClick={() => {
-                      if (window.confirm(`Excluir a designação "${condition.nome}"? Só será permitido se não houver regras ou atribuições ativas.`)) deleteCondition.mutate(condition.id);
+                    <button type="button" aria-label={`Excluir ${condition.nome}`} disabled={deleteCondition.isPending} onClick={async () => {
+                      if ((await confirmDialog(`Excluir a designação "${condition.nome}"? Só será permitido se não houver regras ou atribuições ativas.`, { confirmText: 'Excluir' }))) deleteCondition.mutate(condition.id);
                     }} className="rounded-md p-2 text-red-600 hover:bg-red-50"><Trash2 className="h-4 w-4" /></button>
                   </div>
                 </div>

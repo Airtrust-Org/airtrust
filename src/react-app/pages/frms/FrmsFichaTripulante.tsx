@@ -488,9 +488,7 @@ export default function FrmsFichaTripulante() {
     });
 
     // Usar window.confirm direto para evitar qualquer problema com confirmDialog
-    const confirmar = window.confirm(
-      `Apagar TODAS as ${jornadas.length} jornada(s) de ${mesLabel} para ${nomeTrip}?\n\nEsta ação não pode ser desfeita.`,
-    );
+    const confirmar = (await confirmDialog(`Apagar TODAS as ${jornadas.length} jornada(s) de ${mesLabel} para ${nomeTrip}?\n\nEsta ação não pode ser desfeita.`, { confirmText: 'Apagar' }));
     if (!confirmar) return;
 
     // Capturar lista atual antes de qualquer mutação

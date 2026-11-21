@@ -24,6 +24,7 @@ import { fetchPptxViewerSession, type PptxViewerSession } from './pptxViewer';
 import { sanitizePptxSlideHtml } from './pptxSanitization';
 import { observePptxSlideLayout } from './pptxViewport';
 import { PptxPdfCanvas, openPptxPdf, type PptxPdfDocument } from './PptxPdfCanvas';
+import { confirmDialog } from '@/react-app/utils/confirmDialog';
 
 type PptxEvidence = {
   total_slides: number;
@@ -403,9 +404,7 @@ export default function LmsPlayerPptx() {
   const handleLeave = useCallback(async () => {
     const shouldConfirm = !done;
     if (shouldConfirm) {
-      const confirmed = window.confirm(
-        'A apresentação ainda não foi concluída. Deseja sair mesmo assim?',
-      );
+      const confirmed = (await confirmDialog('A apresentação ainda não foi concluída. Deseja sair mesmo assim?'));
       if (!confirmed) return;
     }
     await flushLatestProgress();

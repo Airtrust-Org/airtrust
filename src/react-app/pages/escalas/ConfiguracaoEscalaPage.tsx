@@ -48,6 +48,7 @@ import { normalizeTimeInput } from '@/react-app/lib/time-input';
 import { getDefaultQuinzenaRange } from './utils/quinzenas';
 import { isValidQuinzenaRange } from './utils/quinzenaValidation';
 import CompactColorPicker from './components/CompactColorPicker';
+import { confirmDialog } from '@/react-app/utils/confirmDialog';
 
 const MESES = [
   'Janeiro',
@@ -1001,7 +1002,7 @@ function AbaTemplates() {
   const templates = templatesRaw ?? [];
 
   async function handleRemover(id: string, nome: string) {
-    if (!window.confirm(`Remover template "${nome}"?`)) return;
+    if (!(await confirmDialog(`Remover template "${nome}"?`, { confirmText: 'Remover' }))) return;
     try {
       await remover(id);
       toast.success('Template removido');

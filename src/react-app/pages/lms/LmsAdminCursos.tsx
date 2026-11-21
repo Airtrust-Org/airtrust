@@ -43,6 +43,7 @@ import {
   getAdminCoursePreviewPath,
   supportsAdminCoursePreview as supportsContentPreview,
 } from './lmsAdminPreview';
+import { confirmDialog } from '@/react-app/utils/confirmDialog';
 
 function impactsCompliance(
   curso: Pick<LmsCurso, 'gerar_qualificacao_ao_concluir' | 'qualificacao_tipo_nome'>,
@@ -184,7 +185,7 @@ export default function LmsAdminCursos() {
   }
 
   async function handleDelete(curso: LmsCurso) {
-    if (!confirm(`Excluir o curso "${curso.titulo}"?`)) return;
+    if (!(await confirmDialog(`Excluir o curso "${curso.titulo}"?`, { confirmText: 'Excluir' }))) return;
 
     try {
       await deleteCurso.mutateAsync(curso.id);

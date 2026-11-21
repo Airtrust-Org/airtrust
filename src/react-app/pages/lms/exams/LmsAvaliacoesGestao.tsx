@@ -7,6 +7,7 @@ import {ExamPageHeader,ExamEmpty,examPage,examCard,examInput,examPrimary,examSec
 import {fetchWithAuth} from '../../../config/api';
 import {buildExamResultsCsv} from './examReportCsv';
 import {ExamExportIntegrity} from './examExportIntegrity';
+import { confirmDialog } from '@/react-app/utils/confirmDialog';
 
 type Course={id:number;titulo:string;tipo_conteudo:string;scorm_assessment_policy:string|null;publicado:number;activePackageSha256:string|null;activeExamId:string|null;activeExamVersion:number|null};
 type Plan={cursoId:number;examId:string;version:number;title:string|null;questionCount:number|null;publishedAt:string};
@@ -94,7 +95,7 @@ export default function LmsAvaliacoesGestao(){
  const exportAllFiltered=async()=>{
   if(!report?.total||exporting)return;
   if(report.pages>200){setReportError('O filtro excede 5.000 registros. Refine os filtros antes de exportar.');return;}
-  if(!window.confirm('Exportar '+report.total+' tentativas dos filtros atuais? O CSV pode conter dados pessoais de alunos.'))return;
+  if(!(await confirmDialog('Exportar '+report.total+' tentativas dos filtros atuais? O CSV pode conter dados pessoais de alunos.')))return;
   setExporting(true);setReportError('');
   try{
    const snapshot=new ExamExportIntegrity<ReportRow>(report.total,report.pages,25);

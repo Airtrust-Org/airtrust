@@ -15,6 +15,7 @@ import {
   type GestorCopiaConvocacao,
   type NotificacoesConvocacaoConfigInput,
 } from '@/react-app/hooks/useNotificacoesConvocacao';
+import { confirmDialog } from '@/react-app/utils/confirmDialog';
 
 interface GestorFormState {
   id: number | null;
@@ -316,7 +317,7 @@ export default function NotificacoesConvocacao() {
   }
 
   async function handleDeleteGestor(id: number) {
-    if (!window.confirm('Excluir este gestor da lista de cópia?')) return;
+    if (!(await confirmDialog('Excluir este gestor da lista de cópia?', { confirmText: 'Excluir' }))) return;
 
     try {
       await excluirGestor.mutateAsync(id);

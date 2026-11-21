@@ -18,6 +18,7 @@ import {
   type QuinzenaEscala,
   type SituacaoTipo,
 } from '../../hooks/queries/useEscalasQuery';
+import { confirmDialog } from '@/react-app/utils/confirmDialog';
 
 const TIPOS_SITUACAO_PADRAO: SituacaoTipo[] = [
   {
@@ -451,7 +452,7 @@ export default function ModalNovaSituacao({
 
   async function handleRemover() {
     if (!situacaoInicial?.id) return;
-    if (!window.confirm('Remover esta situação da escala?')) return;
+    if (!(await confirmDialog('Remover esta situação da escala?', { confirmText: 'Remover' }))) return;
 
     try {
       await removerSituacao.mutateAsync(situacaoInicial.id);

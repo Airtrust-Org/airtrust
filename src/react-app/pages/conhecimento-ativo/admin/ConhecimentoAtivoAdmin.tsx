@@ -31,6 +31,7 @@ import {
   useTornarFonteConhecimentoVigente,
   useValidarImportacaoConhecimento,
 } from '@/react-app/hooks/useConhecimentoAtivoAdmin';
+import { confirmDialog } from '@/react-app/utils/confirmDialog';
 
 type Tab = 'importacao' | 'fontes' | 'topicos' | 'itens' | 'questoes';
 
@@ -311,7 +312,7 @@ function FontesTab() {
               <button
                 type="button"
                 onClick={async () => {
-                  if (!window.confirm('Marcar esta revisão como superada? Itens vinculados voltarão para revisão.')) return;
+                  if (!(await confirmDialog('Marcar esta revisão como superada? Itens vinculados voltarão para revisão.'))) return;
                   try {
                     await superar.mutateAsync(fonte.id);
                     toast.success('Fonte superada; conteúdo vinculado retornou para revisão.');
@@ -394,9 +395,7 @@ function ItensTab() {
                     disabled={aprovarTudo.isPending || pendentes === 0}
                     onClick={async () => {
                       if (
-                        !window.confirm(
-                          `Confirma aprovar todo o conteúdo de ${modelo}? As fontes serão tornadas vigentes e os itens e questões serão aprovados.`,
-                        )
+                        !(await confirmDialog(`Confirma aprovar todo o conteúdo de ${modelo}? As fontes serão tornadas vigentes e os itens e questões serão aprovados.`))
                       )
                         return;
                       try {
