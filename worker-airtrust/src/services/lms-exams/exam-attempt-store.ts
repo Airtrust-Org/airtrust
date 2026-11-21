@@ -39,7 +39,7 @@ export type LearnerAttemptView = Readonly<{
   answers: Readonly<Record<string, string>>;
   result: Readonly<{
     passed: boolean; answered: number; unanswered: number; expired?: boolean;
-    sections: readonly Readonly<{ moduleId: string; scorePct: number; passed: boolean }>[];
+    sections: readonly Readonly<{ moduleId: string; scorePct: number; passed: boolean; minScorePct:number|null }>[];
   }> | null;
 }>;
 
@@ -256,7 +256,12 @@ async function buildView(db: D1Database, a: AttemptRow): Promise<LearnerAttemptV
     // Score percentages only: the answer key and the picked choices are not echoed.
     result = {
       passed: r.passed, answered: r.answered, unanswered: r.unanswered, expired: r.expired === true,
-      sections: r.sections.map(x => ({ moduleId: x.moduleId, scorePct: x.scorePct, passed: x.passed })),
+      // Normative thresholds are taken from the exact immutable plan associated
+      // with this attempt. Never infer them from another course/edition.
+      sections: r.sections.map(x => ({
+        moduleId:x.moduleId,scorePct:x.scorePct,passed:x.passed,
+        minScorePct:plan.sections.find(section=>section.moduleId===x.moduleId)?.minScorePct??null,
+      })),
     };
   }
   const duration=attemptPolicy(plan).timeLimitMinutes;

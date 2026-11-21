@@ -208,6 +208,10 @@ describe('catálogo administrativo de edições e questões publicadas', () => {
     expect(body.data.items).toHaveLength(10);
     expect(body.data.nextOffset).toBeNull();
     expect(body.data.items[0]).toHaveProperty('contentSha256');
+    expect(body.data.items[0].choices).toBeInstanceOf(Array);
+    expect(body.data.items[0].choices[0]).toEqual({id:'o1',text:expect.any(String)});
+    expect(body.data.items[0]).not.toHaveProperty('correctChoiceId');
+    expect(body.data.items[0]).not.toHaveProperty('explanation');
     expect(JSON.stringify(body)).not.toMatch(/correctChoiceId|explanation|SEGREDO|content_json/);
     expect((await call(db, '/api/lms/exams/admin/cursos/26/questoes-publicadas?offset=x', {}, asAdmin)).status).toBe(422);
     expect((await call(db, '/api/lms/exams/admin/cursos/26/questoes-publicadas', {}, { __mockRole: 'student' })).status).toBe(403);

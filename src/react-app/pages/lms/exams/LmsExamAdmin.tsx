@@ -6,6 +6,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import AppLayout from '../../../components/AppLayout';
+import {ExamPageHeader,examPage,examCard,examInput,examPrimary,examSecondary} from './examUi';
 import { useLmsCurso } from '../../../hooks/useLms';
 import { fetchWithAuth } from '../../../config/api';
 import QuestionBankAdmin from './QuestionBankAdmin';
@@ -16,7 +17,7 @@ type Edition = {
 };
 type Question = {
   questionId:string;revision:number;moduleId:string;topicId:string;prompt:string;
-  sourceSha256:string;contentSha256:string;
+  sourceSha256:string;contentSha256:string;choices?:readonly {id:string;text:string}[];
   difficulty?:'BASICA'|'INTERMEDIARIA'|'AVANCADA';
 };
 type Published = { examId:string;version:number;packageSha256:string;planSha256:string };
@@ -44,6 +45,20 @@ const post=(payload:unknown):RequestInit=>({
   method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload),
 });
 
+const humanExamError=(error:unknown)=>{
+ const raw=(error as Error).message||'';
+ if(raw.startsWith('NOTA_MÍNIMA'))return 'Defina a nota mínima autorizada para todos os módulos da prova.';
+ if(raw.includes('LIMITE_DE_TENTATIVAS'))return 'Informe o número máximo de tentativas, de 1 a 10.';
+ if(raw.includes('DURAÇÃO_DE_PROVA'))return 'Informe duração entre 5 e 240 minutos, ou deixe sem limite.';
+ if(raw.includes('INTERVALO_DE_REPETIÇÃO'))return 'Informe um intervalo válido entre tentativas.';
+ if(raw.includes('SELECIONE_QUESTÕES'))return 'Selecione pelo menos uma questão publicada antes de revisar.';
+ if(raw.includes('REVISÃO_EDITORIAL'))return 'Confirme a revisão editorial na etapa de critérios.';
+ if(raw.includes('NOME_DA_PROVA'))return 'Informe um nome para a prova.';
+ if(raw.includes('EDIÇÃO')||raw.includes('EDITION'))return 'Selecione uma edição válida e homologada para esta prova.';
+ if(raw.includes('JUSTIFICATIVA'))return 'Escreva uma justificativa de aprovação de 10 a 500 caracteres.';
+ if(raw.includes('CLASSIFICAÇÃO_NORMATIVA'))return 'Informe se a avaliação é exigida por norma.';
+ return 'Operação não concluída. Revise os campos e tente novamente sem perder sua seleção.';
+};
 export default function LmsExamAdmin():React.ReactElement {
   const {cursoId}=useParams<{cursoId:string}>();
   const id=Number(cursoId);
@@ -57,7 +72,9 @@ export default function LmsExamAdmin():React.ReactElement {
   const [questions,setQuestions]=useState<Question[]>([]);
   const [nextOffset,setNextOffset]=useState<number|null>(null);
   const [packageSha,setPackageSha]=useState('');
-  const [tab,setTab]=useState<'compose'|'bank'>('compose');
+  const [step,setStep]=useState<1|2|3|4>(1);
+  const [bankDirty,setBankDirty]=useState(false);
+  const [questionQuery,setQuestionQuery]=useState('');
   const [selected,setSelected]=useState<Record<string,number>>({});
   const [quantity,setQuantity]=useState<Record<'BASICA'|'INTERMEDIARIA'|'AVANCADA',string>>({
     BASICA:'0',INTERMEDIARIA:'0',AVANCADA:'0',
@@ -105,7 +122,7 @@ export default function LmsExamAdmin():React.ReactElement {
       const preferred=e.editions.find(e=>e.status==='ACTIVE')||
         e.editions.find(e=>e.status==='VALIDATED');
       if(preferred)setPackageSha(old=>old||preferred.packageSha256);
-    }catch(err){setError('Banco de provas indisponível: '+(err as Error).message);}
+    }catch(err){setError('Banco de provas indisponível. Tente atualizar e confira a permissão administrativa.');}
     finally{setLoading(false);}
   },[validId,base,loadQuestions]);
   useEffect(()=>{void refresh();},[refresh]);
@@ -123,7 +140,15 @@ export default function LmsExamAdmin():React.ReactElement {
     return()=>{active=false;};
   },[base,validId,packageSha]);
 
+  function goStep(next:1|2|3|4){
+    if(step===2&&bankDirty&&!window.confirm('Há alterações não salvas no banco. Deseja descartá-las?'))return;
+    setStep(next);
+  }
   function changePackage(value:string){
+    if((bankDirty||Object.keys(selected).length>0||confirmed)&&
+      !window.confirm('Trocar a edição descarta a seleção atual de questões e critérios. Continuar?'))return;
+    setSelected({});setMinimums({});setQuantity({BASICA:'0',INTERMEDIARIA:'0',AVANCADA:'0'});
+    setConfirmed(false);setLegal('');setNote('');setBankDirty(false);
     setPackageSha(value);setPublished(null);setConfirmed(false);setMessage('');setError('');
     setEditionSha(value);
     setEligibility(null);
@@ -160,12 +185,13 @@ export default function LmsExamAdmin():React.ReactElement {
     }
     if(selectedRows.length!==total){setError('As questões selecionadas não são únicas.');return;}
     setSelected(Object.fromEntries(selectedRows.map(q=>[q.questionId,q.revision])));
-    setMinimums(old=>{
-      const next={...old};
-      for(const q of selectedRows)next[q.moduleId]=next[q.moduleId]||'80';
-      return next;
-    });
-    setMessage(total+' questões selecionadas. Confira módulos e critérios antes de publicar.');
+    // A course's normative minimum can be 70%, 80%, or module-specific.
+    // Never invent an 80% minimum during composition: the administrator
+    // must enter and explicitly approve the correct policy for each module.
+    setMinimums(old=>Object.fromEntries(
+      Object.entries(old).filter(([moduleId])=>selectedRows.some(q=>q.moduleId===moduleId))
+    ));
+    setMessage(total+' questões selecionadas. Defina a nota mínima autorizada de cada módulo antes de publicar.');
   }
   function buildPlan(){
     if(!edition||edition.boundExamId||edition.status==='SUPERSEDED'||!sha.test(packageSha))throw Error('EDIÇÃO_INDISPONÍVEL');
@@ -208,7 +234,7 @@ export default function LmsExamAdmin():React.ReactElement {
       const result=await api<{planSha256:string}>(base+'/provas',post({plan}));
       setPublished({examId,version:Number(version),packageSha256:packageSha,planSha256:result.planSha256});
       setMessage('Plano imutável publicado. O vínculo com o curso ainda NÃO foi realizado.');
-    }catch(err){setError('Publicação não concluída: '+(err as Error).message);}
+    }catch(err){setError('Publicação não concluída: '+humanExamError(err));}
     finally{setWorking(false);}
   }
   async function recover(selected?:ListedExam){
@@ -229,7 +255,7 @@ export default function LmsExamAdmin():React.ReactElement {
       setPublished({examId:selectedExamId,version:selectedVersion,packageSha256:selectedSha,planSha256:result.planSha256});
       setEditionSha(result.plan.trainingEditionSha256);
       setMessage('Plano publicado recuperado. Confira a classificação normativa e vincule-o à edição.');
-    }catch(err){setError('Não foi possível recuperar: '+(err as Error).message);}
+    }catch(err){setError('Não foi possível recuperar o plano. Verifique a edição e tente novamente.');}
     finally{setWorking(false);}
   }
   async function bind(){
@@ -247,22 +273,25 @@ export default function LmsExamAdmin():React.ReactElement {
       setPackageSha('');
       setEligibility(null);
       await refresh();
-    }catch(err){setError('Vínculo não concluído: '+(err as Error).message);}
+    }catch(err){setError('Vínculo não concluído: '+humanExamError(err));}
     finally{setWorking(false);}
   }
-  const panel='rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-900';
-  const input='w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-white';
-  return <AppLayout><main className="mx-auto max-w-6xl space-y-5 p-4 md:p-6">
-    <Link className="text-sm underline" to="/treinamentos/avaliacoes">Voltar à Gestão de Avaliações</Link>
-    <header><h1 className="text-2xl font-semibold">Banco de questões e montagem de provas</h1>
-      <p className="text-sm text-slate-600 dark:text-slate-300">{course?.titulo||`Curso #${id}`} — edição e política verificadas pelo Worker</p>
-      <p className="mt-2 text-sm">Publicar um plano não altera matrículas. Vincular uma prova exige uma edição autorizada para avaliação externa.</p>
-    </header>
+  const panel=examCard;
+  const input=examInput;
+  return <AppLayout><div className={examPage}>
+    <ExamPageHeader title="Banco de questões e montagem de provas" back="/treinamentos/avaliacoes"
+      description={(course?.titulo||'Curso #'+id)+' · Selecione a edição, prepare o banco e defina critérios antes de publicar.'}/>
+    <nav aria-label="Etapas de criação da prova" className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+      {([[1,'Edição'],[2,'Banco de questões'],[3,'Critérios e montagem'],[4,'Revisar e publicar']] as const).map(([number,title])=>
+        <button key={number} type="button" aria-current={step===number?'step':undefined}
+          className={(step===number?examPrimary:examSecondary)+' min-w-0 whitespace-normal text-center'}
+          onClick={()=>goStep(number)}>{number}. {title}</button>)}
+    </nav>
     {!validId?<p role="alert">Curso inválido.</p>:null}
-    {error?<p role="alert" className="rounded bg-red-50 p-3 text-sm text-red-900">{error}</p>:null}
-    {message?<p role="status" className="rounded bg-blue-50 p-3 text-sm text-blue-900">{message}</p>:null}
+    {error?<p role="alert" className="rounded-lg border border-red-300 bg-red-50 p-3 text-sm text-red-900 dark:bg-red-950 dark:text-red-100">{error}</p>:null}
+    {message?<p role="status" className="rounded-lg border border-emerald-300 bg-emerald-50 p-3 text-sm text-emerald-900 dark:bg-emerald-950 dark:text-emerald-100">{message}</p>:null}
     {loading?<p>Carregando edições e questões publicadas…</p>:null}
-    {!loading&&validId?<section className={panel}>
+    {!loading&&validId&&step===1?<section className={panel}>
       <label className="block text-sm font-medium">Edição do pacote SCORM
         <select className={input+' mt-2'} aria-label="Edição do pacote SCORM" value={packageSha}
           onChange={e=>changePackage(e.target.value)}>
@@ -306,15 +335,16 @@ export default function LmsExamAdmin():React.ReactElement {
         </div>)}
         </div>
       </div>}
-      <div className="mt-4 flex gap-2">
-        <button type="button" aria-pressed={tab==='compose'} className="rounded border px-3 py-2" onClick={()=>setTab('compose')}>Montagem da prova</button>
-        <button type="button" aria-pressed={tab==='bank'} className="rounded border px-3 py-2" onClick={()=>setTab('bank')}>Banco de questões</button>
-        <button type="button" className="rounded border px-3 py-2" disabled={working} onClick={()=>void refresh()}>Atualizar catálogo</button>
+      <div className="mt-4 flex flex-wrap gap-2">
+        <button type="button" className={examPrimary} onClick={()=>goStep(2)}>Continuar para o banco</button>
+        <button type="button" className={examSecondary} disabled={working} onClick={()=>void refresh()}>Atualizar catálogo</button>
       </div>
     </section>:null}
-    {!loading&&validId&&tab==='bank'&&sha.test(packageSha)?
-      <QuestionBankAdmin courseId={id} trainingSourceSha256={packageSha}/>:null}
-    {!loading&&validId&&tab==='compose'?<section className={panel}>
+    {!loading&&validId&&step===2&&sha.test(packageSha)?
+      <QuestionBankAdmin courseId={id} trainingSourceSha256={packageSha} onDirtyChange={setBankDirty}/>:null}
+    {!loading&&validId&&step===2&&!sha.test(packageSha)?
+      <p role="status" className={examCard}>Selecione uma edição válida na etapa 1 para cadastrar questões.</p>:null}
+    {!loading&&validId&&step===3?<section className={panel}>
       <h2 className="mb-3 text-lg font-semibold">Composição e critérios de aprovação</h2>
       <p className="mb-4 text-sm text-slate-600 dark:text-slate-300">Selecione a edição EXTERNAL, publique as questões no banco, monte a prova e aprove o vínculo. Nenhuma matrícula será alterada por esta tela.</p>
       <label className="block text-sm font-medium">Nome da prova
@@ -360,14 +390,18 @@ export default function LmsExamAdmin():React.ReactElement {
               </small>
             </label>)}
         </div>
-        <button type="button" className="mt-3 rounded bg-slate-800 px-4 py-2 text-sm text-white disabled:opacity-50"
+        <button type="button" className={examSecondary+' mt-3'}
           disabled={working||!!published} onClick={composeByDifficulty}>Selecionar questões</button>
         <p className="mt-2 text-xs text-slate-500">As questões antigas sem classificação podem ser incluídas manualmente.</p>
       </div>
       <h3 className="mt-5 font-semibold">Questões publicadas ({questions.length})</h3>
       {questions.length===0?<p className="text-sm">O banco ainda não contém questões publicadas para este curso.</p>:null}
-      <div className="mt-2 max-h-80 space-y-2 overflow-y-auto" aria-label="Questões disponíveis">
-        {questions.map(q=><label className="flex gap-3 rounded border p-2 text-sm" key={q.questionId+':'+q.revision}>
+      <label className="mt-4 block text-sm">Buscar questão por enunciado, módulo ou assunto
+        <input className={input+' mt-1'} value={questionQuery} onChange={e=>setQuestionQuery(e.target.value)} placeholder="Filtrar questões publicadas"/>
+      </label>
+      <div className="mt-2 grid grid-cols-1 gap-2 lg:grid-cols-2" aria-label="Questões disponíveis">
+        {questions.filter(q=>(q.prompt+' '+q.moduleId+' '+q.topicId).toLocaleLowerCase('pt-BR')
+          .includes(questionQuery.toLocaleLowerCase('pt-BR'))).map(q=><label className="flex min-h-11 gap-3 rounded-lg border border-slate-200 p-3 text-sm dark:border-slate-700" key={q.questionId+':'+q.revision}>
           <input type="checkbox" aria-label={`Incluir ${q.questionId} v${q.revision}`}
             disabled={!!published||working} checked={selected[q.questionId]===q.revision}
             onChange={e=>setSelected(old=>{
@@ -379,7 +413,7 @@ export default function LmsExamAdmin():React.ReactElement {
           <span><strong>{q.moduleId}</strong> · {q.topicId} · {q.difficulty||'Sem nível'} · {q.questionId} v{q.revision}: {q.prompt}</span>
         </label>)}
       </div>
-      {nextOffset!==null?<button type="button" className="mt-3 rounded border px-3 py-2"
+      {nextOffset!==null?<button type="button" className={examSecondary+' mt-3'}
         disabled={working} onClick={()=>void loadQuestions(nextOffset).catch(e=>setError(String(e)))}>
         Carregar mais questões</button>:null}
       <h3 className="mt-5 font-semibold">Critérios por módulo</h3>
@@ -415,11 +449,41 @@ export default function LmsExamAdmin():React.ReactElement {
         checked={confirmed} disabled={!!published||working}
         onChange={e=>setConfirmed(e.target.checked)}/>
         Confirmo a cobertura do conteúdo, os critérios de aprovação por módulo, a edição e a autorização editorial.</label>
+    </section>:null}
+    {!loading&&validId&&step===4?<section className={panel}>
+      <h2 className="text-xl font-semibold">Revisão final antes da publicação</h2>
+      <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">Confira todos os critérios. A publicação é imutável e o vínculo é uma etapa distinta.</p>
+      <dl className="mt-4 grid gap-3 rounded-lg border border-slate-200 p-4 text-sm dark:border-slate-700 sm:grid-cols-2">
+        <div><dt className="font-semibold">Nome</dt><dd>{examTitle}</dd></div>
+        <div><dt className="font-semibold">Edição</dt><dd>{edition?.packageVersion||'Não selecionada'} · {edition?.status||'Sem edição'}</dd></div>
+        <div><dt className="font-semibold">Questões</dt><dd>{picked.length} selecionadas em {groups.length} módulos</dd></div>
+        <div><dt className="font-semibold">Tentativas</dt><dd>{maxAttempts||'Não definido'}</dd></div>
+        <div><dt className="font-semibold">Tempo</dt><dd>{timeLimitMinutes?timeLimitMinutes+' minutos':'Sem limite definido'}</dd></div>
+        <div><dt className="font-semibold">Intervalo</dt><dd>{retryDelayMinutes||'0'} minutos</dd></div>
+        {groups.map(([moduleId,items])=><div key={moduleId}>
+          <dt className="font-semibold">Módulo {moduleId}</dt>
+          <dd>{items.length} questões · mínimo {minimums[moduleId]||'Não definido'}%</dd>
+        </div>)}
+      </dl>
+      <details className="mt-4 rounded-lg border border-slate-200 p-4 text-sm dark:border-slate-700">
+        <summary className="cursor-pointer font-semibold">Pré-visualizar questões como o aluno (sem gabarito)</summary>
+        <ol className="mt-3 list-inside list-decimal space-y-4">{picked.map(q=><li key={q.questionId} className="rounded-lg border border-slate-200 p-3 dark:border-slate-700">
+          <p className="font-semibold">{q.prompt} <span className="font-normal text-slate-500">({q.moduleId})</span></p>
+          {q.choices?.length?<fieldset className="mt-2 space-y-1" disabled>
+            <legend className="sr-only">Alternativas da questão</legend>
+            {q.choices.map(choice=><label key={choice.id} className="flex items-start gap-2 text-sm">
+              <input type="radio" name={'preview-'+q.questionId} disabled/> <span>{choice.text}</span>
+            </label>)}
+          </fieldset>:<p className="mt-1 text-xs text-slate-500">Alternativas não disponíveis nesta versão de pré-visualização.</p>}
+        </li>)}</ol>
+        <p className="mt-2 text-xs">Pré-visualização somente leitura, sem gabarito ou dados de aluno. Não cria matrícula, tentativa ou certificado.</p>
+      </details>
+      <p className="mt-4 text-sm font-medium">{confirmed?'Revisão editorial confirmada.':'Volte à etapa 3 e confirme a revisão editorial antes de publicar.'}</p>
       <div className="mt-4 flex flex-wrap gap-2">
-        <button type="button" className="rounded bg-blue-700 px-4 py-2 text-white disabled:opacity-50"
+        <button type="button" className={examPrimary}
           disabled={working||!eligibility?.canBind||!edition||!!published}
           onClick={()=>void publish()}>Publicar plano imutável</button>
-        <button type="button" className="rounded border px-3 py-2 disabled:opacity-50"
+        <button type="button" className={examSecondary}
           disabled={working||!edition||!!published}
           onClick={()=>void recover()}>Recuperar plano já publicado</button>
       </div>
@@ -437,10 +501,10 @@ export default function LmsExamAdmin():React.ReactElement {
           <textarea className={input+' mt-1'} rows={3} value={note}
             aria-label="Justificativa de aprovação" onChange={e=>setNote(e.target.value)}/>
         </label>
-        <button type="button" className="mt-3 rounded bg-blue-700 px-4 py-2 text-white disabled:opacity-50"
+        <button type="button" className={examPrimary+' mt-3'}
           disabled={working||!eligibility?.canBind||!!edition?.boundExamId} onClick={()=>void bind()}>
           Vincular prova à edição</button>
       </section>:null}
     </section>:null}
-  </main></AppLayout>;
+  </div></AppLayout>;
 }

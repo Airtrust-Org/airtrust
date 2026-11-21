@@ -90,6 +90,24 @@ function scoreForReport(planText:string|null,resultText:string|null):number|null
   }catch{return null;}
 }
 
+/** Per-module score and normative threshold are read-only and derived solely
+ * from the signed attempt's immutable plan; no question keys or responses. */
+function sectionsForReport(planText:string|null,resultText:string|null):{
+ moduleId:string;scorePct:number;minScorePct:number;
+}[]{
+ if(scoreForReport(planText,resultText)===null)return [];
+ try{
+  const plan=JSON.parse(planText as string) as {sections:{moduleId:string;minScorePct:number}[]};
+  const result=JSON.parse(resultText as string) as {sections:{moduleId:string;scorePct:number}[]};
+  return plan.sections.map(section=>{
+   const score=result.sections.find(r=>r.moduleId===section.moduleId);
+   if(!score||!Number.isInteger(section.minScorePct)||section.minScorePct<1||
+      section.minScorePct>100||!Number.isFinite(score.scorePct))return null;
+   return {moduleId:section.moduleId,scorePct:score.scorePct,minScorePct:section.minScorePct};
+  }).filter((x):x is {moduleId:string;scorePct:number;minScorePct:number}=>x!==null);
+ }catch{return [];}
+}
+
 /** Paged assessment results, never answer keys. Auth/ADMIN/tenant is checked above. */
 routes.get('/resultados',async c=>{
   const pageRaw=c.req.query('page')||'1',limitRaw=c.req.query('limit')||'25';
@@ -124,12 +142,12 @@ routes.get('/resultados',async c=>{
   const [count,records]=await Promise.all([
     c.env.DB.prepare('SELECT COUNT(*) AS total'+from).bind(...params)
       .first<{total:number}>(),
-    c.env.DB.prepare('SELECT a.curso_id,c.titulo,a.matricula_id,a.exam_id,a.exam_version,'+
+    c.env.DB.prepare('SELECT a.id AS attempt_id,a.curso_id,c.titulo,a.matricula_id,a.exam_id,a.exam_version,'+
       'a.attempt_no,a.state,a.passed,a.started_at,a.submitted_at,a.result_json,'+
       'f.nome AS aluno_nome,p.plan_json'+from+
       ' ORDER BY a.started_at DESC,a.id DESC LIMIT ? OFFSET ?')
       .bind(...params,limit,(page-1)*limit)
-      .all<{curso_id:number;titulo:string|null;matricula_id:number;exam_id:string;
+      .all<{attempt_id:string;curso_id:number;titulo:string|null;matricula_id:number;exam_id:string;
         exam_version:number;attempt_no:number;state:string;passed:number|null;
         started_at:string;submitted_at:string|null;result_json:string|null;
         aluno_nome:string|null;plan_json:string|null}>(),
@@ -138,11 +156,13 @@ routes.get('/resultados',async c=>{
     page,limit,total:count?.total||0,
     pages:Math.ceil((count?.total||0)/limit),
     items:(records.results||[]).map(row=>({
+      attemptId:row.attempt_id,
       cursoId:row.curso_id,cursoTitulo:row.titulo||null,matriculaId:row.matricula_id,
       alunoNome:row.aluno_nome||null,examId:row.exam_id,version:row.exam_version,
       attemptNo:row.attempt_no,state:row.state,
       passed:row.passed===null?null:row.passed===1,
       scorePct:row.state==='SUBMITTED'?scoreForReport(row.plan_json,row.result_json):null,
+      sections:row.state==='SUBMITTED'?sectionsForReport(row.plan_json,row.result_json):[],
       startedAt:row.started_at,submittedAt:row.submitted_at,
     })),
   }});
@@ -155,11 +175,20 @@ routes.get('/overview',async c=>{
   const tenant=getEmpresaId(c);
   const [courseRows,questionRows,planRows,bindingRows,totalsRow,attemptRows]=await Promise.all([
     c.env.DB.prepare(
-      'SELECT id,titulo,tipo_conteudo,scorm_assessment_policy,publicado '+
-      'FROM lms_cursos WHERE empresa_id=? AND ativo=1 AND deleted_at IS NULL '+
-      'ORDER BY titulo COLLATE NOCASE LIMIT 250'
+      'SELECT c.id,c.titulo,c.tipo_conteudo,c.scorm_assessment_policy,c.publicado,'+
+      'p.package_sha256 AS activePackageSha256,'+
+      'b.exam_id AS activeExamId,b.exam_version AS activeExamVersion '+
+      'FROM lms_cursos c LEFT JOIN lms_scorm_package_versions p ON p.id=('+
+      'SELECT v.id FROM lms_scorm_package_versions v WHERE v.empresa_id=c.empresa_id '+
+      "AND v.curso_id=c.id AND v.status='ACTIVE' "+
+      'ORDER BY v.uploaded_at DESC,v.id DESC LIMIT 1) '+
+      'LEFT JOIN lms_exam_edition_bindings b ON b.empresa_id=c.empresa_id '+
+      'AND b.curso_id=c.id AND b.package_sha256=p.package_sha256 '+
+      'WHERE c.empresa_id=? AND c.ativo=1 AND c.deleted_at IS NULL '+
+      'ORDER BY c.titulo COLLATE NOCASE LIMIT 250'
     ).bind(tenant).all<{id:number;titulo:string;tipo_conteudo:string;
-      scorm_assessment_policy:string|null;publicado:number}>(),
+      scorm_assessment_policy:string|null;publicado:number;
+      activePackageSha256:string|null;activeExamId:string|null;activeExamVersion:number|null}>(),
     c.env.DB.prepare(
       'SELECT curso_id,status,COUNT(DISTINCT question_key) AS total FROM lms_exam_question_revisions '+
       'WHERE empresa_id=? GROUP BY curso_id,status'
@@ -323,7 +352,9 @@ routes.get('/cursos/:cursoId/questoes-publicadas',async c=>{
 });
 routes.get('/cursos/:cursoId/questoes',async c=>{
   const a=actor(c,c.req.param('cursoId'));
-  const items=await listAdminQuestions(c.env.DB,a);
+  const raw=c.req.query('offset')||'0';
+  if(!/^(0|[1-9][0-9]{0,5})$/.test(raw))throw new QuestionStoreError('EXAM_PAGINATION_INVALID');
+  const items=await listAdminQuestions(c.env.DB,a,Number(raw));
   return c.json({success:true,data:items});
 });
 routes.post('/cursos/:cursoId/questoes',async c=>{

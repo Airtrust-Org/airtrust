@@ -37,28 +37,58 @@ describe('Administração de provas por edição',()=>{
   afterEach(()=>cleanup());
   it('lista apenas questões publicadas e edições servidas pelo backend',async()=>{
     renderPage();
+    expect(await screen.findByRole('option',{name:/1.0 · ACTIVE/})).toBeTruthy();
+    fireEvent.click(screen.getByRole('button',{name:'3. Critérios e montagem'}));
     expect(await screen.findByText('Questão de segurança?',{exact:false})).toBeTruthy();
-    expect(screen.getByRole('option',{name:/1.0 · ACTIVE/})).toBeTruthy();
     expect(screen.queryByText('SEGREDO')).toBeNull();
     expect(mocked.mock.calls.some(([url])=>String(url).includes('questoes-publicadas'))).toBe(true);
   });
+  it('seleção por dificuldade não inventa nota mínima de 80% para curso de 70%',async()=>{
+    mocked.mockImplementation(async url=>{
+      if(String(url).endsWith('/edicoes'))return ok({editions:versions});
+      if(String(url).endsWith('/cursos/26/provas'))return ok({items:[],hasMore:false});
+      if(String(url).includes('/aptidao?'))return ok({
+        packageSha256:pkg,status:'ACTIVE',assessmentMode:'EXTERNAL',
+        workerApprovalRequired:true,canBind:true,boundExamId:null,boundExamVersion:null,reason:null,
+      });
+      if(String(url).includes('/questoes-publicadas?'))return ok({
+        items:[{...publishedQuestions[0],difficulty:'BASICA'}],nextOffset:null,
+      });
+      return new Response(JSON.stringify({success:false,code:'UNEXPECTED'}),{status:422});
+    });
+    renderPage();
+    await screen.findByRole('option',{name:/1.0 · ACTIVE/});
+    fireEvent.click(screen.getByRole('button',{name:'3. Critérios e montagem'}));
+    await screen.findByText('Questão de segurança?',{exact:false});
+    fireEvent.change(screen.getByLabelText('Quantidade BASICA'),{target:{value:'1'}});
+    fireEvent.click(screen.getByRole('button',{name:'Selecionar questões'}));
+    const minimum=screen.getByLabelText('Nota mínima de m1') as HTMLInputElement;
+    expect(minimum.value).toBe('');
+    expect(screen.getAllByRole('status').some(el=>el.textContent?.includes('nota mínima autorizada'))).toBe(true);
+  });
+
   it('exige nota mínima e confirmação editorial antes de publicar plano; não vincula automaticamente',async()=>{
     renderPage();
-    await screen.findByText('Questão de segurança?',{exact:false});
     await screen.findByText(/Edição apta para vincular prova externa/);
     expect((screen.getByLabelText('Edição do pacote SCORM') as HTMLSelectElement).value).toBe(pkg);
+    fireEvent.click(screen.getByRole('button',{name:'3. Critérios e montagem'}));
+    await screen.findByText('Questão de segurança?',{exact:false});
     fireEvent.change(screen.getByLabelText('Nome da prova'),{target:{value:'Avaliação Final de CRM'}});
     fireEvent.click(screen.getByText('Configurações avançadas e rastreabilidade'));
     fireEvent.change(screen.getByLabelText('Identificador da prova'),{target:{value:'prova-crm-v1'}});
     fireEvent.change(screen.getByLabelText('SHA-256 da edição aprovada'),{target:{value:edition}});
     fireEvent.click(screen.getByLabelText('Incluir q1 v1'));
+    fireEvent.click(screen.getByRole('button',{name:'4. Revisar e publicar'}));
+    expect(screen.getByText(/Revisão final antes da publicação/)).toBeTruthy();
     fireEvent.click(screen.getByRole('button',{name:'Publicar plano imutável'}));
-    expect(await screen.findByRole('alert')).toHaveProperty('textContent',expect.stringContaining('NOTA_MÍNIMA'));
+    expect(await screen.findByRole('alert')).toHaveProperty('textContent',expect.stringContaining('nota mínima'));
+    fireEvent.click(screen.getByRole('button',{name:'3. Critérios e montagem'}));
     fireEvent.change(screen.getByLabelText('Nota mínima de m1'),{target:{value:'70'}});
     fireEvent.change(screen.getByLabelText('Número máximo de tentativas'),{target:{value:'3'}});
     fireEvent.change(screen.getByLabelText('Intervalo entre tentativas'),{target:{value:'0'}});
     fireEvent.change(screen.getByLabelText('Limite de tempo da prova'),{target:{value:'30'}});
     fireEvent.click(screen.getByText(/Confirmo a cobertura do conteúdo/));
+    fireEvent.click(screen.getByRole('button',{name:'4. Revisar e publicar'}));
     mocked.mockImplementation(async (url,init)=>{
       if(String(url).endsWith('/provas')&&init?.method==='POST')return ok({planSha256:'e'.repeat(64)});
       if(String(url).endsWith('/edicoes'))return ok({editions:versions});

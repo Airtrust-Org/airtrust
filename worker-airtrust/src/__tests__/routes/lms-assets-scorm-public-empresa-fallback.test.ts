@@ -209,6 +209,36 @@ describe('SCORM public routes — empresa_id resolved from JWT payload (no tenan
       expect(html).toContain('scorm');
     });
 
+    it('consulta durante prova em matrícula em andamento é efetivamente somente leitura no Worker', async () => {
+      verifyJWTMock.mockResolvedValue({ empresa_id:6, funcionario_id:42, role:'admin', sub:'42' });
+      const db=createMockDb([
+        ['FROM lms_matriculas m',{first:()=>({
+          id:77,funcionario_id:42,empresa_id:6,status:'EM_ANDAMENTO',
+          curso_id:99,titulo:'Curso de prova',scorm_versao:'1.2',
+          scorm_package_r2_prefix:null,scorm_launch_file:'index.html',
+          ativo:1,publicado:1,
+        })}],
+        ['lms_progresso_scorm',{first:()=>null}],
+        ['lms_matricula_ciclos',{first:()=>({id:44})}],
+      ]);
+      const app=createApp();
+      const args={headers:{Authorization:'Bearer test.jwt.token'}};
+      const response=await app.fetch(
+        new Request('http://localhost/scorm/launch/77?review=1',args),
+        makeEnv(db),{} as ExecutionContext);
+      expect(response.status).toBe(200);
+      const html=await response.text();
+      expect(html).toContain('var REVIEW_MODE = true;');
+      expect(html).toContain('var COMMIT_URL = null;');
+      const normal=await app.fetch(
+        new Request('http://localhost/scorm/launch/77',args),
+        makeEnv(db),{} as ExecutionContext);
+      expect(normal.status).toBe(200);
+      const normalHtml=await normal.text();
+      expect(normalHtml).toContain('var REVIEW_MODE = false;');
+      expect(normalHtml).toContain("var COMMIT_URL = '/api/lms/matriculas/scorm/commit';");
+    });
+
     it('returns 401 when JWT has no empresa_id and no tenant context (empresa remains 0)', async () => {
       verifyJWTMock.mockResolvedValue({
         empresa_id: null,

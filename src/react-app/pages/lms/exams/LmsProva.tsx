@@ -5,17 +5,19 @@
  * itself: after a pass it calls the canonical /finalizar endpoint.
  */
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { Link, useParams } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { invalidateTrainingEvidenceProjections } from '@/react-app/lib/compliance-source-invalidation';
 import { fetchWithAuth } from '../../../config/api';
+import AppLayout from '../../../components/AppLayout';
+import {examPage,examCard,examPrimary,examSecondary,examWarning,examMuted,examDanger} from './examUi';
 
 type Choice = { id: string; text: string };
 type ExamQuestion = { questionId: string; prompt: string; choices: Choice[] };
 type Section = { moduleId: string; questions: ExamQuestion[] };
 type Result = {
   passed: boolean; answered: number; unanswered: number; expired?: boolean;
-  sections: { moduleId: string; scorePct: number; passed: boolean }[];
+  sections: { moduleId: string; scorePct: number; passed: boolean; minScorePct?:number|null }[];
 };
 type Attempt = {
   attemptId: string; attemptNo: number; state: 'IN_PROGRESS' | 'SUBMITTED';
@@ -57,7 +59,6 @@ async function call<T>(path: string, init?: RequestInit): Promise<T> {
 
 export default function LmsProva(): React.ReactElement {
   const { matriculaId } = useParams<{ matriculaId: string }>();
-  const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [exam, setExam] = useState<ExamState | null>(null);
   // Re-render exactly when the Worker-defined retry deadline expires.
@@ -71,6 +72,29 @@ export default function LmsProva(): React.ReactElement {
   // Synchronous guard: React state updates may be batched between rapid clicks.
   const saveInFlight = useRef(false);
   const [confirming, setConfirming] = useState(false);
+  const [questionIndex,setQuestionIndex] = useState(0);
+  const [now,setNow] = useState(Date.now());
+  const [completionConfirmed,setCompletionConfirmed] = useState(false);
+  const sendRef=useRef<HTMLButtonElement>(null);
+  const dialogRef=useRef<HTMLDivElement>(null);
+  const previousConfirming=useRef(false);
+  useEffect(()=>{
+    if(confirming){
+      const first=dialogRef.current?.querySelector('button');
+      first?.focus();
+    }else if(previousConfirming.current){
+      // Restore focus only on closing the confirmation; never steal focus
+      // from the first question when an exam attempt is first started.
+      sendRef.current?.focus();
+    }
+    previousConfirming.current=confirming;
+  },[confirming]);
+  useEffect(()=>{
+    if(attempt?.state!=='IN_PROGRESS'||!attempt.expiresAt)return;
+    setNow(Date.now());
+    const timer=window.setInterval(()=>setNow(Date.now()),1000);
+    return()=>window.clearInterval(timer);
+  },[attempt?.state,attempt?.expiresAt]);
   // One key per start click: a network retry reuses it, so no duplicate attempt.
   const startKey = useRef<string>('');
 
@@ -103,7 +127,7 @@ export default function LmsProva(): React.ReactElement {
         method: 'POST', headers: { 'Idempotency-Key': startKey.current },
       });
       startKey.current = '';
-      setAttempt(data); setAnswers(data.answers); setStatus('');
+      setAttempt(data); setAnswers(data.answers); setQuestionIndex(0);setStatus('');
     } catch (e) { setError(explain((e as { code?: string }).code)); }
     finally { setBusy(false); }
   }
@@ -136,8 +160,17 @@ export default function LmsProva(): React.ReactElement {
     }
   }
 
-  const total = attempt ? attempt.sections.reduce((n, s) => n + s.questions.length, 0) : 0;
-  const unanswered = total - Object.keys(answers).length;
+  const questionList = attempt?.sections.flatMap((section,si)=>
+    section.questions.map(q=>({...q,sectionIndex:si,moduleId:section.moduleId})))||[];
+  const total=questionList.length;
+  const answered=questionList.filter(q=>!!answers[q.questionId]).length;
+  const unanswered=total-answered;
+  const remainingMs=attempt?.expiresAt?Math.max(0,Date.parse(attempt.expiresAt)-now):null;
+  const remainingLabel=remainingMs===null?'':[
+    Math.floor(remainingMs/3600000),
+    Math.floor(remainingMs%3600000/60000),
+    Math.floor(remainingMs%60000/1000),
+  ].map(n=>String(n).padStart(2,'0')).join(':');
 
   async function submit() {
     // Never seal an attempt while its last answer is still in flight.
@@ -158,9 +191,12 @@ export default function LmsProva(): React.ReactElement {
       const body = (await res.json()) as { success?: boolean; code?: string };
       if (!res.ok || !body.success) throw new Error(body.code ?? 'FINALIZE_FAILED');
       void invalidateTrainingEvidenceProjections(queryClient);
-      navigate('/lms');
+      const updated=await call<ExamState>(base+'/prova');
+      setExam(updated);
+      if(updated.state==='COMPLETED'){setCompletionConfirmed(true);setAttempt(null);setStatus('Conclusão confirmada pelo LMS.');}
+      else setStatus('Solicitação aceita; aguardando confirmação da conclusão no LMS. Consulte o histórico antes de considerar o curso encerrado.');
     } catch {
-      setError('A prova foi aprovada, mas a conclusão ainda não foi registrada. Tente novamente em instantes.');
+      setError('A prova foi aprovada, mas a conclusão ainda não foi confirmada. Consulte o histórico ou tente novamente.');
     } finally { setBusy(false); }
   }
 
@@ -180,14 +216,19 @@ export default function LmsProva(): React.ReactElement {
     } finally { setBusy(false); }
   }
 
-  const card = 'rounded-xl border border-slate-200 bg-white p-4 text-slate-800 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100';
-  const primary = 'inline-flex items-center rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600';
-  const secondary = 'inline-flex items-center rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600';
+  const card=examCard;
+  const primary=examPrimary;
+  const secondary=examSecondary;
 
   return (
-    <main className="mx-auto max-w-3xl px-4 py-6" aria-labelledby="prova-titulo">
+    <AppLayout><div className={examPage+' max-w-3xl'} aria-labelledby="prova-titulo">
       <h1 id="prova-titulo" className="mb-1 text-xl font-bold text-slate-900 dark:text-white">Prova final</h1>
-      <p className="mb-4 text-sm text-slate-600 dark:text-slate-300">
+      <p className="mb-4 flex flex-wrap items-center gap-3 text-sm text-slate-600 dark:text-slate-300">
+        <a href={'/lms/player/' + matriculaId + '?review=1&source=exam'}
+          target="_blank" rel="noopener noreferrer" className="underline"
+          aria-label="Consultar o conteúdo do treinamento em outra aba, sem alterar a prova">
+          Consultar conteúdo em outra aba (somente leitura)
+        </a>
         <Link to={`/lms/player/${matriculaId}`} className="underline">Voltar ao treinamento</Link>
       </p>
       {error ? <p role="alert" className="mb-4 rounded-lg border border-red-300 bg-red-50 p-3 text-sm text-red-800">{error}</p> : null}
@@ -201,7 +242,9 @@ export default function LmsProva(): React.ReactElement {
           {exam.state === 'STUDY_PENDING' ? <p>Conclua todo o conteúdo do treinamento para liberar a avaliação.</p> : null}
           {exam.state === 'COMPLETED' ? (
             <>
-              <p className="mb-3">Treinamento já concluído.</p>
+              <h2 className="mb-3 text-lg font-semibold">{completionConfirmed?'Conclusão confirmada pelo LMS':'Treinamento já concluído.'}</h2>
+              <p className="mb-2 text-sm">Matrícula #{matriculaId}. {exam.certificate==='ISSUED'?'Certificado emitido.':exam.certificate==='NOT_APPLICABLE'?'Não há certificado EAD aplicável.':'Emissão de certificado ainda não confirmada.'}</p>
+              <Link to="/lms" className={secondary+' mb-4'}>Consultar meus treinamentos</Link>
               {exam.certificate === 'ISSUED' ? <p className="text-sm">Certificado emitido. Consulte seus certificados.</p> : null}
               {exam.certificate !== 'ISSUED' && exam.certificate !== 'NOT_APPLICABLE' ? (
                 <>
@@ -248,30 +291,45 @@ export default function LmsProva(): React.ReactElement {
 
       {attempt && attempt.state === 'IN_PROGRESS' ? (
         <form onSubmit={e => { e.preventDefault(); if (!busy && !saveInFlight.current) setConfirming(true); }} aria-label={`Tentativa ${attempt.attemptNo}`}>
-          {attempt.expiresAt ? <p className="mb-3 text-sm" aria-live="polite">
-            Esta tentativa termina em {new Date(attempt.expiresAt).toLocaleString('pt-BR')}.
-            O tempo continua correndo durante a consulta ao treinamento.
-          </p> : null}
-          {attempt.sections.map((section, si) => (
-            <div key={section.moduleId} className="mb-6">
-              <h2 className="mb-2 text-base font-semibold text-slate-900 dark:text-white">Parte {si + 1}</h2>
-              {section.questions.map((q, qi) => (
-                <fieldset key={q.questionId} className={`${card} mb-3`}>
-                  <legend className="px-1 text-sm font-semibold">Questão {qi + 1}. {q.prompt}</legend>
-                  {q.choices.map(c => (
-                    <label key={c.id} className="flex cursor-pointer items-start gap-2 py-1.5 text-sm">
-                      <input type="radio" name={q.questionId} value={c.id} className="mt-1"
-                        checked={answers[q.questionId] === c.id} disabled={busy || saving}
-                        onChange={() => void choose(q.questionId, c.id)} />
-                      <span>{c.text}</span>
-                    </label>
-                  ))}
-                </fieldset>
-              ))}
+          {attempt.expiresAt ? <div role="timer" aria-live="off" className={(remainingMs!==null&&remainingMs<=600000?examWarning:card)+' mb-3'}>
+            <span className="font-semibold">Tempo restante: {remainingLabel}</span>
+            <p className="mt-1 text-sm">Prazo: {new Date(attempt.expiresAt).toLocaleString('pt-BR')}. O tempo continua correndo durante a consulta.</p>
+            {remainingMs!==null&&remainingMs<=60000?<p role="alert" className="mt-1 text-sm font-semibold">Menos de 1 minuto restante.</p>:
+              remainingMs!==null&&remainingMs<=300000?<p className="mt-1 text-sm font-semibold">Menos de 5 minutos restantes.</p>:
+              remainingMs!==null&&remainingMs<=600000?<p className="mt-1 text-sm font-semibold">Menos de 10 minutos restantes.</p>:null}
+          </div>:null}
+          <section className={card+' mb-4'} aria-label="Progresso da prova">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <strong>{answered} de {total} questões respondidas</strong>
+              <span className="text-sm">{unanswered} pendente(s)</span>
             </div>
-          ))}
+            <progress className="mt-2 h-3 w-full accent-primary" max={Math.max(total,1)} value={answered} aria-label="Progresso de respostas"/>
+            <nav className="mt-3 flex flex-wrap gap-2" aria-label="Selecionar questão">
+              {questionList.map((q,i)=><button type="button" key={q.questionId} aria-current={questionIndex===i?'step':undefined}
+                aria-label={'Ir para questão '+(i+1)+(answers[q.questionId]?' respondida':' pendente')}
+                className={(i===questionIndex?primary:secondary)+' min-w-11'}
+                onClick={()=>setQuestionIndex(i)}>{i+1}{answers[q.questionId]?' ✓':''}</button>)}
+            </nav>
+          </section>
+          {questionList.map((q,i)=>i!==questionIndex?null:<section key={q.questionId} className="mb-6" aria-label={'Questão '+(i+1)}>
+            <h2 className="mb-3 text-sm font-semibold text-slate-600 dark:text-slate-300">Módulo {q.moduleId} · Questão {i+1} de {total}</h2>
+            <fieldset className={card+' mb-3'}>
+              <legend className="px-1 text-base font-semibold">Questão {i+1}. {q.prompt}</legend>
+              {q.choices.map(c=><label key={c.id} className="flex min-h-11 cursor-pointer items-start gap-3 rounded-lg py-2 text-sm">
+                <input type="radio" name={q.questionId} value={c.id} className="mt-1"
+                  checked={answers[q.questionId]===c.id} disabled={busy||saving}
+                  onChange={()=>void choose(q.questionId,c.id)}/>
+                <span>{c.text}</span>
+              </label>)}
+              {saving?<span role="status" className="text-xs">Salvando resposta. Aguarde a confirmação.</span>:null}
+            </fieldset>
+            <div className="flex flex-wrap justify-between gap-2">
+              <button type="button" className={secondary} disabled={i===0||saving} onClick={()=>setQuestionIndex(Math.max(0,i-1))}>Anterior</button>
+              <button type="button" className={secondary} disabled={i===total-1||saving} onClick={()=>setQuestionIndex(Math.min(total-1,i+1))}>Próxima questão</button>
+            </div>
+          </section>)}
           {confirming ? (
-            <div role="alertdialog" aria-labelledby="confirmar-envio" className={`${card} mb-3`}>
+            <div role="alertdialog" ref={dialogRef} aria-modal="true" aria-labelledby="confirmar-envio" onKeyDown={e=>{if(e.key==='Escape'){setConfirming(false);sendRef.current?.focus();}if(e.key==='Tab'){const buttons=dialogRef.current?.querySelectorAll('button');if(buttons?.length){if(e.shiftKey&&document.activeElement===buttons[0]){e.preventDefault();buttons[buttons.length-1].focus();}else if(!e.shiftKey&&document.activeElement===buttons[buttons.length-1]){e.preventDefault();buttons[0].focus();}}}}} className={`${card} mb-3`}>
               <p id="confirmar-envio" className="mb-3 text-sm">
                 {unanswered > 0
                   ? `Você deixou ${unanswered} questão(ões) sem resposta; elas contam como erradas. Enviar mesmo assim?`
@@ -283,7 +341,7 @@ export default function LmsProva(): React.ReactElement {
               </div>
             </div>
           ) : (
-            <button type="submit" className={primary} disabled={busy || saving}>Enviar prova</button>
+            <button type="submit" className={primary} ref={sendRef} disabled={busy || saving}>Enviar prova</button>
           )}
         </form>
       ) : null}
@@ -294,7 +352,7 @@ export default function LmsProva(): React.ReactElement {
           {attempt.result.expired ? <p role="alert" className="mb-2 text-sm">Tempo esgotado: esta tentativa foi encerrada sem aprovação.</p> : null}
           <ul className="mb-3 list-disc pl-5 text-sm">
             {attempt.result.sections.map((s, i) => (
-              <li key={s.moduleId}>Parte {i + 1}: {s.scorePct}% — {attempt.result?.expired ? 'tentativa encerrada por tempo' : s.passed ? 'atingiu o mínimo' : 'abaixo do mínimo'}</li>
+              <li key={s.moduleId}>Módulo {s.moduleId} (parte {i+1}): {s.scorePct}% — mínimo {s.minScorePct===undefined||s.minScorePct===null?'não informado':s.minScorePct+'%'} — {attempt.result?.expired ? 'tentativa encerrada por tempo' : s.passed ? 'atingiu o mínimo' : 'abaixo do mínimo'}</li>
             ))}
           </ul>
           {attempt.result.unanswered > 0 ? <p className="mb-3 text-sm">Questões sem resposta: {attempt.result.unanswered}.</p> : null}
@@ -309,6 +367,6 @@ export default function LmsProva(): React.ReactElement {
           )}
         </section>
       ) : null}
-    </main>
+    </div></AppLayout>
   );
 }

@@ -85,6 +85,8 @@ describe('Question bank separated from SCORM player',()=>{
         target:{value:text},
       });
     }
+    fireEvent.click(screen.getByRole('radio',{name:'Resposta correta: alternativa 1'}));
+    fireEvent.change(screen.getByRole('combobox',{name:'Nível de dificuldade da questão'}),{target:{value:'BASICA'}});
     fireEvent.click(screen.getByRole('button',{name:'Salvar rascunho'}));
     await waitFor(()=>expect(mocked).toHaveBeenCalledTimes(3));
     const [url,options]=mocked.mock.calls[1];

@@ -1028,8 +1028,8 @@ app.get('/scorm/launch/:matricula_id', async (c) => {
   }
 
   const launchUrl = `/api/lms/scorm/assets/${matricula.empresa_id}/${matricula.curso_id}/${resolvedLaunchFile}`;
-  const commitUrl = '/api/lms/matriculas/scorm/commit';
-
+  const reviewMode = c.req.query('review') === '1' || matricula.status === 'CONCLUIDO';
+  const commitUrl = reviewMode ? null : '/api/lms/matriculas/scorm/commit';
   // Versão SCORM: 1.2 ou 2004
   const isScorm2004 = matricula.scorm_versao === '2004';
   const progressoScorm = await db
@@ -1090,7 +1090,7 @@ app.get('/scorm/launch/:matricula_id', async (c) => {
     progressoScorm?.cmi_json ?? null,
     progressoScorm?.suspend_data ?? null,
     isScorm2004,
-    matricula.status === 'CONCLUIDO',
+    reviewMode,
     navigationBookmark,
     { persisted: progressoScorm, reviewEditionMismatch: Boolean(mismatch), formativeCourse },
   );
@@ -1153,7 +1153,7 @@ app.get('/scorm/launch/:matricula_id', async (c) => {
     hasResumeState,
     strictCursor: formativeCourse,
     assetCacheBuster: Date.now().toString(36),
-    reviewMode: matricula.status === 'CONCLUIDO',
+    reviewMode,
     legacyS76Rc3FinalButton: s76Rc3Active,
   });
 
@@ -1421,7 +1421,7 @@ ${buildScormLocationHelpersScript()}
     matriculaId,
     cicloId,
     numeroCiclo,
-    strictCursor,
+    strictCursor, reviewMode,
   })}
 
   var SCORM_DIAG = (function(){ try { return /[?&]scorm_diag=1(&|$)/.test(window.location.search); } catch(e) { return false; } })();

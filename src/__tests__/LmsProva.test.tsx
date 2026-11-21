@@ -8,6 +8,7 @@ import LmsProva from '../react-app/pages/lms/exams/LmsProva';
 import { fetchWithAuth } from '../react-app/config/api';
 
 vi.mock('../react-app/config/api', () => ({ API_BASE_URL: '/api', fetchWithAuth: vi.fn() }));
+vi.mock('../react-app/components/AppLayout',()=>({default:({children}:{children:React.ReactNode})=><div>{children}</div>}));
 const mocked = vi.mocked(fetchWithAuth);
 const ok = (data: unknown, status = 200) =>
   new Response(JSON.stringify({ success: true, data }), { status, headers: { 'Content-Type': 'application/json' } });
@@ -90,6 +91,18 @@ describe('Prova final do aluno', () => {
     expect(calls()).toContain('POST /api/lms/matriculas/10/finalizar');
   });
 
+  it('permite consulta simultânea sem mutar a tentativa da prova', async()=>{
+    mocked.mockResolvedValueOnce(ok(state('READY')));
+    renderPage();
+    const link=screen.getByRole('link',{name:/Consultar o conteúdo do treinamento em outra aba/});
+    expect(link.getAttribute('href')).toBe('/lms/player/10?review=1&source=exam');
+    expect(link.getAttribute('target')).toBe('_blank');
+    expect(link.getAttribute('rel')).toContain('noopener');
+    expect(link.getAttribute('rel')).toContain('noreferrer');
+    await screen.findByRole('button',{name:'Iniciar prova'});
+    expect(calls()).toEqual(['GET /api/lms/exams/matriculas/10/prova']);
+  });
+
   it('ambiente sem a prova ativada mostra mensagem clara', async () => {
     mocked.mockResolvedValueOnce(fail('EXAM_RUNTIME_NOT_ACTIVATED', 503));
     renderPage();
@@ -120,8 +133,9 @@ describe('Prova final do aluno', () => {
     expect(await screen.findByText('Aprovado')).toBeTruthy();
 
     mocked.mockResolvedValueOnce(new Response(JSON.stringify({ success: true }), { status: 200 }));
+    mocked.mockResolvedValueOnce(ok(state('COMPLETED',{certificate:'ISSUED'})));
     fireEvent.click(screen.getByRole('button', { name: 'Concluir treinamento' }));
-    await waitFor(() => expect(screen.getByTestId('where').textContent).toBe('/lms'));
+    await screen.findByRole('heading',{name:'Conclusão confirmada pelo LMS'});
     expect(calls()).toContain('POST /api/lms/matriculas/10/finalizar');
   });
 
@@ -139,8 +153,9 @@ describe('Prova final do aluno', () => {
     renderPage(client);
     const button = await screen.findByRole('button', { name: 'Concluir treinamento' });
     mocked.mockResolvedValueOnce(new Response(JSON.stringify({ success: true }), { status: 200 }));
+    mocked.mockResolvedValueOnce(ok(state('COMPLETED',{certificate:'MISSING'})));
     fireEvent.click(button);
-    await waitFor(() => expect(screen.getByTestId('where').textContent).toBe('/lms'));
+    await screen.findByRole('heading',{name:'Conclusão confirmada pelo LMS'});
     for (const key of keys) expect(client.getQueryState(key)?.isInvalidated).toBe(true);
     client.clear();
   });
@@ -154,7 +169,7 @@ describe('Prova final do aluno', () => {
     const button = await screen.findByRole('button', { name: 'Concluir treinamento' });
     mocked.mockResolvedValueOnce(fail('REQUIRES_REVIEW', 409));
     fireEvent.click(button);
-    await waitFor(() => expect(screen.getByRole('alert').textContent).toMatch(/ainda não foi registrada/));
+    await waitFor(() => expect(screen.getByRole('alert').textContent).toMatch(/ainda não foi confirmada/));
     expect(client.getQueryState(key)?.isInvalidated).toBe(false);
     client.clear();
   });
@@ -178,7 +193,7 @@ describe('Prova final do aluno', () => {
     renderPage();
     mocked.mockResolvedValueOnce(ok(attempt(), 201));
     fireEvent.click(await screen.findByRole('button', { name: 'Iniciar prova' }));
-    await screen.findByText(/Questão 1/);
+    await screen.findByText('Questão 1. Primeira?');
 
     mocked.mockResolvedValueOnce(fail('EXAM_ANSWER_INVALID', 422));
     const radio = screen.getAllByRole('radio', { name: 'Sim' })[0] as HTMLInputElement;
@@ -216,19 +231,43 @@ describe('Prova final do aluno', () => {
     expect(selected.checked).toBe(true);
     expect(calls().filter(x => x.includes('/tentativas'))).toHaveLength(1);
   });
+  it('mostra progresso global e navegação por questão, sem criar tentativas extras',async()=>{
+    mocked.mockResolvedValueOnce(ok(state('READY')));
+    renderPage();
+    mocked.mockResolvedValueOnce(ok(attempt(),201));
+    fireEvent.click(await screen.findByRole('button',{name:'Iniciar prova'}));
+    expect(await screen.findByText('0 de 2 questões respondidas')).toBeTruthy();
+    expect(document.activeElement).not.toBe(screen.getByRole('button',{name:'Enviar prova'}));
+    expect(screen.getByRole('progressbar',{name:'Progresso de respostas'})).toBeTruthy();
+    expect(screen.getByText('Questão 1. Primeira?')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button',{name:'Próxima questão'}));
+    expect(screen.getByText('Questão 2. Segunda?')).toBeTruthy();
+    expect(screen.queryByText('Questão 1. Primeira?')).toBeNull();
+    expect(calls().filter(x=>x.includes('/tentativas'))).toHaveLength(1);
+  });
+  it('não afirma conclusão quando POST retorna 200 mas GET ainda indica PASSED',async()=>{
+    mocked.mockResolvedValueOnce(ok(state('PASSED')));
+    renderPage();
+    const button=await screen.findByRole('button',{name:'Concluir treinamento'});
+    mocked.mockResolvedValueOnce(new Response(JSON.stringify({success:true}),{status:200}));
+    mocked.mockResolvedValueOnce(ok(state('PASSED')));
+    fireEvent.click(button);
+    await waitFor(()=>expect(screen.getByRole('status').textContent).toMatch(/aguardando confirmação/));
+    expect(screen.queryByText('Conclusão confirmada pelo LMS')).toBeNull();
+  });
   it('impede envio ou nova seleção enquanto a última resposta ainda não foi persistida', async () => {
     mocked.mockResolvedValueOnce(ok(state('READY')));
     renderPage();
     mocked.mockResolvedValueOnce(ok(attempt(), 201));
     fireEvent.click(await screen.findByRole('button', { name: 'Iniciar prova' }));
-    await screen.findByText(/Questão 1/);
+    await screen.findByText('Questão 1. Primeira?');
 
     let releaseSave: ((response: Response) => void) | undefined;
     mocked.mockImplementationOnce(() => new Promise<Response>(resolve => { releaseSave = resolve; }));
     fireEvent.click(screen.getAllByRole('radio', { name: 'Sim' })[0]);
     const send = screen.getByRole('button', { name: 'Enviar prova' }) as HTMLButtonElement;
     expect(send.disabled).toBe(true);
-    expect((screen.getAllByRole('radio', { name: 'Não' })[1] as HTMLInputElement).disabled).toBe(true);
+    expect((screen.getAllByRole('radio', { name: 'Não' })[0] as HTMLInputElement).disabled).toBe(true);
     fireEvent.click(send);
     expect(screen.queryByRole('alertdialog')).toBeNull();
     expect(calls().filter(value => value.includes('/enviar'))).toHaveLength(0);

@@ -14,6 +14,7 @@ export default {
           500: '#10b77f',
           600: '#10b77f', // Verde principal AirTrust
           700: '#0d9e6e',
+          800: '#076245', // Contraste AA em texto branco para controles primários
           DEFAULT: '#10b77f', // AirTrust green
         },
         'background-light': '#f6f8f7',
