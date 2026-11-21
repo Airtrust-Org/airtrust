@@ -297,20 +297,20 @@ export default function FrmsFormJornada({
             <>
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs font-medium text-gray-500 mb-1">
+                  <label htmlFor="frmsformjornada-hora-apresentacao" className="block text-xs font-medium text-gray-500 mb-1">
                     Hora Apresentação
                   </label>
-                  <TimeInput
+                  <TimeInput id="frmsformjornada-hora-apresentacao"
                     value={horaApres}
                     onChange={setHoraApres}
                     className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/40"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-gray-500 mb-1">
+                  <label htmlFor="frmsformjornada-hora-termino" className="block text-xs font-medium text-gray-500 mb-1">
                     Hora Término
                   </label>
-                  <TimeInput
+                  <TimeInput id="frmsformjornada-hora-termino"
                     value={horaTerm}
                     onChange={setHoraTerm}
                     className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/40"

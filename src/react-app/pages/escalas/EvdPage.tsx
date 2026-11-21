@@ -2484,10 +2484,10 @@ function EvdCreateForm({
             </h4>
             <div className="grid grid-cols-3 gap-3">
               <div>
-                <label className="mb-1 block text-xs font-medium text-slate-500">
+                <label htmlFor="evdpage-apresentacao-hh-mm" className="mb-1 block text-xs font-medium text-slate-500">
                   Apresentação <span className="text-slate-400">HH:MM</span>
                 </label>
-                <TimeInput
+                <TimeInput id="evdpage-apresentacao-hh-mm"
                   value={form.hora_apresentacao}
                   onChange={(value) => setForm((prev) => ({ ...prev, hora_apresentacao: value }))}
                   onBlur={() => handleHorarioBlur('hora_apresentacao', 'Apresentação')}
@@ -2496,10 +2496,10 @@ function EvdCreateForm({
                 />
               </div>
               <div>
-                <label className="mb-1 block text-xs font-medium text-slate-500">
+                <label htmlFor="evdpage-inicio-hh-mm" className="mb-1 block text-xs font-medium text-slate-500">
                   Início <span className="text-slate-400">HH:MM</span>
                 </label>
-                <TimeInput
+                <TimeInput id="evdpage-inicio-hh-mm"
                   value={form.hora_decolagem_prevista}
                   onChange={(value) =>
                     setForm((prev) => ({ ...prev, hora_decolagem_prevista: value }))
@@ -2510,10 +2510,10 @@ function EvdCreateForm({
                 />
               </div>
               <div>
-                <label className="mb-1 block text-xs font-medium text-slate-500">
+                <label htmlFor="evdpage-termino-hh-mm" className="mb-1 block text-xs font-medium text-slate-500">
                   Término <span className="text-slate-400">HH:MM</span>
                 </label>
-                <TimeInput
+                <TimeInput id="evdpage-termino-hh-mm"
                   value={form.hora_pouso_previsto}
                   onChange={(value) => setForm((prev) => ({ ...prev, hora_pouso_previsto: value }))}
                   onBlur={() => handleHorarioBlur('hora_pouso_previsto', 'Término')}

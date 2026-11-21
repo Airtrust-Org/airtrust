@@ -308,10 +308,10 @@ export default function FormularioAgendamento({
 
             {/* Hora Início */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label htmlFor="formularioagendamento-hora-inicio" className="block text-sm font-medium text-gray-700 mb-1">
                 Hora Início <span className="text-red-500">*</span>
               </label>
-              <TimeInput
+              <TimeInput id="formularioagendamento-hora-inicio"
                 value={dadosGerais.hora_inicio}
                 onChange={handleHoraInicioChange}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
@@ -321,11 +321,11 @@ export default function FormularioAgendamento({
 
             {/* Hora Fim */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label htmlFor="formularioagendamento-hora-fim-calculado-automaticamente-2h" className="block text-sm font-medium text-gray-700 mb-1">
                 Hora Fim <span className="text-red-500">*</span>
                 <span className="text-xs text-gray-500 ml-2">(calculado automaticamente +2h)</span>
               </label>
-              <TimeInput
+              <TimeInput id="formularioagendamento-hora-fim-calculado-automaticamente-2h"
                 value={dadosGerais.hora_fim}
                 onChange={(value) => setDadosGerais({ ...dadosGerais, hora_fim: value })}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"

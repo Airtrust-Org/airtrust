@@ -310,10 +310,10 @@ export default function SessaoModal({ isOpen, onClose, onSalvar, sessaoId }: Ses
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+              <label htmlFor="sessaomodal-hora" className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
                 Hora *
               </label>
-              <TimeInput
+              <TimeInput id="sessaomodal-hora"
                 value={formData.hora_inicio}
                 onChange={(value) => setFormData({ ...formData, hora_inicio: value })}
                 className="w-full rounded-md border border-slate-300 dark:border-slate-700 dark:bg-slate-800 dark:text-white px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"

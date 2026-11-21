@@ -152,8 +152,8 @@ export default function FormSessao({ isOpen, onClose, onSuccess }: Props) {
 
             {/* Hora Início */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Hora Início *</label>
-              <TimeInput
+              <label htmlFor="formulariosessao-hora-inicio" className="block text-sm font-medium text-gray-700 mb-2">Hora Início *</label>
+              <TimeInput id="formulariosessao-hora-inicio"
                 required
                 value={formData.hora_inicio}
                 onChange={(value) => setFormData({ ...formData, hora_inicio: value })}
@@ -163,8 +163,8 @@ export default function FormSessao({ isOpen, onClose, onSuccess }: Props) {
 
             {/* Hora Fim */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Hora Fim *</label>
-              <TimeInput
+              <label htmlFor="formulariosessao-hora-fim" className="block text-sm font-medium text-gray-700 mb-2">Hora Fim *</label>
+              <TimeInput id="formulariosessao-hora-fim"
                 required
                 value={formData.hora_fim}
                 onChange={(value) => setFormData({ ...formData, hora_fim: value })}

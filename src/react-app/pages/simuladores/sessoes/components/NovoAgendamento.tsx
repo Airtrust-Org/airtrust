@@ -203,11 +203,11 @@ export default function NovoAgendamento() {
             </div>
 
             <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-2">
+              <label htmlFor="novoagendamento-hora-inicio" className="block text-sm font-semibold text-gray-700 mb-2">
                 <Clock className="w-4 h-4 inline mr-1" />
                 Hora Início *
               </label>
-              <TimeInput
+              <TimeInput id="novoagendamento-hora-inicio"
                 required
                 value={formData.hora_inicio}
                 onChange={(value) => setFormData({ ...formData, hora_inicio: value })}
@@ -216,11 +216,11 @@ export default function NovoAgendamento() {
             </div>
 
             <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-2">
+              <label htmlFor="novoagendamento-hora-fim" className="block text-sm font-semibold text-gray-700 mb-2">
                 <Clock className="w-4 h-4 inline mr-1" />
                 Hora Fim *
               </label>
-              <TimeInput
+              <TimeInput id="novoagendamento-hora-fim"
                 required
                 value={formData.hora_fim}
                 onChange={(value) => setFormData({ ...formData, hora_fim: value })}

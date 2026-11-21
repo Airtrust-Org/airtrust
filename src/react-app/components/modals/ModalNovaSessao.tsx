@@ -2149,10 +2149,10 @@ export default function ModalNovaSessao({
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-2">
+              <label htmlFor="modalnovasessao-horario-inicio" className="block text-sm font-medium text-slate-700 mb-2">
                 Horário Início <span className="text-red-500">*</span>
               </label>
-              <TimeInput
+              <TimeInput id="modalnovasessao-horario-inicio"
                 value={horarioInicio}
                 onChange={(v) => {
                   setHorarioInicio(v);
@@ -2167,10 +2167,10 @@ export default function ModalNovaSessao({
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-2">
+              <label htmlFor="modalnovasessao-horario-fim" className="block text-sm font-medium text-slate-700 mb-2">
                 Horário Fim <span className="text-red-500">*</span>
               </label>
-              <TimeInput
+              <TimeInput id="modalnovasessao-horario-fim"
                 value={horarioFim}
                 onChange={(v) => {
                   setHorarioFim(v);
