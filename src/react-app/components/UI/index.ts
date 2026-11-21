@@ -24,6 +24,7 @@ export { VirtualTable } from './VirtualTable';
 export { ColumnSelector } from './ColumnSelector';
 export { Input, TextArea, Select } from './Input';
 export { FormField } from './FormField';
+export { IconButton, type IconButtonProps } from './IconButton';
 export { DropdownMenu } from './DropdownMenu';
 export type { DropdownMenuItem } from './DropdownMenu';
 

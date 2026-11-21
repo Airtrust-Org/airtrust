@@ -1,11 +1,17 @@
 import { HTMLAttributes, ThHTMLAttributes, TdHTMLAttributes } from 'react';
 import { cn } from '@/react-app/lib/utils';
 
-export function Table({ children, className, ...props }: HTMLAttributes<HTMLTableElement>) {
+interface TableProps extends HTMLAttributes<HTMLTableElement> {
+  /** Legenda acessível da tabela (visível apenas para leitores de tela). */
+  caption?: string;
+}
+
+export function Table({ children, className, caption, ...props }: TableProps) {
   return (
     <div className="w-full overflow-hidden rounded-lg border border-slate-200">
       <div className="w-full overflow-x-auto">
         <table className={cn('w-full text-sm', className)} {...props}>
+          {caption && <caption className="sr-only">{caption}</caption>}
           {children}
         </table>
       </div>
@@ -52,6 +58,7 @@ export function TableHead({
 }: ThHTMLAttributes<HTMLTableCellElement>) {
   return (
     <th
+      scope="col"
       className={cn(
         'px-6 py-3 text-left text-xs font-medium text-slate-600 uppercase tracking-wider',
         className,

@@ -7,14 +7,16 @@
  * - z-modal alinhado com design-system
  * - Slots: title, subtitle, children, footer
  * - Variantes de tamanho: sm | md | lg | xl | full
- * - Fecha com Escape e clique no backdrop
+ * - Fecha com Escape (apenas o modal do topo) e clique no backdrop
+ * - Foco: entra ao abrir, fica preso (Tab) e volta ao gatilho ao fechar
  * - Acessibilidade: role="dialog", aria-modal e associações ARIA únicas
  */
 
-import { useEffect, useId, useRef } from 'react';
+import { useId, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
 import { cn } from '@/react-app/lib/utils';
+import { useModalA11y } from '@/react-app/hooks/useModalA11y';
 
 export interface BaseModalProps {
   isOpen: boolean;
@@ -63,27 +65,8 @@ export function BaseModal({
     if (e.target === e.currentTarget) onClose();
   };
 
-  // Fecha com Escape
-  useEffect(() => {
-    if (!isOpen) return;
-    const handler = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
-    };
-    document.addEventListener('keydown', handler);
-    return () => document.removeEventListener('keydown', handler);
-  }, [isOpen, onClose]);
-
-  // Bloqueia scroll do body
-  useEffect(() => {
-    if (isOpen) {
-      document.body.style.overflow = 'hidden';
-    } else {
-      document.body.style.overflow = '';
-    }
-    return () => {
-      document.body.style.overflow = '';
-    };
-  }, [isOpen]);
+  // Foco, trap de Tab, Escape só no topo da pilha e bloqueio de rolagem com contagem
+  useModalA11y({ isOpen, onClose, dialogRef });
 
   if (!isOpen) return null;
 
@@ -159,7 +142,9 @@ export function BaseModal({
         )}
 
         {/* Body */}
-        <div className="min-h-0 flex-1 overflow-y-auto px-6 py-5">{children}</div>
+        <div data-modal-body className="min-h-0 flex-1 overflow-y-auto px-6 py-5">
+          {children}
+        </div>
 
         {/* Footer */}
         {footer && (

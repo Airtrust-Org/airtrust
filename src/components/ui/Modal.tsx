@@ -1,5 +1,6 @@
 import 'material-symbols/outlined.css';
-import { useEffect, useRef } from 'react';
+import { useId, useRef } from 'react';
+import { useModalA11y } from '@/react-app/hooks/useModalA11y';
 
 interface ModalProps {
   isOpen: boolean;
@@ -12,20 +13,10 @@ interface ModalProps {
 
 export function Modal({ isOpen, onClose, title, children, size = 'md', footer }: ModalProps) {
   const overlayRef = useRef<HTMLDivElement>(null);
+  const dialogRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    const handleEsc = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
-    };
-    if (isOpen) {
-      document.addEventListener('keydown', handleEsc);
-      document.body.style.overflow = 'hidden';
-    }
-    return () => {
-      document.removeEventListener('keydown', handleEsc);
-      document.body.style.overflow = 'unset';
-    };
-  }, [isOpen, onClose]);
+  const titleId = useId();
+  useModalA11y({ isOpen, onClose, dialogRef });
 
   if (!isOpen) return null;
 
@@ -54,19 +45,21 @@ export function Modal({ isOpen, onClose, title, children, size = 'md', footer }:
     >
       <div className="flex min-h-[calc(100dvh-1.5rem)] w-full items-center justify-center sm:min-h-[calc(100dvh-2rem)]">
         <div
+          ref={dialogRef}
           data-modal-container
           className={`relative flex w-full flex-col ${cfg.widthClass} overflow-hidden rounded-2xl bg-white shadow-2xl motion-safe:transition-all motion-safe:duration-200 ease-out`}
           style={{ maxHeight: cfg.maxHeight }}
           role="dialog"
           aria-modal="true"
-          aria-labelledby="modal-title"
+          aria-labelledby={titleId}
           onClick={(e) => e.stopPropagation()}
         >
           <div className="flex flex-shrink-0 items-center justify-between border-b border-gray-100 px-6 py-4">
-            <h2 id="modal-title" className="pr-3 text-lg font-bold text-slate-900">
+            <h2 id={titleId} className="pr-3 text-lg font-bold text-slate-900">
               {title}
             </h2>
             <button
+              type="button"
               onClick={onClose}
               aria-label="Fechar"
               className="flex min-h-[44px] min-w-[44px] items-center justify-center rounded-full text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-400 motion-safe:transition-colors"

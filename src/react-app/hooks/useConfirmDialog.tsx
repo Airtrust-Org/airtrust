@@ -1,0 +1,56 @@
+/**
+ * useConfirmDialog — confirmação assíncrona acessível no lugar de `window.confirm`.
+ *
+ * Uso:
+ *   const { confirm, confirmDialog } = useConfirmDialog();
+ *   if (!(await confirm({ title: 'Remover acesso?', tone: 'danger' }))) return;
+ *   return <>{...}{confirmDialog}</>;
+ */
+import { useCallback, useRef, useState } from 'react';
+import { ConfirmDialog, type ConfirmOptions } from '@/react-app/components/modals/ConfirmDialog';
+
+interface PendingConfirm {
+  /** Identidade única do pedido: reinicia o estado do diálogo a cada substituição. */
+  id: number;
+  options: ConfirmOptions;
+  resolve: (value: boolean) => void;
+}
+
+/**
+ * Renderize `confirmDialog` uma vez no componente.
+ * Chamadas simultâneas resolvem a anterior como `false`.
+ */
+export function useConfirmDialog() {
+  const [pending, setPending] = useState<PendingConfirm | null>(null);
+  const pendingRef = useRef<PendingConfirm | null>(null);
+  const nextIdRef = useRef(0);
+
+  const settle = useCallback((value: boolean) => {
+    const current = pendingRef.current;
+    pendingRef.current = null;
+    setPending(null);
+    current?.resolve(value);
+  }, []);
+
+  const confirm = useCallback((options: ConfirmOptions) => {
+    return new Promise<boolean>((resolve) => {
+      pendingRef.current?.resolve(false);
+      nextIdRef.current += 1;
+      const next = { id: nextIdRef.current, options, resolve };
+      pendingRef.current = next;
+      setPending(next);
+    });
+  }, []);
+
+  const confirmDialog = pending ? (
+    <ConfirmDialog
+      key={pending.id}
+      isOpen
+      {...pending.options}
+      onConfirm={() => settle(true)}
+      onCancel={() => settle(false)}
+    />
+  ) : null;
+
+  return { confirm, confirmDialog };
+}
