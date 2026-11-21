@@ -34,7 +34,7 @@ export function EscalaDayCell({
   const tooltip = state.tooltipLines.length > 0 ? state.tooltipLines.join('\n') : undefined;
 
   return (
-    <div role="button" tabIndex={0} onKeyDown={(e) => { if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); e.currentTarget.click(); } }}
+    <div role={onClick ? 'button' : undefined} tabIndex={onClick ? 0 : undefined} onKeyDown={onClick ? (e) => { if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); e.currentTarget.click(); } } : undefined}
       title={tooltip}
       onClick={onClick}
       className={cn(

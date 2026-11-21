@@ -70,7 +70,7 @@ export function StatusCard({ icon: Icon, title, count, status, onClick }: Status
   const colors = getColors(status);
 
   return (
-    <div role="button" tabIndex={0} onKeyDown={(e) => { if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); e.currentTarget.click(); } }}
+    <div role={onClick ? 'button' : undefined} tabIndex={onClick ? 0 : undefined} onKeyDown={onClick ? (e) => { if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); e.currentTarget.click(); } } : undefined}
       onClick={onClick}
       className={`
         rounded-lg border p-6
