@@ -52,7 +52,7 @@ export default function VerificarCertificado() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-blue-100 py-8 px-4">
+    <main className="min-h-screen bg-gradient-to-br from-blue-50 to-blue-100 py-8 px-4">
       <div className="max-w-3xl mx-auto">
         {/* Botão Voltar */}
         <button
@@ -216,7 +216,7 @@ export default function VerificarCertificado() {
           animation: shake 0.5s ease-out;
         }
       `}</style>
-    </div>
+    </main>
   );
 }
 
