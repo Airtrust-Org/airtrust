@@ -315,6 +315,9 @@ test('full training compliance lifecycle recalculates organization, enrollments 
   await page.getByRole('button', { name: 'Por organização', exact: true }).click();
   await expect(page.getByText('Matriz por organização', { exact: true })).toBeVisible();
   await chooseOrgScope(page, sector.id);
+  // New rules are intentionally hidden by the default "applicable" view.
+  // An administrator must open the full catalog before creating a requirement.
+  await page.getByLabel('Exibir treinamentos').selectOption('all');
 
   let matrix = await api(
     page,
