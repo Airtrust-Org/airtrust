@@ -436,7 +436,7 @@ export default function RecoveryActivityCard({
               key={index}
               className="grid gap-2 rounded-xl border border-slate-200 p-3 sm:grid-cols-3"
             >
-              <select
+              <select aria-label={`Tipo de atividade do trecho ${index + 1}`}
                 value={segment.activity_type}
                 onChange={(event) => {
                   const next = [...segments];

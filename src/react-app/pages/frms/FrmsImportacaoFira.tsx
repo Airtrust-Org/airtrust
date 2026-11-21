@@ -1182,7 +1182,7 @@ export default function FrmsImportacaoFira() {
                   <thead>
                     <tr className="border-b border-gray-100 bg-gray-50 text-xs text-gray-500 uppercase tracking-wider">
                       <th scope="col" className="w-8 py-3 pl-4 text-left">
-                        <input
+                        <input aria-label="Selecionar todas as linhas"
                           type="checkbox"
                           checked={preview.linhas
                             .filter((l) => l.situacao !== 'DIA_VAZIO')
@@ -1220,7 +1220,7 @@ export default function FrmsImportacaoFira() {
                           className={`transition-colors ${disabled ? 'opacity-40' : checked ? 'bg-blue-50/30' : 'hover:bg-gray-50'}`}
                         >
                           <td className="py-2.5 pl-4">
-                            <input
+                            <input aria-label="Selecionar linha"
                               type="checkbox"
                               disabled={disabled}
                               checked={checked}

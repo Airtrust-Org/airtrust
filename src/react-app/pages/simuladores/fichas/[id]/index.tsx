@@ -1789,7 +1789,7 @@ export default function FichaDetalhe() {
                               </span>
                             ) : null}
                             {isEditMode ? (
-                              <select
+                              <select aria-label={`Nota da manobra ${manobra.ordem}`}
                                 value={getNotaSelectValue(manobra.nota)}
                                 onChange={(e) => handleNotaChange(manobra.ordem, e.target.value)}
                                 className={`w-24 rounded-md border px-2 py-1 text-sm ${
@@ -1858,7 +1858,7 @@ export default function FichaDetalhe() {
                           {manobra.tripulante || 'AB'}
                         </span>
                         {isEditMode ? (
-                          <select
+                          <select aria-label={`Nota da manobra ${manobra.ordem}`}
                             value={getNotaSelectValue(manobra.nota)}
                             onChange={(e) => handleNotaChange(manobra.ordem, e.target.value)}
                             className={`w-24 rounded border px-2 py-1 text-sm text-center focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary ${
@@ -1926,7 +1926,7 @@ export default function FichaDetalhe() {
                           {manobra.tripulante || 'AB'}
                         </span>
                         {isEditMode ? (
-                          <select
+                          <select aria-label={`Nota da manobra ${manobra.ordem}`}
                             value={getNotaSelectValue(manobra.nota)}
                             onChange={(e) => handleNotaChange(manobra.ordem, e.target.value)}
                             className={`w-24 rounded border px-2 py-1 text-sm text-center focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary ${
@@ -2058,7 +2058,7 @@ export default function FichaDetalhe() {
                         </p>
                       </div>
                       {isEditMode ? (
-                        <select
+                        <select aria-label={`Nota da manobra ${manobra.ordem}`}
                           value={getNotaSelectValue(manobra.nota)}
                           onChange={(e) => handleNotaChange(manobra.ordem, e.target.value)}
                           className={`w-24 shrink-0 rounded border px-2 py-1 text-sm text-center focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary ${

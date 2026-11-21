@@ -1020,7 +1020,7 @@ function CourseDrawer({
                       </div>
                       <div className="space-y-2">
                         <FieldLabel label="Carga horária (min)" />
-                        <input
+                        <input aria-label="Carga horária (min)"
                           type="number"
                           min={0}
                           value={form.carga_horaria_minutos ?? ''}
@@ -1211,7 +1211,7 @@ function CourseDrawer({
                       </div>
                       <div className="space-y-2">
                         <FieldLabel label="Carga inicial (h)" />
-                        <input
+                        <input aria-label="Carga inicial (h)"
                           type="number"
                           min={0}
                           step="0.1"
@@ -1229,7 +1229,7 @@ function CourseDrawer({
                       </div>
                       <div className="space-y-2">
                         <FieldLabel label="Carga recorrente (h)" />
-                        <input
+                        <input aria-label="Carga recorrente (h)"
                           type="number"
                           min={0}
                           step="0.1"
@@ -1429,7 +1429,7 @@ function CourseDrawer({
                               Vincula a um tipo de qualificação EAD.
                             </p>
                           </div>
-                          <input
+                          <input aria-label="Gerar qualificação ao concluir o curso"
                             type="checkbox"
                             checked={form.gerar_qualificacao_ao_concluir === 1}
                             onChange={(e) =>

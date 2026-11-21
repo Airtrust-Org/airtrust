@@ -171,7 +171,7 @@ export default function ExecutarSessao() {
               <div className="flex items-start gap-4">
                 {/* Checkbox */}
                 <div className="flex items-center pt-1">
-                  <input
+                  <input aria-label={`Manobra executada: ${manobra.nome ?? manobra.ordem}`}
                     type="checkbox"
                     checked={manobra.executada || false}
                     onChange={(e) =>

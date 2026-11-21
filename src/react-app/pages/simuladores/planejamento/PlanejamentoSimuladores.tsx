@@ -1559,7 +1559,7 @@ export default function PlanejamentoSimuladores() {
                         )}
                       </td>
                       <td className="px-3 py-3">
-                        <select
+                        <select aria-label="Situação do planejamento"
                           className={`${inputClass} w-48`}
                           value={draft?.status || item.planejamento_status}
                           onChange={(event) =>

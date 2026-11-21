@@ -209,7 +209,7 @@ export default function CompactColorPicker({
             </span>
           </div>
 
-          <input
+          <input aria-label="Matiz da cor"
             type="range"
             min={0}
             max={360}

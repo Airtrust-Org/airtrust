@@ -1129,7 +1129,7 @@ export default function CalendarioAgendamentos() {
           </div>
 
           {/* Filtro status */}
-          <select
+          <select aria-label="Filtrar por status"
             value={filtroStatus}
             onChange={(e) => setFiltroStatus(e.target.value)}
             className="cursor-pointer rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm font-medium text-gray-700 transition-all focus:border-transparent focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
@@ -1143,7 +1143,7 @@ export default function CalendarioAgendamentos() {
 
           {/* Filtro instrutor — oculto para readOnly (só veem as próprias sessões) */}
           {!readOnly && (
-            <select
+            <select aria-label="Filtrar por instrutor"
               value={filtroInstrutor}
               onChange={(e) => setFiltroInstrutor(e.target.value)}
               className="cursor-pointer rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm font-medium text-gray-700 transition-all focus:border-transparent focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"

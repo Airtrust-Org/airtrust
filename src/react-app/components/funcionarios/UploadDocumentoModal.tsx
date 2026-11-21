@@ -323,7 +323,7 @@ export default function UploadDocumentoModal({
                 {subtipoLabel(tipoDocumento)} <span className="text-red-500">*</span>
               </label>
               {usaSubtipoLivre ? (
-                <input
+                <input aria-label={subtipoLabel(tipoDocumento)}
                   type="text"
                   value={subTipo}
                   onChange={(e) => setSubTipo(e.target.value)}
@@ -338,7 +338,7 @@ export default function UploadDocumentoModal({
                   disabled={uploading}
                 />
               ) : (
-                <select
+                <select aria-label={subtipoLabel(tipoDocumento)}
                   value={subTipo}
                   onChange={(e) => setSubTipo(e.target.value)}
                   className="w-full rounded-lg border border-slate-300 px-4 py-2 focus:border-primary focus:ring-2 focus:ring-primary dark:border-slate-700 dark:bg-slate-950"
