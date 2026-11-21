@@ -23,6 +23,16 @@ export default tseslint.config(
     },
   },
   {
+    // Diálogos nativos bloqueiam a thread, não são acessíveis nem estilizáveis.
+    // Use `useConfirmDialog` (hooks/useConfirmDialog) e o Toast do sistema.
+    // Em `warn` enquanto os usos legados são migrados (relatório UI/UX 2026-11-20).
+    files: ['src/react-app/**/*.{ts,tsx}'],
+    ignores: ['**/*.test.{ts,tsx}', '**/__tests__/**'],
+    rules: {
+      'no-alert': 'warn',
+    },
+  },
+  {
     // These validators intentionally reject C0/DEL characters in untrusted ZIP
     // paths. The security check is the reason for the control-character regex.
     files: [
