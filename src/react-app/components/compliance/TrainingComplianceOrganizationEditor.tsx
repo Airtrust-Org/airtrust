@@ -168,7 +168,7 @@ export function TrainingComplianceOrganizationEditor() {
   });
   const sortedMatrix = useMemo(
     () =>
-      sortComplianceRows((matrix.data || []).filter((row) => visibility === 'all' || row.impacto.com_requisito > 0 || (row.direta !== null && row.direta.obrigatoriedade !== 'NAO_APLICA')), sort, (row, key) => {
+      sortComplianceRows((matrix.data || []).filter((row) => visibility === 'all' || row.impacto.com_requisito > 0 || row.direta !== null), sort, (row, key) => {
         if (key === 'training') return row.qualificacao_tipo_nome;
         if (key === 'rule') return row.efetiva?.obrigatoriedade;
         if (key === 'impact') return row.impacto.atingidas_neste_nivel;
