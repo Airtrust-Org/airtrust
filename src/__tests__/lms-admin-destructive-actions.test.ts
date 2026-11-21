@@ -10,7 +10,7 @@ describe('LMS administrative destructive action contracts', () => {
   it('keeps course deletion behind RowActionsMenu and preserves confirmation plus DELETE endpoint', () => {
     expect(courseSource).toContain("label: 'Excluir curso'");
     expect(courseSource).toContain('onSelect: () => handleDelete(curso)');
-    expect(courseSource).toContain('if (!confirm(`Excluir o curso');
+    expect(courseSource).toContain('if (!(await confirmDialog(`Excluir o curso');
     expect(courseSource).not.toContain('title="Excluir curso"');
     expect(lmsHooksSource).toContain('lmsRequest<void>(`/cursos/${id}`, { method: \'DELETE\' })');
   });

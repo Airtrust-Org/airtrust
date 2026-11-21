@@ -808,6 +808,7 @@ export default function PlanejamentoSimuladores() {
       setExporting('pdf');
       const { jsPDF } = await import('jspdf');
       const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+      doc.setLanguage?.('pt-BR');
       const pageWidth = doc.internal.pageSize.getWidth();
       const pageHeight = doc.internal.pageSize.getHeight();
       const margin = 10;

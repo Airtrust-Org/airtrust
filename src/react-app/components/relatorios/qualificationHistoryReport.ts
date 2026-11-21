@@ -362,6 +362,7 @@ export async function exportQualificationHistoryPdf(
 ): Promise<void> {
   const { jsPDF } = await import('jspdf');
   const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+  doc.setLanguage?.('pt-BR');
   const rows = buildQualificationHistoryReportRows(source);
   const stats = summarize(rows);
   const generatedAt = context.generatedAt || new Date();

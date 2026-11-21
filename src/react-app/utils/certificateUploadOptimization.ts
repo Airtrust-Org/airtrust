@@ -50,6 +50,7 @@ async function imageFileToPdf(file: File): Promise<File> {
   const heightPt = (fitted.height * 72) / TARGET_DPI;
   const orientation = widthPt > heightPt ? 'landscape' : 'portrait';
   const pdf = new jsPDF({ unit: 'pt', format: [widthPt, heightPt], orientation, compress: true });
+  pdf.setLanguage?.('pt-BR');
   pdf.addImage(
     await canvasToJpegDataUrl(canvas),
     'JPEG',
