@@ -99,10 +99,15 @@ async function openCourseEditor(page: Page, course: QaCourse) {
   // Fail closed with an actionable RBAC diagnostic rather than timing out
   // on a hidden mutation button. Never alter the QA user's grants here.
   const edit = card.getByRole('button', { name: 'Editar', exact: true });
-  if (await edit.count() !== 1) {
+  // The draft catalog can settle before /api/me/operational-access. Do not
+  // diagnose an RBAC denial while the session's permissions are still loading.
+  // Preserve the original action wait budget and only classify a settled miss.
+  try {
+    await expect(edit).toBeVisible({ timeout: 30_000 });
+  } catch {
     const managementRestricted = await card.getByText(/restrit/i).count();
     throw new Error(
-      'QA_SCORM_COURSE_EDIT_ACTION_NOT_VISIBLE' +
+      'QA_SCORM_COURSE_EDIT_ACTION_NOT_VISIBLE_AFTER_WAIT' +
       ':restricted_hint=' + Number(managementRestricted > 0),
     );
   }
