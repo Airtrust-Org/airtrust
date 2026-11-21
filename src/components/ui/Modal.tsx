@@ -52,7 +52,6 @@ export function Modal({ isOpen, onClose, title, children, size = 'md', footer }:
           role="dialog"
           aria-modal="true"
           aria-labelledby={titleId}
-          onClick={(e) => e.stopPropagation()}
         >
           <div className="flex flex-shrink-0 items-center justify-between border-b border-gray-100 px-6 py-4">
             <h2 id={titleId} className="pr-3 text-lg font-bold text-slate-900">

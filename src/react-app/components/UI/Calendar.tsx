@@ -137,7 +137,7 @@ export const Calendar: React.FC<CalendarProps> = ({ events, onEventClick, onDate
           const isTodayDate = isToday(day);
 
           return (
-            <div
+            <div role="button" tabIndex={0} onKeyDown={(e) => { if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); e.currentTarget.click(); } }}
               key={i}
               onClick={() => onDateClick?.(day)}
               className={`
@@ -171,7 +171,7 @@ export const Calendar: React.FC<CalendarProps> = ({ events, onEventClick, onDate
               {/* Eventos do Dia */}
               <div className="space-y-1">
                 {dayEvents.slice(0, 3).map((event) => (
-                  <div
+                  <div role="button" tabIndex={0} onKeyDown={(e) => { if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); e.currentTarget.click(); } }}
                     key={event.id}
                     onClick={(e) => {
                       e.stopPropagation();

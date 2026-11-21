@@ -95,7 +95,7 @@ function TreeNodeComponent({
   return (
     <>
       {/* Current Node */}
-      <div
+      <div role={hasChildren || node.type === 'file' ? 'button' : undefined} tabIndex={hasChildren || node.type === 'file' ? 0 : undefined} onKeyDown={hasChildren || node.type === 'file' ? (e) => { if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); e.currentTarget.click(); } } : undefined}
         className={`
           flex items-center justify-between py-2 px-3 rounded-lg border transition-all duration-200
           ${node.type === 'folder' 

@@ -196,7 +196,7 @@ export default function AdvancedCombobox({
               </li>
             ) : (
               filteredOptions.map((option, index) => (
-                <li
+                <li tabIndex={-1} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleSelectOption(option); } }}
                   key={option.id}
                   onClick={() => handleSelectOption(option)}
                   className={`

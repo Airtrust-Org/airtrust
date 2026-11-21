@@ -269,7 +269,7 @@ export default function EscalasListagemView() {
               const mesNome = MESES[(escala.mes - 1) % 12];
 
               return (
-                <div
+                <div role="link" tabIndex={0} onKeyDown={(e) => { if (e.target === e.currentTarget && e.key === 'Enter') { e.preventDefault(); e.currentTarget.click(); } }}
                   key={escala.id}
                   data-testid={`card-escala-${escala.id}`}
                   className={[

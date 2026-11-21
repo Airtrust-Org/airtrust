@@ -101,7 +101,6 @@ export function BaseModal({
           sizeClasses[size],
           className,
         )}
-        onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
         {(title || subtitle) && (

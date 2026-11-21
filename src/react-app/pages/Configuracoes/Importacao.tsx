@@ -495,7 +495,7 @@ export default function ImportacaoPage() {
               </div>
             </div>
 
-            <div
+            <div role="button" tabIndex={0} aria-label="Selecionar arquivo para importação" onKeyDown={(e) => { if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); e.currentTarget.click(); } }}
               className={`mt-6 rounded-2xl border-2 border-dashed p-5 text-center transition-colors ${
                 dragging
                   ? 'border-blue-400 bg-blue-50'

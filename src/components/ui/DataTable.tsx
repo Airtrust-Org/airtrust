@@ -652,7 +652,7 @@ export function DataTable<T extends { id?: string | number }>({
                     <span>{column.label}</span>
                     {column.sortable && <span className="text-lg">{getSortIcon(column.id)}</span>}
                   </div>
-                  <div
+                  <div role="presentation"
                     className="absolute right-0 top-0 h-full w-3 cursor-col-resize select-none"
                     onMouseDown={(event) => beginResize(event, column.id, column.width)}
                   />

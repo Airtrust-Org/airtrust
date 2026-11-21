@@ -164,7 +164,7 @@ export const Header: React.FC = () => {
             </button>
 
             {profileDropdownOpen && (
-              <div
+              <div tabIndex={-1}
                 ref={profileMenuRef}
                 id="profile-menu"
                 role="menu"
@@ -257,7 +257,7 @@ export const Header: React.FC = () => {
               mobileMenuButtonRef.current?.focus();
             }}
           />
-          <div
+          <div tabIndex={-1}
             ref={mobileMenuRef}
             id="mobile-navigation-menu"
             role="menu"

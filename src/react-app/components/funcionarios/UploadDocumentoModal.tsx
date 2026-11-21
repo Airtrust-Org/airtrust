@@ -380,7 +380,7 @@ export default function UploadDocumentoModal({
             <label htmlFor="uploaddocumentomodal-arquivo-pdf" className="mb-2 block text-sm font-medium text-slate-700 dark:text-slate-200">
               Arquivo PDF <span className="text-red-500">*</span>
             </label>
-            <div
+            <div role="button" tabIndex={0} aria-label="Selecionar arquivo PDF" onKeyDown={(e) => { if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); e.currentTarget.click(); } }}
               onClick={() => fileInputRef.current?.click()}
               className={`cursor-pointer rounded-lg border-2 border-dashed p-5 text-center transition ${file ? 'border-green-500 bg-green-50 dark:bg-green-950/20' : 'border-slate-300 hover:border-primary hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800'}`}
             >

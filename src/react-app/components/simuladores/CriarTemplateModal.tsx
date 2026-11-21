@@ -264,7 +264,7 @@ export const CriarTemplateModal: React.FC<CriarTemplateModalProps> = ({
 
                   return (
                     <div key={manobra.id} className="border-b border-gray-100 last:border-b-0">
-                      <div
+                      <div role="checkbox" aria-checked={Boolean(incluida)} tabIndex={0} onKeyDown={(e) => { if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); e.currentTarget.click(); } }}
                         onClick={() => toggleManobra(manobra)}
                         className={`p-4 cursor-pointer hover:bg-gray-50 transition-colors ${
                           incluida ? 'bg-primary/10 border-l-4 border-primary' : ''
