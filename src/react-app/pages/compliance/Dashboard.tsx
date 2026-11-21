@@ -198,7 +198,7 @@ export default function ComplianceDashboard() {
                   <thead>
                     <tr className="bg-slate-50">
                       {['Matrícula', 'Nome', 'Função', 'Setor', 'Total', 'Válidas', 'Vencendo', 'Vencidas', 'Status'].map((col) => (
-                        <th
+                        <th scope="col"
                           key={col}
                           className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider"
                         >

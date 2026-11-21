@@ -268,14 +268,14 @@ function LmsHistoricoEdAppContent({ canManage }: { canManage: boolean }) {
                   <table className="w-full text-sm">
                     <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500 dark:bg-slate-800 dark:text-slate-400">
                       <tr>
-                        <th className="px-6 py-3 text-left">Funcionário</th>
-                        <th className="px-4 py-3 text-left">Curso EdApp</th>
-                        <th className="px-4 py-3 text-center">Status</th>
-                        <th className="px-4 py-3 text-right">Progresso</th>
-                        <th className="px-4 py-3 text-right">Score</th>
-                        <th className="px-4 py-3 text-left">Qualificação</th>
-                        <th className="px-4 py-3 text-left">Conclusão</th>
-                        <th className="px-4 py-3 text-left">Vínculo</th>
+                        <th scope="col" className="px-6 py-3 text-left">Funcionário</th>
+                        <th scope="col" className="px-4 py-3 text-left">Curso EdApp</th>
+                        <th scope="col" className="px-4 py-3 text-center">Status</th>
+                        <th scope="col" className="px-4 py-3 text-right">Progresso</th>
+                        <th scope="col" className="px-4 py-3 text-right">Score</th>
+                        <th scope="col" className="px-4 py-3 text-left">Qualificação</th>
+                        <th scope="col" className="px-4 py-3 text-left">Conclusão</th>
+                        <th scope="col" className="px-4 py-3 text-left">Vínculo</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100 dark:divide-slate-800">

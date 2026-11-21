@@ -38,7 +38,7 @@ export default function ControleVoosRdvSaveStatus({ status, error, lastSavedAt }
       </div>
       {status === 'erro' && error && <p className="mt-1 leading-snug">{error}</p>}
       {status === 'salvo' && lastSavedAt && (
-        <p className="mt-1 text-[11px] opacity-80">
+        <p className="mt-1 text-xs opacity-80">
           Último salvamento:{' '}
           {new Date(lastSavedAt).toLocaleTimeString('pt-BR', {
             hour: '2-digit',

@@ -111,7 +111,7 @@ export default function FormSessao({ isOpen, onClose, onSuccess }: Props) {
         {/* Header */}
         <div className="flex items-center justify-between p-6 border-b border-gray-200">
           <h2 className="text-2xl font-bold text-gray-900">Agendar Nova Sessão</h2>
-          <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
+          <button type="button" onClick={onClose} className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
             <X className="w-5 h-5 text-gray-500" />
           </button>
         </div>
@@ -278,7 +278,7 @@ export default function FormSessao({ isOpen, onClose, onSuccess }: Props) {
           >
             Cancelar
           </button>
-          <button
+          <button type="button"
             onClick={handleSubmit}
             disabled={loading}
             className=" py-2 bg-primary text-white rounded-lg font-medium hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"

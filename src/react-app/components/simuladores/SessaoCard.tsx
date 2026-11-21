@@ -176,7 +176,7 @@ export default function SessaoCard({ sessao, onEdit, onDelete, onVerFichas }: Se
           </h3>
           <p className="text-sm text-slate-500 mt-0.5">{sessao.simulador_nome}</p>
           {Boolean(sessao.modo_compartilhado) && (
-            <span className="mt-1 inline-flex rounded-full bg-indigo-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-indigo-700">
+            <span className="mt-1 inline-flex rounded-full bg-indigo-100 px-2 py-0.5 text-xs font-semibold uppercase tracking-wide text-indigo-700">
               Compartilhada
             </span>
           )}
@@ -228,7 +228,7 @@ export default function SessaoCard({ sessao, onEdit, onDelete, onVerFichas }: Se
                 </div>
 
                 <span
-                  className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${getFuncaoBadgeColor(
+                  className={`px-2 py-0.5 rounded text-xs font-bold uppercase ${getFuncaoBadgeColor(
                     part.funcao,
                   )}`}
                 >

@@ -471,25 +471,25 @@ export default function CrudModelos({ onBack }: Props = {}) {
           </div>
 
           <SimuladoresCard padding="none">
-            <table className="w-full">
+            <div className="overflow-x-auto"><table className="w-full">
               <thead className="border-b border-slate-200 bg-slate-50">
                 <tr>
-                  <th className="px-4 py-3 text-left text-xs font-medium uppercase text-slate-700">
+                  <th scope="col" className="px-4 py-3 text-left text-xs font-medium uppercase text-slate-700">
                     Codigo
                   </th>
-                  <th className="px-4 py-3 text-left text-xs font-medium uppercase text-slate-700">
+                  <th scope="col" className="px-4 py-3 text-left text-xs font-medium uppercase text-slate-700">
                     Nome
                   </th>
-                  <th className="px-4 py-3 text-left text-xs font-medium uppercase text-slate-700">
+                  <th scope="col" className="px-4 py-3 text-left text-xs font-medium uppercase text-slate-700">
                     Tipo
                   </th>
-                  <th className="px-4 py-3 text-center text-xs font-medium uppercase text-slate-700">
+                  <th scope="col" className="px-4 py-3 text-center text-xs font-medium uppercase text-slate-700">
                     Duracao
                   </th>
-                  <th className="px-4 py-3 text-center text-xs font-medium uppercase text-slate-700">
+                  <th scope="col" className="px-4 py-3 text-center text-xs font-medium uppercase text-slate-700">
                     Manobras
                   </th>
-                  <th className="px-4 py-3 text-right text-xs font-medium uppercase text-slate-700">
+                  <th scope="col" className="px-4 py-3 text-right text-xs font-medium uppercase text-slate-700">
                     Acoes
                   </th>
                 </tr>
@@ -554,7 +554,7 @@ export default function CrudModelos({ onBack }: Props = {}) {
                   </tr>
                 ))}
               </tbody>
-            </table>
+            </table></div>
 
             {modelos.length === 0 && (
               <div className="p-12">
@@ -710,22 +710,22 @@ export default function CrudModelos({ onBack }: Props = {}) {
               </div>
             </div>
 
-            <table className="w-full">
+            <div className="overflow-x-auto"><table className="w-full">
               <thead className="border-b border-slate-200 bg-slate-50">
                 <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium uppercase text-slate-700">
+                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium uppercase text-slate-700">
                     #
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium uppercase text-slate-700">
+                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium uppercase text-slate-700">
                     Codigo
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium uppercase text-slate-700">
+                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium uppercase text-slate-700">
                     Descricao
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium uppercase text-slate-700">
+                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium uppercase text-slate-700">
                     Categoria
                   </th>
-                  <th className="px-6 py-3 text-right text-xs font-medium uppercase text-slate-700">
+                  <th scope="col" className="px-6 py-3 text-right text-xs font-medium uppercase text-slate-700">
                     Acoes
                   </th>
                 </tr>
@@ -756,7 +756,7 @@ export default function CrudModelos({ onBack }: Props = {}) {
                   </tr>
                 ))}
               </tbody>
-            </table>
+            </table></div>
 
             {manobrasDoModelo.length === 0 && (
               <div className="p-12">

@@ -404,7 +404,7 @@ export default function Funcionarios() {
           </div>
           {/* Stats chips */}
           {stats && (
-            <div className="flex flex-wrap items-center gap-1.5 border-t border-slate-100 px-4 py-2 text-[11px]">
+            <div className="flex flex-wrap items-center gap-1.5 border-t border-slate-100 px-4 py-2 text-xs">
               <span className="font-medium text-slate-500">{stats.ativos} ativos</span>
               {['AW139', 'SK76'].map((modelo) => {
                 const s = stats.byModelo[modelo];

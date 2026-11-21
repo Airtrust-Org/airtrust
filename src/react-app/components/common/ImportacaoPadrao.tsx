@@ -315,7 +315,7 @@ export default function ImportacaoPadrao({
                 <thead className="bg-gray-50">
                   <tr>
                     {Object.keys(preview[0]).map((key) => (
-                      <th
+                      <th scope="col"
                         key={key}
                         className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase"
                       >

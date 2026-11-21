@@ -264,19 +264,19 @@ export default function FrmsHistoricoFira() {
               />
             </div>
           ) : (
-            <table className="w-full text-sm">
+            <div className="overflow-x-auto"><table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-gray-100 bg-gray-50 text-xs uppercase tracking-wider text-gray-500">
-                  <th className="py-3 pl-5 text-left">Aeronauta</th>
-                  <th className="py-3 text-left">CANAC</th>
-                  <th className="py-3 text-left">Período</th>
-                  <th className="py-3 text-left">Status</th>
-                  <th className="py-3 text-right pr-3">Imp.</th>
-                  <th className="py-3 text-right pr-3">Subst.</th>
-                  <th className="py-3 text-right pr-3">Erros</th>
-                  <th className="py-3 text-left">Operador</th>
-                  <th className="py-3 text-left">Data</th>
-                  <th className="py-3 pr-5 text-right">Ações</th>
+                  <th scope="col" className="py-3 pl-5 text-left">Aeronauta</th>
+                  <th scope="col" className="py-3 text-left">CANAC</th>
+                  <th scope="col" className="py-3 text-left">Período</th>
+                  <th scope="col" className="py-3 text-left">Status</th>
+                  <th scope="col" className="py-3 text-right pr-3">Imp.</th>
+                  <th scope="col" className="py-3 text-right pr-3">Subst.</th>
+                  <th scope="col" className="py-3 text-right pr-3">Erros</th>
+                  <th scope="col" className="py-3 text-left">Operador</th>
+                  <th scope="col" className="py-3 text-left">Data</th>
+                  <th scope="col" className="py-3 pr-5 text-right">Ações</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50">
@@ -364,7 +364,7 @@ export default function FrmsHistoricoFira() {
                   );
                 })}
               </tbody>
-            </table>
+            </table></div>
           )}
         </div>
 

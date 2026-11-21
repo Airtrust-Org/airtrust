@@ -288,14 +288,14 @@ export default function ReclassificacaoQualificacoes() {
           <table className="min-w-full text-sm">
             <thead className="bg-gray-50 text-xs uppercase text-gray-600">
               <tr>
-                <th className="px-4 py-3 text-left">Histórico ID</th>
-                <th className="px-4 py-3 text-left">Funcionário</th>
-                <th className="px-4 py-3 text-left">Data Conclusão</th>
-                <th className="px-4 py-3 text-left">Data Vencimento</th>
-                <th className="px-4 py-3 text-left">Código Atual</th>
-                <th className="px-4 py-3 text-left">Selecionar Tipo</th>
-                <th className="px-4 py-3 text-left">Sugestões</th>
-                <th className="px-4 py-3 text-left">Aplicar</th>
+                <th scope="col" className="px-4 py-3 text-left">Histórico ID</th>
+                <th scope="col" className="px-4 py-3 text-left">Funcionário</th>
+                <th scope="col" className="px-4 py-3 text-left">Data Conclusão</th>
+                <th scope="col" className="px-4 py-3 text-left">Data Vencimento</th>
+                <th scope="col" className="px-4 py-3 text-left">Código Atual</th>
+                <th scope="col" className="px-4 py-3 text-left">Selecionar Tipo</th>
+                <th scope="col" className="px-4 py-3 text-left">Sugestões</th>
+                <th scope="col" className="px-4 py-3 text-left">Aplicar</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200">

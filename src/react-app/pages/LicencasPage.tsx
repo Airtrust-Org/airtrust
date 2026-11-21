@@ -247,14 +247,14 @@ export default function LicencasPage() {
               <table className="w-full text-sm">
                 <thead className="bg-gray-50">
                   <tr>
-                    <th className="px-4 py-3 text-left font-medium text-gray-700">Funcionário</th>
-                    <th className="px-4 py-3 text-left font-medium text-gray-700">Matrícula</th>
-                    <th className="px-4 py-3 text-left font-medium text-gray-700">Tipo</th>
-                    <th className="px-4 py-3 text-left font-medium text-gray-700">Número</th>
-                    <th className="px-4 py-3 text-left font-medium text-gray-700">Emissão</th>
-                    <th className="px-4 py-3 text-left font-medium text-gray-700">Vencimento</th>
-                    <th className="px-4 py-3 text-center font-medium text-gray-700">Status</th>
-                    <th className="px-4 py-3 text-center font-medium text-gray-700">Ações</th>
+                    <th scope="col" className="px-4 py-3 text-left font-medium text-gray-700">Funcionário</th>
+                    <th scope="col" className="px-4 py-3 text-left font-medium text-gray-700">Matrícula</th>
+                    <th scope="col" className="px-4 py-3 text-left font-medium text-gray-700">Tipo</th>
+                    <th scope="col" className="px-4 py-3 text-left font-medium text-gray-700">Número</th>
+                    <th scope="col" className="px-4 py-3 text-left font-medium text-gray-700">Emissão</th>
+                    <th scope="col" className="px-4 py-3 text-left font-medium text-gray-700">Vencimento</th>
+                    <th scope="col" className="px-4 py-3 text-center font-medium text-gray-700">Status</th>
+                    <th scope="col" className="px-4 py-3 text-center font-medium text-gray-700">Ações</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-200">

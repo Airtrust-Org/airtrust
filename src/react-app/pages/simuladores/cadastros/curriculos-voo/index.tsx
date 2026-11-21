@@ -397,7 +397,7 @@ export default function CurriculosVooPage({ embedded = false, onBack }: Curricul
                         </p>
                       </div>
                       {incompleteOrder && (
-                        <span className="shrink-0 rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold text-amber-800">
+                        <span className="shrink-0 rounded bg-amber-100 px-1.5 py-0.5 text-xs font-semibold text-amber-800">
                           ordenar
                         </span>
                       )}

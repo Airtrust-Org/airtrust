@@ -385,16 +385,16 @@ export function ModalImportacao({ entidade, onClose, onSucesso }: ModalImportaca
                       </h3>
                     </div>
                     <div className="max-h-64 overflow-y-auto">
-                      <table className="min-w-full divide-y divide-red-100">
+                      <div className="overflow-x-auto"><table className="min-w-full divide-y divide-red-100">
                         <thead className="bg-red-50 sticky top-0">
                           <tr>
-                            <th className="px-4 py-3 text-left text-xs font-medium text-red-800 uppercase">
+                            <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-red-800 uppercase">
                               Linha
                             </th>
-                            <th className="px-4 py-3 text-left text-xs font-medium text-red-800 uppercase">
+                            <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-red-800 uppercase">
                               Ação
                             </th>
-                            <th className="px-4 py-3 text-left text-xs font-medium text-red-800 uppercase">
+                            <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-red-800 uppercase">
                               Mensagem
                             </th>
                           </tr>
@@ -420,7 +420,7 @@ export function ModalImportacao({ entidade, onClose, onSucesso }: ModalImportaca
                             ));
                           })()}
                         </tbody>
-                      </table>
+                      </table></div>
                     </div>
                     {validacao.erros > 20 && (
                       <div className="bg-red-50 px-4 py-3 border-t flex items-center justify-between">

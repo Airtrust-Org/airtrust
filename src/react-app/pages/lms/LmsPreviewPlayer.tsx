@@ -343,10 +343,10 @@ export default function LmsPreviewPlayer() {
               <>
                 <div className="mb-4 rounded-[28px] border border-sky-400/20 bg-gradient-to-br from-sky-500 via-blue-600 to-indigo-900 p-5 shadow-2xl shadow-blue-950/50">
                   <div className="mb-3 flex flex-wrap items-center gap-2">
-                    <span className="inline-flex rounded-full bg-white/15 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-white/80">
+                    <span className="inline-flex rounded-full bg-white/15 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-white/80">
                       Player de teste
                     </span>
-                    <span className="inline-flex rounded-full border border-white/15 bg-white/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-white/70">
+                    <span className="inline-flex rounded-full border border-white/15 bg-white/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.14em] text-white/70">
                       Sem matrícula ativa
                     </span>
                   </div>
@@ -455,7 +455,7 @@ export default function LmsPreviewPlayer() {
               <section className="rounded-3xl border border-white/10 bg-white/5 p-4">
                 <div className="mb-3 flex items-center justify-between gap-3">
                   <div className="text-sm font-semibold text-white">O que está sendo testado</div>
-                  <span className="rounded-full border border-white/10 bg-white/5 px-2.5 py-1 text-[11px] uppercase tracking-[0.16em] text-white/50">
+                  <span className="rounded-full border border-white/10 bg-white/5 px-2.5 py-1 text-xs uppercase tracking-[0.16em] text-white/50">
                     Checklist
                   </span>
                 </div>

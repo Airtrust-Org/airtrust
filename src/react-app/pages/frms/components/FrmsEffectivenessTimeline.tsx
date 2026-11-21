@@ -308,7 +308,7 @@ export default function FrmsEffectivenessTimeline({
               key={item.value}
               type="button"
               onClick={() => setMode(item.value)}
-              className={`rounded-lg border px-2.5 py-1.5 text-[11px] font-medium transition-colors ${
+              className={`rounded-lg border px-2.5 py-1.5 text-xs font-medium transition-colors ${
                 mode === item.value
                   ? 'border-slate-300 bg-slate-800 text-white'
                   : 'border-slate-200 bg-slate-50 text-slate-600 hover:bg-slate-100'
@@ -321,10 +321,10 @@ export default function FrmsEffectivenessTimeline({
       </div>
 
       <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-        <p className="text-[11px] text-slate-500">
+        <p className="text-xs text-slate-500">
           Passe o cursor sobre um dia para ver o cenário completo e a qualidade dos dados.
         </p>
-        <div className="flex items-center rounded-lg border border-slate-200 bg-slate-50 p-0.5 text-[10px]">
+        <div className="flex items-center rounded-lg border border-slate-200 bg-slate-50 p-0.5 text-xs">
           <button
             type="button"
             onClick={() => {
@@ -478,7 +478,7 @@ export default function FrmsEffectivenessTimeline({
         </ResponsiveContainer>
       )}
 
-      <div className="mt-2 flex flex-wrap gap-2 text-[10px] text-slate-500">
+      <div className="mt-2 flex flex-wrap gap-2 text-xs text-slate-500">
         <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-1">Efetividade: somente check-in completo · Jornada/HV: real ou estimada, conforme fonte</span>
         {mode === 'workload' && <span className="rounded-full border border-blue-200 bg-blue-50 px-2 py-1">Atividade, voo real, simulador e treinamento em horas; simulador permanece separado da HV regulatória</span>}
         {mode === 'operational' && <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-1">Pousos + temperatura observada</span>}

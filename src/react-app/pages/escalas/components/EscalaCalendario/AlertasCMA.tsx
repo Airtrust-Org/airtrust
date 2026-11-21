@@ -24,7 +24,7 @@ export default function AlertasCMA({ alertas, onMinimizar }: AlertasCMAProps) {
             <span className="text-xs font-bold text-red-800">
               {alertas.length} tripulante{alertas.length !== 1 ? 's' : ''} com CMA a vencer
             </span>
-            <span className="text-[10px] text-red-500">Exames serão agendados automaticamente</span>
+            <span className="text-xs text-red-500">Exames serão agendados automaticamente</span>
           </div>
 
           <div className="flex flex-wrap gap-2">
@@ -37,9 +37,9 @@ export default function AlertasCMA({ alertas, onMinimizar }: AlertasCMAProps) {
                 <FuncionarioLink
                   funcionarioId={a.funcionario_id}
                   nome={a.funcionario_nome}
-                  className="text-[11px] font-semibold text-red-800 hover:underline"
+                  className="text-xs font-semibold text-red-800 hover:underline"
                 />
-                <span className="text-[10px] text-red-600">{a.dias_para_vencer}d para vencer</span>
+                <span className="text-xs text-red-600">{a.dias_para_vencer}d para vencer</span>
               </div>
             ))}
 
@@ -52,9 +52,9 @@ export default function AlertasCMA({ alertas, onMinimizar }: AlertasCMAProps) {
                 <FuncionarioLink
                   funcionarioId={a.funcionario_id}
                   nome={a.funcionario_nome}
-                  className="text-[11px] font-medium text-orange-800 hover:underline"
+                  className="text-xs font-medium text-orange-800 hover:underline"
                 />
-                <span className="text-[10px] text-orange-600">
+                <span className="text-xs text-orange-600">
                   {a.dias_para_vencer}d para vencer
                 </span>
               </div>

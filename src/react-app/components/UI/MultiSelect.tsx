@@ -106,7 +106,7 @@ export function MultiSelect({
       >
         <span className="truncate max-w-[180px]">{displayLabel}</span>
         {!noneSelected && (
-          <span className="inline-flex items-center justify-center rounded-full bg-primary/10 px-1.5 py-0.5 text-[11px] font-semibold text-primary">
+          <span className="inline-flex items-center justify-center rounded-full bg-primary/10 px-1.5 py-0.5 text-xs font-semibold text-primary">
             {selected.length}
           </span>
         )}

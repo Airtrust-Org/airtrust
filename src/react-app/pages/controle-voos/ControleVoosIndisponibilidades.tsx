@@ -63,7 +63,7 @@ export default function ControleVoosIndisponibilidades() {
                           ) : null;
                         })}
                       </div>
-                      <p className="mt-1 text-[11px] text-slate-400 dark:text-slate-500">
+                      <p className="mt-1 text-xs text-slate-400 dark:text-slate-500">
                         Referências ilustrativas do preview; não abrem registros operacionais.
                       </p>
                     </div>

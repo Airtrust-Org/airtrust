@@ -115,14 +115,14 @@ export function ImportValidator({ dados, onValidationComplete, validationRules, 
         {/* LISTA DE ERROS/AVISOS */}
         {validacao.length > 0 && (
           <div className="max-h-96 overflow-y-auto border rounded-lg">
-            <table className="w-full">
+            <div className="overflow-x-auto"><table className="w-full">
               <thead className="bg-gray-50 sticky top-0">
                 <tr>
-                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-600 uppercase">Linha</th>
-                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-600 uppercase">Tipo</th>
-                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-600 uppercase">Campo</th>
-                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-600 uppercase">Mensagem</th>
-                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-600 uppercase">Valor</th>
+                  <th scope="col" className="px-4 py-2 text-left text-xs font-medium text-gray-600 uppercase">Linha</th>
+                  <th scope="col" className="px-4 py-2 text-left text-xs font-medium text-gray-600 uppercase">Tipo</th>
+                  <th scope="col" className="px-4 py-2 text-left text-xs font-medium text-gray-600 uppercase">Campo</th>
+                  <th scope="col" className="px-4 py-2 text-left text-xs font-medium text-gray-600 uppercase">Mensagem</th>
+                  <th scope="col" className="px-4 py-2 text-left text-xs font-medium text-gray-600 uppercase">Valor</th>
                 </tr>
               </thead>
               <tbody className="divide-y">
@@ -157,7 +157,7 @@ export function ImportValidator({ dados, onValidationComplete, validationRules, 
                   </tr>
                 ))}
               </tbody>
-            </table>
+            </table></div>
           </div>
         )}
 

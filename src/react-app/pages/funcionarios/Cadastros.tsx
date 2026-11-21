@@ -307,25 +307,25 @@ export function Cadastros() {
           </div>
 
           <div className="bg-white rounded-lg border border-slate-200 overflow-hidden">
-            <table className="w-full">
+            <div className="overflow-x-auto"><table className="w-full">
               <thead className="bg-slate-50 border-b border-slate-200">
                 <tr>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-slate-700 uppercase w-28">
+                  <th scope="col" className="px-4 py-3 text-left text-xs font-semibold text-slate-700 uppercase w-28">
                     Ações
                   </th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-slate-700 uppercase">
+                  <th scope="col" className="px-4 py-3 text-left text-xs font-semibold text-slate-700 uppercase">
                     Código
                   </th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-slate-700 uppercase">
+                  <th scope="col" className="px-4 py-3 text-left text-xs font-semibold text-slate-700 uppercase">
                     Nome
                   </th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-slate-700 uppercase">
+                  <th scope="col" className="px-4 py-3 text-left text-xs font-semibold text-slate-700 uppercase">
                     Descrição
                   </th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-slate-700 uppercase">
+                  <th scope="col" className="px-4 py-3 text-left text-xs font-semibold text-slate-700 uppercase">
                     Categoria
                   </th>
-                  <th className="px-4 py-3 text-center text-xs font-semibold text-slate-700 uppercase">
+                  <th scope="col" className="px-4 py-3 text-center text-xs font-semibold text-slate-700 uppercase">
                     Status
                   </th>
                 </tr>
@@ -365,7 +365,7 @@ export function Cadastros() {
                   </tr>
                 ))}
               </tbody>
-            </table>
+            </table></div>
           </div>
         </div>
       )}
@@ -386,25 +386,25 @@ export function Cadastros() {
           </div>
 
           <div className="bg-white rounded-lg border border-slate-200 overflow-hidden">
-            <table className="w-full">
+            <div className="overflow-x-auto"><table className="w-full">
               <thead className="bg-slate-50 border-b border-slate-200">
                 <tr>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-slate-700 uppercase w-28">
+                  <th scope="col" className="px-4 py-3 text-left text-xs font-semibold text-slate-700 uppercase w-28">
                     Ações
                   </th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-slate-700 uppercase">
+                  <th scope="col" className="px-4 py-3 text-left text-xs font-semibold text-slate-700 uppercase">
                     Código
                   </th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-slate-700 uppercase">
+                  <th scope="col" className="px-4 py-3 text-left text-xs font-semibold text-slate-700 uppercase">
                     Nome
                   </th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-slate-700 uppercase">
+                  <th scope="col" className="px-4 py-3 text-left text-xs font-semibold text-slate-700 uppercase">
                     Descrição
                   </th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-slate-700 uppercase">
+                  <th scope="col" className="px-4 py-3 text-left text-xs font-semibold text-slate-700 uppercase">
                     Responsável
                   </th>
-                  <th className="px-4 py-3 text-center text-xs font-semibold text-slate-700 uppercase">
+                  <th scope="col" className="px-4 py-3 text-center text-xs font-semibold text-slate-700 uppercase">
                     Status
                   </th>
                 </tr>
@@ -446,7 +446,7 @@ export function Cadastros() {
                   </tr>
                 ))}
               </tbody>
-            </table>
+            </table></div>
           </div>
         </div>
       )}
@@ -467,28 +467,28 @@ export function Cadastros() {
           </div>
 
           <div className="bg-white rounded-lg border border-slate-200 overflow-hidden">
-            <table className="w-full">
+            <div className="overflow-x-auto"><table className="w-full">
               <thead className="bg-slate-50 border-b border-slate-200">
                 <tr>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-slate-700 uppercase w-28">
+                  <th scope="col" className="px-4 py-3 text-left text-xs font-semibold text-slate-700 uppercase w-28">
                     Ações
                   </th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-slate-700 uppercase">
+                  <th scope="col" className="px-4 py-3 text-left text-xs font-semibold text-slate-700 uppercase">
                     Código
                   </th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-slate-700 uppercase">
+                  <th scope="col" className="px-4 py-3 text-left text-xs font-semibold text-slate-700 uppercase">
                     Equipamento
                   </th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-slate-700 uppercase">
+                  <th scope="col" className="px-4 py-3 text-left text-xs font-semibold text-slate-700 uppercase">
                     Fabricante
                   </th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-slate-700 uppercase">
+                  <th scope="col" className="px-4 py-3 text-left text-xs font-semibold text-slate-700 uppercase">
                     Tipo
                   </th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-slate-700 uppercase">
+                  <th scope="col" className="px-4 py-3 text-left text-xs font-semibold text-slate-700 uppercase">
                     Categoria
                   </th>
-                  <th className="px-4 py-3 text-center text-xs font-semibold text-slate-700 uppercase">
+                  <th scope="col" className="px-4 py-3 text-center text-xs font-semibold text-slate-700 uppercase">
                     Status
                   </th>
                 </tr>
@@ -531,7 +531,7 @@ export function Cadastros() {
                   </tr>
                 ))}
               </tbody>
-            </table>
+            </table></div>
           </div>
         </div>
       )}
@@ -552,28 +552,28 @@ export function Cadastros() {
           </div>
 
           <div className="bg-white rounded-lg border border-slate-200 overflow-hidden">
-            <table className="w-full">
+            <div className="overflow-x-auto"><table className="w-full">
               <thead className="bg-slate-50 border-b border-slate-200">
                 <tr>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-slate-700 uppercase w-28">
+                  <th scope="col" className="px-4 py-3 text-left text-xs font-semibold text-slate-700 uppercase w-28">
                     Ações
                   </th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-slate-700 uppercase">
+                  <th scope="col" className="px-4 py-3 text-left text-xs font-semibold text-slate-700 uppercase">
                     Código
                   </th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-slate-700 uppercase">
+                  <th scope="col" className="px-4 py-3 text-left text-xs font-semibold text-slate-700 uppercase">
                     Equipamento
                   </th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-slate-700 uppercase">
+                  <th scope="col" className="px-4 py-3 text-left text-xs font-semibold text-slate-700 uppercase">
                     Fabricante
                   </th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-slate-700 uppercase">
+                  <th scope="col" className="px-4 py-3 text-left text-xs font-semibold text-slate-700 uppercase">
                     Prefixo
                   </th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-slate-700 uppercase">
+                  <th scope="col" className="px-4 py-3 text-left text-xs font-semibold text-slate-700 uppercase">
                     Ano
                   </th>
-                  <th className="px-4 py-3 text-center text-xs font-semibold text-slate-700 uppercase">
+                  <th scope="col" className="px-4 py-3 text-center text-xs font-semibold text-slate-700 uppercase">
                     Status
                   </th>
                 </tr>
@@ -620,7 +620,7 @@ export function Cadastros() {
                   </tr>
                 ))}
               </tbody>
-            </table>
+            </table></div>
           </div>
         </div>
       )}

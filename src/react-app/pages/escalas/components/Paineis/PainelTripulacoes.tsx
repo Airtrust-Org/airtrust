@@ -52,15 +52,15 @@ export default function PainelTripulacoes({
             <div key={t.id} className="bg-white border border-slate-200 rounded-xl p-3 space-y-2">
               {/* PIC */}
               <div className="flex items-center gap-2">
-                <div className="w-6 h-6 rounded-full bg-blue-500 flex items-center justify-center text-white text-[10px] font-bold flex-shrink-0">
+                <div className="w-6 h-6 rounded-full bg-blue-500 flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
                   {t.pic_nome.charAt(0)}
                 </div>
                 <div className="min-w-0">
-                  <div className="text-[11px] font-semibold text-slate-800 truncate">
+                  <div className="text-xs font-semibold text-slate-800 truncate">
                     {t.pic_nome}
                   </div>
                   <div className="flex gap-1 items-center">
-                    <span className="text-[9px] px-1 bg-blue-100 text-blue-700 rounded font-medium">
+                    <span className="text-xs px-1 bg-blue-100 text-blue-700 rounded font-medium">
                       PIC
                     </span>
                   </div>
@@ -70,15 +70,15 @@ export default function PainelTripulacoes({
               {/* SIC (se houver) */}
               {t.sic_id && t.sic_nome && (
                 <div className="flex items-center gap-2">
-                  <div className="w-6 h-6 rounded-full bg-indigo-400 flex items-center justify-center text-white text-[10px] font-bold flex-shrink-0">
+                  <div className="w-6 h-6 rounded-full bg-indigo-400 flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
                     {t.sic_nome.charAt(0)}
                   </div>
                   <div className="min-w-0">
-                    <div className="text-[11px] font-semibold text-slate-800 truncate">
+                    <div className="text-xs font-semibold text-slate-800 truncate">
                       {t.sic_nome}
                     </div>
                     <div className="flex gap-1 items-center">
-                      <span className="text-[9px] px-1 bg-indigo-100 text-indigo-700 rounded font-medium">
+                      <span className="text-xs px-1 bg-indigo-100 text-indigo-700 rounded font-medium">
                         SIC
                       </span>
                     </div>
@@ -87,7 +87,7 @@ export default function PainelTripulacoes({
               )}
 
               {/* Padrão + Período */}
-              <div className="text-[10px] text-slate-500 border-t border-slate-100 pt-2 space-y-0.5">
+              <div className="text-xs text-slate-500 border-t border-slate-100 pt-2 space-y-0.5">
                 {t.padrao_nome && (
                   <div>
                     📅 Padrão: <span className="font-medium text-slate-700">{t.padrao_nome}</span>

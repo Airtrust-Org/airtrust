@@ -886,16 +886,16 @@ export default function EvdPage() {
   <table>
     <thead>
       <tr>
-        <th>Matrícula</th>
-        <th>Modelo</th>
-        <th>Comandante (PIC)</th>
-        <th>Copiloto (SIC)</th>
-        <th>Apresentação</th>
-        <th>Início</th>
-        <th>Término</th>
-        <th>Base/Local</th>
-        <th>Tipo Operação</th>
-        <th>Observações</th>
+        <th scope="col">Matrícula</th>
+        <th scope="col">Modelo</th>
+        <th scope="col">Comandante (PIC)</th>
+        <th scope="col">Copiloto (SIC)</th>
+        <th scope="col">Apresentação</th>
+        <th scope="col">Início</th>
+        <th scope="col">Término</th>
+        <th scope="col">Base/Local</th>
+        <th scope="col">Tipo Operação</th>
+        <th scope="col">Observações</th>
       </tr>
     </thead>
     <tbody>${rows || '<tr><td colspan="10">Sem itens na revisão.</td></tr>'}</tbody>
@@ -1161,7 +1161,7 @@ export default function EvdPage() {
         <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900 lg:p-5">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
             <div className="flex items-center gap-3">
-              <button
+              <button type="button"
                 onClick={() => changeDay(-1)}
                 className="rounded-xl border border-slate-200 bg-white p-2.5 text-slate-600 transition hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
                 title="Dia anterior"
@@ -1169,7 +1169,7 @@ export default function EvdPage() {
                 <ChevronLeft className="h-5 w-5" />
               </button>
               <div>
-                <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
+                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
                   Escala do dia
                 </p>
                 <div className="mt-1 flex flex-wrap items-center gap-2">
@@ -1177,11 +1177,11 @@ export default function EvdPage() {
                     {formatDateBR(data)}
                   </p>
                   {isDPlusOne && (
-                    <span className="inline-flex items-center rounded-full border border-sky-200 bg-sky-50 px-2 py-0.5 text-[10px] font-semibold text-sky-700">
+                    <span className="inline-flex items-center rounded-full border border-sky-200 bg-sky-50 px-2 py-0.5 text-xs font-semibold text-sky-700">
                       D+1 (padrão)
                     </span>
                   )}
-                  <span className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] text-slate-600">
+                  <span className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-xs text-slate-600">
                     Hoje: {formatDateBR(todayStr)}
                   </span>
                 </div>
@@ -1189,7 +1189,7 @@ export default function EvdPage() {
                   {weekday}, {formatDateBR(data)}
                 </p>
               </div>
-              <button
+              <button type="button"
                 onClick={() => changeDay(1)}
                 className="rounded-xl border border-slate-200 bg-white p-2.5 text-slate-600 transition hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
                 title="Próximo dia"
@@ -1217,28 +1217,28 @@ export default function EvdPage() {
             <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
               <div className="flex items-center gap-1 text-slate-500">
                 <Plane className="h-3.5 w-3.5" />
-                <span className="text-[11px] font-medium">Aeronaves ativas</span>
+                <span className="text-xs font-medium">Aeronaves ativas</span>
               </div>
               <p className="mt-1 text-xl font-bold text-slate-900">{resumoOperacional.totalAtivas}</p>
             </div>
             <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3">
               <div className="flex items-center gap-1 text-emerald-700">
                 <CheckCircle className="h-3.5 w-3.5" />
-                <span className="text-[11px] font-medium">Designadas</span>
+                <span className="text-xs font-medium">Designadas</span>
               </div>
               <p className="mt-1 text-xl font-bold text-emerald-800">{resumoOperacional.designadas}</p>
             </div>
             <div className="rounded-xl border border-sky-200 bg-sky-50 p-3">
               <div className="flex items-center gap-1 text-sky-700">
                 <Plus className="h-3.5 w-3.5" />
-                <span className="text-[11px] font-medium">Pendentes</span>
+                <span className="text-xs font-medium">Pendentes</span>
               </div>
               <p className="mt-1 text-xl font-bold text-sky-800">{resumoOperacional.pendentes}</p>
             </div>
             <div className="rounded-xl border border-amber-200 bg-amber-50 p-3">
               <div className="flex items-center gap-1 text-amber-700">
                 <AlertTriangle className="h-3.5 w-3.5" />
-                <span className="text-[11px] font-medium">Alertas FRMS</span>
+                <span className="text-xs font-medium">Alertas FRMS</span>
               </div>
               <p className="mt-1 text-xl font-bold text-amber-800">{resumoOperacional.alertas}</p>
             </div>
@@ -1327,11 +1327,11 @@ export default function EvdPage() {
                         </div>
                         <div className="flex flex-col items-end gap-1">
                           <span
-                            className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold ${statusDesignacao.tone}`}
+                            className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold ${statusDesignacao.tone}`}
                           >
                             {statusDesignacao.label}
                           </span>
-                          <span className="inline-flex items-center rounded-full border border-slate-200 bg-white px-2 py-0.5 text-[10px] font-medium text-slate-600">
+                          <span className="inline-flex items-center rounded-full border border-slate-200 bg-white px-2 py-0.5 text-xs font-medium text-slate-600">
                             ANV: {metaAnv.label === 'Disponível' ? 'Ativa' : metaAnv.label}
                           </span>
                         </div>
@@ -1339,7 +1339,7 @@ export default function EvdPage() {
 
                       <div className="mt-3 grid grid-cols-2 gap-2 rounded-lg border border-slate-100 bg-white p-2">
                         <div className="rounded border border-slate-100 bg-slate-50 px-2 py-1.5">
-                          <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500">
+                          <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">
                             PIC
                           </p>
                           <p className="mt-0.5 text-xs font-medium text-slate-800">
@@ -1347,7 +1347,7 @@ export default function EvdPage() {
                           </p>
                         </div>
                         <div className="rounded border border-slate-100 bg-slate-50 px-2 py-1.5">
-                          <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500">
+                          <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">
                             SIC
                           </p>
                           <p className="mt-0.5 text-xs font-medium text-slate-800">
@@ -1359,13 +1359,13 @@ export default function EvdPage() {
                       <div className="mt-3 flex items-center justify-between gap-2">
                         {hasFrmsAlert ? (
                           <div className="flex items-center gap-1.5">
-                            <span className="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-medium text-amber-700">
+                            <span className="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-700">
                               <AlertTriangle className="h-3 w-3" />
                               Alerta FRMS
                             </span>
                             <Link
                               to={buildFrmsLink(frmsReferenceDate, frmsAlertedCrewId)}
-                              className="inline-flex items-center gap-0.5 text-[10px] text-slate-500 hover:text-blue-600 transition-colors"
+                              className="inline-flex items-center gap-0.5 text-xs text-slate-500 hover:text-blue-600 transition-colors"
                               title="Ver no Controle Operacional FRMS"
                             >
                               <ExternalLink className="h-2.5 w-2.5" />
@@ -1373,7 +1373,7 @@ export default function EvdPage() {
                             </Link>
                           </div>
                         ) : (
-                          <span className="text-[10px] text-slate-500">
+                          <span className="text-xs text-slate-500">
                             {canDesignar ? 'Pendente de tripulação' : 'Tripulação definida'}
                           </span>
                         )}
@@ -1561,7 +1561,7 @@ export default function EvdPage() {
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
-                    <button
+                    <button type="button"
                       onClick={() => loadPublicacao(pub.id)}
                       disabled={snapshotLoading}
                       className="inline-flex items-center gap-1 rounded border border-slate-300 px-2 py-1 text-xs text-slate-700 hover:bg-slate-100"
@@ -1569,7 +1569,7 @@ export default function EvdPage() {
                       <FileText className="h-3.5 w-3.5" />
                       Ver revisão
                     </button>
-                    <button
+                    <button type="button"
                       onClick={() => void handlePrintPublicacao(pub.id)}
                       disabled={snapshotLoading}
                       className="inline-flex items-center gap-1 rounded border border-slate-300 px-2 py-1 text-xs text-slate-700 hover:bg-slate-100"
@@ -1624,15 +1624,15 @@ export default function EvdPage() {
               <table className="min-w-full text-xs border border-slate-200">
                 <thead className="bg-slate-50 text-slate-600">
                   <tr>
-                    <th className="px-2 py-2 text-left">Matrícula</th>
-                    <th className="px-2 py-2 text-left">Modelo</th>
-                    <th className="px-2 py-2 text-left">Comandante (PIC)</th>
-                    <th className="px-2 py-2 text-left">Copiloto (SIC)</th>
-                    <th className="px-2 py-2 text-left">Apresentação</th>
-                    <th className="px-2 py-2 text-left">Início</th>
-                    <th className="px-2 py-2 text-left">Término</th>
-                    <th className="px-2 py-2 text-left">Base/Missão</th>
-                    <th className="px-2 py-2 text-left">Observações</th>
+                    <th scope="col" className="px-2 py-2 text-left">Matrícula</th>
+                    <th scope="col" className="px-2 py-2 text-left">Modelo</th>
+                    <th scope="col" className="px-2 py-2 text-left">Comandante (PIC)</th>
+                    <th scope="col" className="px-2 py-2 text-left">Copiloto (SIC)</th>
+                    <th scope="col" className="px-2 py-2 text-left">Apresentação</th>
+                    <th scope="col" className="px-2 py-2 text-left">Início</th>
+                    <th scope="col" className="px-2 py-2 text-left">Término</th>
+                    <th scope="col" className="px-2 py-2 text-left">Base/Missão</th>
+                    <th scope="col" className="px-2 py-2 text-left">Observações</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1738,7 +1738,7 @@ export default function EvdPage() {
             <div className="py-16 text-center text-slate-400 dark:text-slate-500">
               <Plane className="h-12 w-12 mx-auto mb-3 opacity-30 animate-pulse" />
               <p className="text-sm font-medium">Nenhuma aeronave escalada para {formatDateBR(data)}</p>
-              <button
+              <button type="button"
                 onClick={() => {
                   openDesignationPanel();
                 }}
@@ -1749,30 +1749,30 @@ export default function EvdPage() {
             </div>
           ) : (
             <div className="overflow-x-auto">
-              <div className="border-b border-slate-200 bg-slate-50 px-3 py-2 text-[11px] text-slate-600">
+              <div className="border-b border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
                 Fadiga (F): <code>OK</code> = Check-in recebido / FRMS OK, <code>ATN</code> = Atenção, <code>REV</code> = Revisar com gestor, <code>SC</code> = check-in ausente ou incompleto — cálculo FRMS indisponível, <code>IND</code> = FRMS indisponível.{' '}
                 Clique no badge F para abrir o Controle Operacional FRMS filtrado pelo tripulante.
               </div>
               <table className="min-w-full text-sm">
                 <thead className="border-b border-slate-200 bg-slate-50 dark:border-slate-700 dark:bg-slate-800/60">
                   <tr>
-                    <th className="px-3 py-3 text-left text-xs font-semibold text-slate-600 whitespace-nowrap">Tipo</th>
-                    <th className="px-3 py-3 text-left text-xs font-semibold text-slate-600 whitespace-nowrap">Matrícula</th>
-                    <th className="px-3 py-3 text-left text-xs font-semibold text-slate-600 whitespace-nowrap">Status ANV</th>
-                    <th className="px-3 py-3 text-left text-xs font-semibold text-slate-600 whitespace-nowrap">Comandante</th>
-                    <th className="px-3 py-3 text-left text-xs font-semibold text-slate-600 whitespace-nowrap">F</th>
-                    <th className="px-3 py-3 text-left text-xs font-semibold text-slate-600 whitespace-nowrap">Q</th>
-                    <th className="px-3 py-3 text-left text-xs font-semibold text-slate-600 whitespace-nowrap">P</th>
-                    <th className="px-3 py-3 text-left text-xs font-semibold text-slate-600 whitespace-nowrap">Copiloto</th>
-                    <th className="px-3 py-3 text-left text-xs font-semibold text-slate-600 whitespace-nowrap">F</th>
-                    <th className="px-3 py-3 text-left text-xs font-semibold text-slate-600 whitespace-nowrap">Q</th>
-                    <th className="px-3 py-3 text-left text-xs font-semibold text-slate-600 whitespace-nowrap">P</th>
-                    <th className="px-3 py-3 text-left text-xs font-semibold text-slate-600 whitespace-nowrap">Base</th>
-                    <th className="px-3 py-3 text-left text-xs font-semibold text-slate-600 whitespace-nowrap">Apresentação</th>
-                    <th className="px-3 py-3 text-left text-xs font-semibold text-slate-600 whitespace-nowrap">Início</th>
-                    <th className="px-3 py-3 text-left text-xs font-semibold text-slate-600 whitespace-nowrap">Término</th>
-                    <th className="px-3 py-3 text-left text-xs font-semibold text-slate-600">Observações</th>
-                    <th className="px-3 py-3 text-right text-xs font-semibold text-slate-600 dark:text-slate-300">Ações</th>
+                    <th scope="col" className="px-3 py-3 text-left text-xs font-semibold text-slate-600 whitespace-nowrap">Tipo</th>
+                    <th scope="col" className="px-3 py-3 text-left text-xs font-semibold text-slate-600 whitespace-nowrap">Matrícula</th>
+                    <th scope="col" className="px-3 py-3 text-left text-xs font-semibold text-slate-600 whitespace-nowrap">Status ANV</th>
+                    <th scope="col" className="px-3 py-3 text-left text-xs font-semibold text-slate-600 whitespace-nowrap">Comandante</th>
+                    <th scope="col" className="px-3 py-3 text-left text-xs font-semibold text-slate-600 whitespace-nowrap">F</th>
+                    <th scope="col" className="px-3 py-3 text-left text-xs font-semibold text-slate-600 whitespace-nowrap">Q</th>
+                    <th scope="col" className="px-3 py-3 text-left text-xs font-semibold text-slate-600 whitespace-nowrap">P</th>
+                    <th scope="col" className="px-3 py-3 text-left text-xs font-semibold text-slate-600 whitespace-nowrap">Copiloto</th>
+                    <th scope="col" className="px-3 py-3 text-left text-xs font-semibold text-slate-600 whitespace-nowrap">F</th>
+                    <th scope="col" className="px-3 py-3 text-left text-xs font-semibold text-slate-600 whitespace-nowrap">Q</th>
+                    <th scope="col" className="px-3 py-3 text-left text-xs font-semibold text-slate-600 whitespace-nowrap">P</th>
+                    <th scope="col" className="px-3 py-3 text-left text-xs font-semibold text-slate-600 whitespace-nowrap">Base</th>
+                    <th scope="col" className="px-3 py-3 text-left text-xs font-semibold text-slate-600 whitespace-nowrap">Apresentação</th>
+                    <th scope="col" className="px-3 py-3 text-left text-xs font-semibold text-slate-600 whitespace-nowrap">Início</th>
+                    <th scope="col" className="px-3 py-3 text-left text-xs font-semibold text-slate-600 whitespace-nowrap">Término</th>
+                    <th scope="col" className="px-3 py-3 text-left text-xs font-semibold text-slate-600">Observações</th>
+                    <th scope="col" className="px-3 py-3 text-right text-xs font-semibold text-slate-600 dark:text-slate-300">Ações</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
@@ -1816,7 +1816,7 @@ export default function EvdPage() {
                           </span>
                         </td>
                         <td className="px-3 py-3.5 whitespace-nowrap">
-                          <span className={`rounded px-2 py-0.5 text-[10px] font-semibold ${statusAnv.tone}`}>
+                          <span className={`rounded px-2 py-0.5 text-xs font-semibold ${statusAnv.tone}`}>
                             {statusAnv.code}
                           </span>
                         </td>
@@ -1825,7 +1825,7 @@ export default function EvdPage() {
                             {voo.pic_guerra || voo.pic_nome || '—'}
                           </span>
                           {voo.repouso_minimo_ok === 0 && (
-                            <div className="mt-0.5 flex items-center gap-1 text-[10px] text-red-600">
+                            <div className="mt-0.5 flex items-center gap-1 text-xs text-red-600">
                               <AlertTriangle className="h-3 w-3" /> Repouso &lt;12h30
                             </div>
                           )}
@@ -1834,14 +1834,14 @@ export default function EvdPage() {
                           <div className="space-y-1">
                             <Link
                               to={buildFrmsLink(frmsReferenceDate, voo.pic_id)}
-                              className={`inline-flex items-center gap-0.5 rounded border px-1.5 py-0.5 text-[10px] font-semibold hover:opacity-80 transition-opacity ${getFrmsBadgeTone(picFrms.short)}`}
+                              className={`inline-flex items-center gap-0.5 rounded border px-1.5 py-0.5 text-xs font-semibold hover:opacity-80 transition-opacity ${getFrmsBadgeTone(picFrms.short)}`}
                               title={buildFrmsTooltipLabel(picSignal, picFortnight)}
                             >
                               {picFrms.short}
                               <ExternalLink className="h-2 w-2 opacity-50" />
                             </Link>
                             {picFrmsSummary ? (
-                              <div className="max-w-40 text-[10px] leading-tight text-slate-500">
+                              <div className="max-w-40 text-xs leading-tight text-slate-500">
                                 {picFrmsSummary}
                               </div>
                             ) : null}
@@ -1849,13 +1849,13 @@ export default function EvdPage() {
                         </td>
                         <td className="px-3 py-3.5 whitespace-nowrap">
                           <span
-                            className={`inline-flex items-center rounded border px-1.5 py-0.5 text-[10px] font-semibold ${getQualificacaoBadgeTone(voo.pic_funcao)}`}
+                            className={`inline-flex items-center rounded border px-1.5 py-0.5 text-xs font-semibold ${getQualificacaoBadgeTone(voo.pic_funcao)}`}
                           >
                             {voo.pic_funcao || 'a validar'}
                           </span>
                         </td>
                         <td className="px-3 py-3.5 whitespace-nowrap">
-                          <span className="inline-flex items-center rounded border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-[10px] font-semibold text-slate-700">
+                          <span className="inline-flex items-center rounded border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-xs font-semibold text-slate-700">
                             PIC
                           </span>
                         </td>
@@ -1868,14 +1868,14 @@ export default function EvdPage() {
                           <div className="space-y-1">
                             <Link
                               to={buildFrmsLink(frmsReferenceDate, voo.sic_id)}
-                              className={`inline-flex items-center gap-0.5 rounded border px-1.5 py-0.5 text-[10px] font-semibold hover:opacity-80 transition-opacity ${getFrmsBadgeTone(sicFrms.short)}`}
+                              className={`inline-flex items-center gap-0.5 rounded border px-1.5 py-0.5 text-xs font-semibold hover:opacity-80 transition-opacity ${getFrmsBadgeTone(sicFrms.short)}`}
                               title={buildFrmsTooltipLabel(sicSignal, sicFortnight)}
                             >
                               {sicFrms.short}
                               <ExternalLink className="h-2 w-2 opacity-50" />
                             </Link>
                             {sicFrmsSummary ? (
-                              <div className="max-w-40 text-[10px] leading-tight text-slate-500">
+                              <div className="max-w-40 text-xs leading-tight text-slate-500">
                                 {sicFrmsSummary}
                               </div>
                             ) : null}
@@ -1883,13 +1883,13 @@ export default function EvdPage() {
                         </td>
                         <td className="px-3 py-3.5 whitespace-nowrap">
                           <span
-                            className={`inline-flex items-center rounded border px-1.5 py-0.5 text-[10px] font-semibold ${getQualificacaoBadgeTone(voo.sic_funcao)}`}
+                            className={`inline-flex items-center rounded border px-1.5 py-0.5 text-xs font-semibold ${getQualificacaoBadgeTone(voo.sic_funcao)}`}
                           >
                             {voo.sic_funcao || 'a validar'}
                           </span>
                         </td>
                         <td className="px-3 py-3.5 whitespace-nowrap">
-                          <span className="inline-flex items-center rounded border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-[10px] font-semibold text-slate-700">
+                          <span className="inline-flex items-center rounded border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-xs font-semibold text-slate-700">
                             SIC
                           </span>
                         </td>
@@ -1900,7 +1900,7 @@ export default function EvdPage() {
                         <td className="px-3 py-3.5 text-xs text-slate-600">
                           <div>{voo.observacoes || '—'}</div>
                           {hasFrmsAlert && (
-                            <div className="mt-0.5 flex items-center gap-0.5 text-[10px] text-amber-600">
+                            <div className="mt-0.5 flex items-center gap-0.5 text-xs text-amber-600">
                               <AlertTriangle className="h-3 w-3" /> revisão FRMS
                             </div>
                           )}
@@ -1909,7 +1909,7 @@ export default function EvdPage() {
                           <div className="flex items-center justify-end gap-1.5">
                             {podeGerenciarOperacoes && voo.status === 'RASCUNHO' && (
                               <>
-                                <button
+                                <button type="button"
                                   onClick={() => handlePublish(voo)}
                                   disabled={publicarMutation.isPending}
                                   className="inline-flex items-center gap-1 rounded-md border border-emerald-200 bg-emerald-50 px-2.5 py-1.5 text-xs font-semibold text-emerald-700 transition hover:bg-emerald-100"
@@ -1931,7 +1931,7 @@ export default function EvdPage() {
                               </>
                             )}
                             {voo.status === 'PUBLICADA' && (
-                              <span className="flex items-center gap-1 text-[11px] text-emerald-600">
+                              <span className="flex items-center gap-1 text-xs text-emerald-600">
                                 <CheckCircle className="h-3.5 w-3.5" /> Publicada
                               </span>
                             )}
@@ -2275,7 +2275,7 @@ function EvdCreateForm({
         <form onSubmit={handleSubmit} className="space-y-5 p-4">
           {/* ── AERONAVE ── */}
           <section>
-            <h4 className="mb-2 text-[11px] font-bold uppercase tracking-[0.1em] text-slate-500">
+            <h4 className="mb-2 text-xs font-bold uppercase tracking-[0.1em] text-slate-500">
               Aeronave
             </h4>
             <select
@@ -2304,22 +2304,22 @@ function EvdCreateForm({
             </select>
             {aeronaveSelecionada && (
               <div className="mt-2 flex flex-wrap items-center gap-1.5">
-                <span className="inline-flex items-center rounded-md border border-slate-200 bg-slate-50 px-2 py-0.5 text-[11px] font-medium text-slate-700">
+                <span className="inline-flex items-center rounded-md border border-slate-200 bg-slate-50 px-2 py-0.5 text-xs font-medium text-slate-700">
                   {normalizePrefixo(aeronaveSelecionada.prefixo)}
                 </span>
-                <span className="text-[11px] text-slate-300">·</span>
-                <span className="inline-flex items-center rounded-md border border-slate-200 bg-slate-50 px-2 py-0.5 text-[11px] font-medium text-slate-700">
+                <span className="text-xs text-slate-300">·</span>
+                <span className="inline-flex items-center rounded-md border border-slate-200 bg-slate-50 px-2 py-0.5 text-xs font-medium text-slate-700">
                   {aeronaveSelecionada.modelo || 'Sem modelo'}
                 </span>
-                <span className="text-[11px] text-slate-300">·</span>
-                <span className="inline-flex items-center gap-1 rounded-md border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-700">
+                <span className="text-xs text-slate-300">·</span>
+                <span className="inline-flex items-center gap-1 rounded-md border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-700">
                   <CheckCircle className="h-3 w-3" />
                   {getAircraftStatusMeta(aeronaveSelecionada.status).label === 'Disponível'
                     ? 'Ativa'
                     : getAircraftStatusMeta(aeronaveSelecionada.status).label}
                 </span>
-                <span className="text-[11px] text-slate-300">·</span>
-                <span className="inline-flex items-center rounded-md border border-slate-200 bg-slate-50 px-2 py-0.5 text-[11px] font-medium text-slate-700">
+                <span className="text-xs text-slate-300">·</span>
+                <span className="inline-flex items-center rounded-md border border-slate-200 bg-slate-50 px-2 py-0.5 text-xs font-medium text-slate-700">
                   {quinzena === 'primeira' ? '1ª Quinzena' : '2ª Quinzena'}
                 </span>
               </div>
@@ -2334,7 +2334,7 @@ function EvdCreateForm({
 
           {/* ── TRIPULAÇÃO ── */}
           <section>
-            <h4 className="mb-2 text-[11px] font-bold uppercase tracking-[0.1em] text-slate-500">
+            <h4 className="mb-2 text-xs font-bold uppercase tracking-[0.1em] text-slate-500">
               Tripulação
             </h4>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -2390,10 +2390,10 @@ function EvdCreateForm({
                     </select>
                     {selectedPicId && (
                       <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
-                        <span className="inline-flex items-center rounded-full border border-slate-200 bg-white px-2 py-0.5 text-[10px] font-medium text-slate-600 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-300">
+                        <span className="inline-flex items-center rounded-full border border-slate-200 bg-white px-2 py-0.5 text-xs font-medium text-slate-600 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-300">
                           Função: {picSelecionado?.role || 'a validar'}
                         </span>
-                        <span className="inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold dark:border-slate-600"
+                        <span className="inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-semibold dark:border-slate-600"
                           style={{
                             borderColor: frmsPic?.hasAlert || isFrmsRelevant(frmsPic) ? '#fbbf24' : '#d1d5db',
                             backgroundColor: frmsPic?.hasAlert || isFrmsRelevant(frmsPic) ? '#fef3c7' : '#f9fafb',
@@ -2454,10 +2454,10 @@ function EvdCreateForm({
                     </select>
                     {selectedSicId && (
                       <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
-                        <span className="inline-flex items-center rounded-full border border-slate-200 bg-white px-2 py-0.5 text-[10px] font-medium text-slate-600 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-300">
+                        <span className="inline-flex items-center rounded-full border border-slate-200 bg-white px-2 py-0.5 text-xs font-medium text-slate-600 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-300">
                           Função: {sicSelecionado?.role || 'a validar'}
                         </span>
-                        <span className="inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold dark:border-slate-600"
+                        <span className="inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-semibold dark:border-slate-600"
                           style={{
                             borderColor: frmsSic?.hasAlert || isFrmsRelevant(frmsSic) ? '#fbbf24' : '#d1d5db',
                             backgroundColor: frmsSic?.hasAlert || isFrmsRelevant(frmsSic) ? '#fef3c7' : '#f9fafb',
@@ -2476,12 +2476,12 @@ function EvdCreateForm({
 
           {/* ── HORÁRIOS ── */}
           <section>
-            <h4 className="mb-2 text-[11px] font-bold uppercase tracking-[0.1em] text-slate-500">
+            <h4 className="mb-2 text-xs font-bold uppercase tracking-[0.1em] text-slate-500">
               Horários
             </h4>
             <div className="grid grid-cols-3 gap-3">
               <div>
-                <label className="mb-1 block text-[11px] font-medium text-slate-500">
+                <label className="mb-1 block text-xs font-medium text-slate-500">
                   Apresentação <span className="text-slate-400">HH:MM</span>
                 </label>
                 <TimeInput
@@ -2493,7 +2493,7 @@ function EvdCreateForm({
                 />
               </div>
               <div>
-                <label className="mb-1 block text-[11px] font-medium text-slate-500">
+                <label className="mb-1 block text-xs font-medium text-slate-500">
                   Início <span className="text-slate-400">HH:MM</span>
                 </label>
                 <TimeInput
@@ -2507,7 +2507,7 @@ function EvdCreateForm({
                 />
               </div>
               <div>
-                <label className="mb-1 block text-[11px] font-medium text-slate-500">
+                <label className="mb-1 block text-xs font-medium text-slate-500">
                   Término <span className="text-slate-400">HH:MM</span>
                 </label>
                 <TimeInput
@@ -2523,12 +2523,12 @@ function EvdCreateForm({
 
           {/* ── BASE E OBSERVAÇÕES ── */}
           <section>
-            <h4 className="mb-2 text-[11px] font-bold uppercase tracking-[0.1em] text-slate-500">
+            <h4 className="mb-2 text-xs font-bold uppercase tracking-[0.1em] text-slate-500">
               Base e observações
             </h4>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-[140px_1fr]">
               <div>
-                <label className="mb-1 block text-[11px] font-medium text-slate-500">Base</label>
+                <label className="mb-1 block text-xs font-medium text-slate-500">Base</label>
                 <input
                   type="text"
                   value={form.base}
@@ -2538,7 +2538,7 @@ function EvdCreateForm({
                 />
               </div>
               <div>
-                <label className="mb-1 block text-[11px] font-medium text-slate-500">Observações</label>
+                <label className="mb-1 block text-xs font-medium text-slate-500">Observações</label>
                 <textarea
                   value={form.observacoes}
                   onChange={(e) => setForm((prev) => ({ ...prev, observacoes: e.target.value }))}
@@ -2619,16 +2619,16 @@ function EvdCreateForm({
                   Justificativa operacional obrigatória
                 </span>
               </div>
-              <p className="mb-2 text-[11px] text-amber-700 dark:text-amber-400">
+              <p className="mb-2 text-xs text-amber-700 dark:text-amber-400">
                 Referência FRMS: {formatDateBR(frmsReferenceDate)} (escala para {formatDateBR(data)}).
               </p>
               {isFrmsRelevant(frmsPic) && picSelecionado && (
-                <p className="text-[11px] text-amber-700 dark:text-amber-400">
+                <p className="text-xs text-amber-700 dark:text-amber-400">
                   • PIC {(picSelecionado.nome_guerra || picSelecionado.nome).trim()}: {getFrmsReasonLine(frmsPic, frmsReferenceDate)}
                 </p>
               )}
               {isFrmsRelevant(frmsSic) && sicSelecionado && (
-                <p className="text-[11px] text-amber-700 dark:text-amber-400">
+                <p className="text-xs text-amber-700 dark:text-amber-400">
                   • SIC {(sicSelecionado.nome_guerra || sicSelecionado.nome).trim()}: {getFrmsReasonLine(frmsSic, frmsReferenceDate)}
                 </p>
               )}

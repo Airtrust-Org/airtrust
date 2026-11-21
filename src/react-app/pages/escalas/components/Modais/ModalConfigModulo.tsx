@@ -124,7 +124,7 @@ export default function ModalConfigModulo({ onClose }: Props) {
                   <button
                     type="button"
                     onClick={() => abrirPicker(codigo, corAtual)}
-                    className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg text-[11px] font-bold tracking-tight shadow-sm transition-transform hover:scale-105"
+                    className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg text-xs font-bold tracking-tight shadow-sm transition-transform hover:scale-105"
                     style={{
                       backgroundColor: corDraftAtual,
                       color: '#FFFFFF',
@@ -145,7 +145,7 @@ export default function ModalConfigModulo({ onClose }: Props) {
                       className="w-full border-b border-transparent bg-transparent py-0.5 text-sm font-medium leading-tight text-slate-800 focus:border-slate-300 focus:outline-none"
                       title="Clique para editar o nome"
                     />
-                    <div className="mt-0.5 text-[10px] text-slate-400">
+                    <div className="mt-0.5 text-xs text-slate-400">
                       {codigo} · sigla {row.sigla} · ordem {row.ordem}
                     </div>
                   </div>
@@ -183,7 +183,7 @@ export default function ModalConfigModulo({ onClose }: Props) {
                     />
 
                     <div className="flex items-center justify-between gap-3">
-                      <span className="text-[11px] text-slate-400">
+                      <span className="text-xs text-slate-400">
                         Arraste na palheta e aplique quando chegar no tom certo.
                       </span>
                       <div className="flex items-center gap-2">

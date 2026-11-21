@@ -883,7 +883,7 @@ export default function ModalFuncionario({
           <h2 className="text-xl font-bold text-slate-900 dark:text-slate-100">
             {funcionario ? 'Editar' : 'Novo'} Funcionário
           </h2>
-          <button
+          <button type="button"
             onClick={onFechar}
             className="text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"
           >
@@ -1789,19 +1789,19 @@ export default function ModalFuncionario({
                       <table className="w-full text-sm">
                         <thead className="bg-slate-50 dark:bg-slate-800/60">
                           <tr>
-                            <th className="px-3 py-2 text-left font-medium text-slate-700 dark:text-slate-300">
+                            <th scope="col" className="px-3 py-2 text-left font-medium text-slate-700 dark:text-slate-300">
                               Categoria
                             </th>
-                            <th className="px-3 py-2 text-left font-medium text-slate-700 dark:text-slate-300">
+                            <th scope="col" className="px-3 py-2 text-left font-medium text-slate-700 dark:text-slate-300">
                               Nome
                             </th>
-                            <th className="px-3 py-2 text-left font-medium text-slate-700 dark:text-slate-300">
+                            <th scope="col" className="px-3 py-2 text-left font-medium text-slate-700 dark:text-slate-300">
                               Realização
                             </th>
-                            <th className="px-3 py-2 text-left font-medium text-slate-700 dark:text-slate-300">
+                            <th scope="col" className="px-3 py-2 text-left font-medium text-slate-700 dark:text-slate-300">
                               Vencimento
                             </th>
-                            <th className="px-3 py-2 text-center font-medium text-slate-700 dark:text-slate-300">
+                            <th scope="col" className="px-3 py-2 text-center font-medium text-slate-700 dark:text-slate-300">
                               Status
                             </th>
                           </tr>
@@ -1872,22 +1872,22 @@ export default function ModalFuncionario({
                       <table className="w-full text-sm">
                         <thead className="bg-slate-50 dark:bg-slate-800/60">
                           <tr>
-                            <th className="px-3 py-2 text-left font-medium text-slate-700 dark:text-slate-300">
+                            <th scope="col" className="px-3 py-2 text-left font-medium text-slate-700 dark:text-slate-300">
                               Tipo
                             </th>
-                            <th className="px-3 py-2 text-left font-medium text-slate-700 dark:text-slate-300">
+                            <th scope="col" className="px-3 py-2 text-left font-medium text-slate-700 dark:text-slate-300">
                               Número
                             </th>
-                            <th className="px-3 py-2 text-left font-medium text-slate-700 dark:text-slate-300">
+                            <th scope="col" className="px-3 py-2 text-left font-medium text-slate-700 dark:text-slate-300">
                               Emissão
                             </th>
-                            <th className="px-3 py-2 text-left font-medium text-slate-700 dark:text-slate-300">
+                            <th scope="col" className="px-3 py-2 text-left font-medium text-slate-700 dark:text-slate-300">
                               Vencimento
                             </th>
-                            <th className="px-3 py-2 text-center font-medium text-slate-700 dark:text-slate-300">
+                            <th scope="col" className="px-3 py-2 text-center font-medium text-slate-700 dark:text-slate-300">
                               Status
                             </th>
-                            <th className="px-3 py-2 text-center font-medium text-slate-700 dark:text-slate-300">
+                            <th scope="col" className="px-3 py-2 text-center font-medium text-slate-700 dark:text-slate-300">
                               Ações
                             </th>
                           </tr>

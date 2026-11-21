@@ -281,16 +281,16 @@ export default function Aeronaves() {
             <table className="min-w-full divide-y divide-gray-200">
               <thead className="bg-neutral-50">
                 <tr>
-                  <th className=" py-3 text-left text-xs font-medium text-neutral-500 uppercase tracking-wider">
+                  <th scope="col" className=" py-3 text-left text-xs font-medium text-neutral-500 uppercase tracking-wider">
                     Prefixo
                   </th>
-                  <th className=" py-3 text-left text-xs font-medium text-neutral-500 uppercase tracking-wider">
+                  <th scope="col" className=" py-3 text-left text-xs font-medium text-neutral-500 uppercase tracking-wider">
                     Modelo
                   </th>
-                  <th className=" py-3 text-left text-xs font-medium text-neutral-500 uppercase tracking-wider">
+                  <th scope="col" className=" py-3 text-left text-xs font-medium text-neutral-500 uppercase tracking-wider">
                     Peso vazio
                   </th>
-                  <th className=" py-3 text-right text-xs font-medium text-neutral-500 uppercase tracking-wider">
+                  <th scope="col" className=" py-3 text-right text-xs font-medium text-neutral-500 uppercase tracking-wider">
                     Ações
                   </th>
                 </tr>

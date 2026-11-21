@@ -258,13 +258,13 @@ export default function PDFSystem({ fichaData, onPrint }: PDFSystemProps) {
     
     <div class="manobras-section">
         <h2 class="section-title">Manobras Executadas</h2>
-        <table class="manobras-table">
+        <div className="overflow-x-auto"><table class="manobras-table">
             <thead>
                 <tr>
-                    <th>Manobra</th>
-                    <th>Categoria</th>
-                    <th class="nota-column">Nota</th>
-                    <th>Observações</th>
+                    <th scope="col">Manobra</th>
+                    <th scope="col">Categoria</th>
+                    <th scope="col" class="nota-column">Nota</th>
+                    <th scope="col">Observações</th>
                 </tr>
             </thead>
             <tbody>
@@ -281,7 +281,7 @@ export default function PDFSystem({ fichaData, onPrint }: PDFSystemProps) {
                     </tr>
                 `).join('')}
             </tbody>
-        </table>
+        </table></div>
     </div>
     
     <div class="footer">

@@ -68,7 +68,7 @@ export function EscalaDayCell({
               : undefined
           }
         >
-          <span className="text-[11px] font-bold leading-none tracking-tight">
+          <span className="text-xs font-bold leading-none tracking-tight">
             {getEventInitial(state.primary.badgeLabel || state.primary.label)}
           </span>
           {!state.hasConflict && state.secondaryList.length > 0 && (

@@ -280,7 +280,7 @@ export default function ModalDetalhesEvento({
           {/* Período */}
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-[11px] text-slate-500 mb-1">Data início</label>
+              <label className="block text-xs text-slate-500 mb-1">Data início</label>
               <input
                 type="date"
                 value={dataInicio}
@@ -289,7 +289,7 @@ export default function ModalDetalhesEvento({
               />
             </div>
             <div>
-              <label className="block text-[11px] text-slate-500 mb-1">Data fim</label>
+              <label className="block text-xs text-slate-500 mb-1">Data fim</label>
               <input
                 type="date"
                 value={dataFim}
@@ -302,7 +302,7 @@ export default function ModalDetalhesEvento({
           {/* Turno + Status */}
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-[11px] text-slate-500 mb-1">Turno</label>
+              <label className="block text-xs text-slate-500 mb-1">Turno</label>
               <select value={turno} onChange={(e) => setTurno(e.target.value)} className={INP}>
                 {TURNOS.map((t) => (
                   <option key={t.value} value={t.value}>
@@ -312,7 +312,7 @@ export default function ModalDetalhesEvento({
               </select>
             </div>
             <div>
-              <label className="block text-[11px] text-slate-500 mb-1">Status</label>
+              <label className="block text-xs text-slate-500 mb-1">Status</label>
               <select value={status} onChange={(e) => setStatus(e.target.value)} className={INP}>
                 {Object.entries(STATUS_EVENTO).map(([k, v]) => (
                   <option key={k} value={k}>
@@ -323,7 +323,7 @@ export default function ModalDetalhesEvento({
             </div>
           </div>
           <div>
-            <label className="block text-[11px] text-slate-500 mb-1">Local</label>
+            <label className="block text-xs text-slate-500 mb-1">Local</label>
             <input
               type="text"
               value={local}
@@ -333,7 +333,7 @@ export default function ModalDetalhesEvento({
             />
           </div>
           <div>
-            <label className="block text-[11px] text-slate-500 mb-1">Observações</label>
+            <label className="block text-xs text-slate-500 mb-1">Observações</label>
             <textarea
               value={obs}
               onChange={(e) => setObs(e.target.value)}
@@ -412,7 +412,7 @@ export default function ModalDetalhesEvento({
                   onClose();
                   navigate('/qualificacoes?funcionario=' + evento.funcionario_id);
                 }}
-                className="ml-auto text-blue-500 hover:text-blue-700 text-[10px] flex items-center gap-0.5"
+                className="ml-auto text-blue-500 hover:text-blue-700 text-xs flex items-center gap-0.5"
                 title="Ver qualificações deste tripulante"
               >
                 <ShieldCheck className="w-3 h-3" />
@@ -442,7 +442,7 @@ export default function ModalDetalhesEvento({
               <GitBranch className="h-4 w-4 text-indigo-500 shrink-0" />
               <div className="flex-1 min-w-0">
                 <p className="text-xs font-medium text-indigo-800">Escala publicada</p>
-                <p className="text-[11px] text-indigo-600 mt-0.5">
+                <p className="text-xs text-indigo-600 mt-0.5">
                   Para editar, inicie uma nova revisão. A versão atual fica preservada no histórico.
                 </p>
               </div>
@@ -453,7 +453,7 @@ export default function ModalDetalhesEvento({
                     onClose();
                     onIniciarRevisao();
                   }}
-                  className="shrink-0 rounded-lg bg-indigo-600 px-3 py-1.5 text-[11px] font-semibold text-white hover:bg-indigo-700 transition-colors"
+                  className="shrink-0 rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-indigo-700 transition-colors"
                 >
                   Iniciar Revisão
                 </button>
@@ -461,7 +461,7 @@ export default function ModalDetalhesEvento({
             </div>
           )}
           {podeEditar && origemGerenciadaExternamente && (
-            <p className="text-[11px] text-slate-400 italic text-center">
+            <p className="text-xs text-slate-400 italic text-center">
               Edição bloqueada em Escalas. Faça a alteração no módulo {origemLabel}.
             </p>
           )}

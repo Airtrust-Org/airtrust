@@ -45,7 +45,7 @@ export function Table<T extends Record<string, any>>({
         <thead className="bg-gray-50">
           <tr>
             {columns.map((column) => (
-              <th
+              <th scope="col"
                 key={column.key}
                 className={`
                   px-6 py-3 text-${column.align || 'left'}

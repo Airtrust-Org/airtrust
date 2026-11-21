@@ -161,11 +161,11 @@ export default function LmsEmAndamento() {
                   <table className="w-full text-sm">
                     <thead className="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500 dark:bg-slate-800 dark:text-slate-400">
                       <tr>
-                        <th className="px-4 py-3">{sortHeader('Funcionário', 'funcionario')}</th>
-                        <th className="px-4 py-3">{sortHeader('Curso', 'curso')}</th>
-                        <th className="px-4 py-3">{sortHeader('Progresso', 'progresso')}</th>
-                        <th className="hidden px-4 py-3 md:table-cell">{sortHeader('Início', 'inicio')}</th>
-                        <th className="hidden px-4 py-3 lg:table-cell">{sortHeader('Prazo', 'prazo')}</th>
+                        <th scope="col" className="px-4 py-3">{sortHeader('Funcionário', 'funcionario')}</th>
+                        <th scope="col" className="px-4 py-3">{sortHeader('Curso', 'curso')}</th>
+                        <th scope="col" className="px-4 py-3">{sortHeader('Progresso', 'progresso')}</th>
+                        <th scope="col" className="hidden px-4 py-3 md:table-cell">{sortHeader('Início', 'inicio')}</th>
+                        <th scope="col" className="hidden px-4 py-3 lg:table-cell">{sortHeader('Prazo', 'prazo')}</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100 dark:divide-slate-800">

@@ -177,16 +177,16 @@ export default function MroDashboard() {
               <table className="w-full min-w-[680px] text-sm">
                 <thead className="border-b border-slate-200 bg-slate-50 dark:border-slate-800 dark:bg-slate-950">
                   <tr>
-                    <th className="px-4 py-3 text-left font-medium text-slate-600 dark:text-slate-300">
+                    <th scope="col" className="px-4 py-3 text-left font-medium text-slate-600 dark:text-slate-300">
                       Aeronave
                     </th>
-                    <th className="px-4 py-3 text-left font-medium text-slate-600 dark:text-slate-300">
+                    <th scope="col" className="px-4 py-3 text-left font-medium text-slate-600 dark:text-slate-300">
                       Situação
                     </th>
-                    <th className="px-4 py-3 text-left font-medium text-slate-600 dark:text-slate-300">
+                    <th scope="col" className="px-4 py-3 text-left font-medium text-slate-600 dark:text-slate-300">
                       Utilização
                     </th>
-                    <th className="px-4 py-3 text-left font-medium text-slate-600 dark:text-slate-300">
+                    <th scope="col" className="px-4 py-3 text-left font-medium text-slate-600 dark:text-slate-300">
                       Base
                     </th>
                   </tr>
@@ -248,16 +248,16 @@ export default function MroDashboard() {
               <table className="w-full min-w-[680px] text-sm">
                 <thead className="border-b border-slate-200 bg-slate-50 dark:border-slate-800 dark:bg-slate-950">
                   <tr>
-                    <th className="px-4 py-3 text-left font-medium text-slate-600 dark:text-slate-300">
+                    <th scope="col" className="px-4 py-3 text-left font-medium text-slate-600 dark:text-slate-300">
                       Ordem de serviço
                     </th>
-                    <th className="px-4 py-3 text-left font-medium text-slate-600 dark:text-slate-300">
+                    <th scope="col" className="px-4 py-3 text-left font-medium text-slate-600 dark:text-slate-300">
                       Aeronave
                     </th>
-                    <th className="px-4 py-3 text-left font-medium text-slate-600 dark:text-slate-300">
+                    <th scope="col" className="px-4 py-3 text-left font-medium text-slate-600 dark:text-slate-300">
                       Situação
                     </th>
-                    <th className="px-4 py-3 text-left font-medium text-slate-600 dark:text-slate-300">
+                    <th scope="col" className="px-4 py-3 text-left font-medium text-slate-600 dark:text-slate-300">
                       Emissão
                     </th>
                   </tr>

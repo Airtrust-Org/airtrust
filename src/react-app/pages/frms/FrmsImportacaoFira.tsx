@@ -1178,10 +1178,10 @@ export default function FrmsImportacaoFira() {
 
               {/* Tabela de dias */}
               <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm">
-                <table className="w-full text-sm">
+                <div className="overflow-x-auto"><table className="w-full text-sm">
                   <thead>
                     <tr className="border-b border-gray-100 bg-gray-50 text-xs text-gray-500 uppercase tracking-wider">
-                      <th className="w-8 py-3 pl-4 text-left">
+                      <th scope="col" className="w-8 py-3 pl-4 text-left">
                         <input
                           type="checkbox"
                           checked={preview.linhas
@@ -1197,15 +1197,15 @@ export default function FrmsImportacaoFira() {
                           className="h-4 w-4 scale-[0.65] rounded accent-blue-600 cursor-pointer"
                         />
                       </th>
-                      <th className="py-3 pl-2 text-left">Dia</th>
-                      <th className="py-3 text-left">Status</th>
-                      <th className="py-3 text-left">Apresentação</th>
-                      <th className="py-3 text-left">Término</th>
-                      <th className="py-3 text-right">Jornada</th>
-                      <th className="py-3 text-right">H. Voo</th>
-                      <th className="py-3 text-left">Local</th>
-                      <th className="py-3 text-left">Situação</th>
-                      <th className="py-3 pr-4 text-left">Subst.</th>
+                      <th scope="col" className="py-3 pl-2 text-left">Dia</th>
+                      <th scope="col" className="py-3 text-left">Status</th>
+                      <th scope="col" className="py-3 text-left">Apresentação</th>
+                      <th scope="col" className="py-3 text-left">Término</th>
+                      <th scope="col" className="py-3 text-right">Jornada</th>
+                      <th scope="col" className="py-3 text-right">H. Voo</th>
+                      <th scope="col" className="py-3 text-left">Local</th>
+                      <th scope="col" className="py-3 text-left">Situação</th>
+                      <th scope="col" className="py-3 pr-4 text-left">Subst.</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-50">
@@ -1271,7 +1271,7 @@ export default function FrmsImportacaoFira() {
                       );
                     })}
                   </tbody>
-                </table>
+                </table></div>
               </div>
 
               {/* Observação */}
@@ -1464,13 +1464,13 @@ export default function FrmsImportacaoFira() {
               </div>
 
               <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm">
-                <table className="w-full text-sm">
+                <div className="overflow-x-auto"><table className="w-full text-sm">
                   <thead>
                     <tr className="border-b border-gray-100 bg-gray-50 text-xs text-gray-500 uppercase tracking-wider">
-                      <th className="py-3 pl-4 text-left">Arquivo</th>
-                      <th className="py-3 text-left">Status</th>
-                      <th className="py-3 pr-4 text-left">Detalhe</th>
-                      <th className="py-3 pr-4 text-right">Ação</th>
+                      <th scope="col" className="py-3 pl-4 text-left">Arquivo</th>
+                      <th scope="col" className="py-3 text-left">Status</th>
+                      <th scope="col" className="py-3 pr-4 text-left">Detalhe</th>
+                      <th scope="col" className="py-3 pr-4 text-right">Ação</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-50">
@@ -1517,7 +1517,7 @@ export default function FrmsImportacaoFira() {
                       </tr>
                     ))}
                   </tbody>
-                </table>
+                </table></div>
               </div>
 
               <div className="flex flex-wrap gap-3 justify-end">

@@ -469,7 +469,7 @@ function ProvenanceBadge({
 
   return (
     <span
-      className={`inline-flex max-w-full items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold ${classes[provenance.kind]}`}
+      className={`inline-flex max-w-full items-center rounded-full border px-2 py-0.5 text-xs font-semibold ${classes[provenance.kind]}`}
       title={provenance.source ? `${provenance.label} — ${provenance.source}` : provenance.label}
     >
       {provenance.label}

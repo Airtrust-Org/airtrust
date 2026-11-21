@@ -254,7 +254,7 @@ export default function FrmsFormJornada({
               <p className="text-sm text-primary font-medium mt-0.5">{tripulanteNome}</p>
             )}
           </div>
-          <button onClick={onClose} className="rounded-lg p-1 hover:bg-gray-100 transition-colors">
+          <button type="button" onClick={onClose} className="rounded-lg p-1 hover:bg-gray-100 transition-colors">
             <X className="h-5 w-5 text-gray-400" />
           </button>
         </div>
@@ -358,7 +358,7 @@ export default function FrmsFormJornada({
                 ) : (
                   <Info className="h-3.5 w-3.5 text-gray-400" />
                 )}
-                <span className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider">
+                <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
                   {loadingPreview ? 'Calculando projeção...' : 'Projeção de limites'}
                 </span>
               </div>

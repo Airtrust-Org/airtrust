@@ -325,7 +325,7 @@ export const GlobalTable: React.FC<GlobalTableProps> = ({
           <thead>
             <tr className="border-b border-neutral-200 bg-neutral-50">
               {columns.map((column) => (
-                <th
+                <th scope="col"
                   key={column.key}
                   className={`px-6 py-3 text-left text-xs font-semibold text-neutral-700 uppercase tracking-wider whitespace-nowrap ${
                     column.sortable ? 'hover:bg-neutral-100 transition-colors' : ''

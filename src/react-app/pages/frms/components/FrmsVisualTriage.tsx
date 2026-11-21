@@ -25,7 +25,7 @@ export function FrmsScoreMeter({ item, compact = false }: { item: FrmsOperationa
   return (
     <div aria-label="Índice acumulado da quinzena" className="min-w-0">
       <div className="flex items-baseline justify-between gap-2">
-        <span className={compact ? 'text-[11px] font-semibold text-slate-600 dark:text-slate-300' : 'text-xs font-semibold text-slate-600 dark:text-slate-300'}>
+        <span className={compact ? 'text-xs font-semibold text-slate-600 dark:text-slate-300' : 'text-xs font-semibold text-slate-600 dark:text-slate-300'}>
           Índice acumulado
         </span>
         <span className={compact ? 'text-base font-extrabold tabular-nums' : 'text-3xl font-extrabold tabular-nums'}>
@@ -38,7 +38,7 @@ export function FrmsScoreMeter({ item, compact = false }: { item: FrmsOperationa
         className="mt-1.5 h-2.5 overflow-hidden rounded-full bg-slate-200 dark:bg-slate-700">
         {valid ? <div className={'h-full rounded-full ' + tone} style={{ width: pct + '%' }} /> : null}
       </div>
-      <div className="mt-1 flex items-center justify-between gap-2 text-[11px] text-slate-500">
+      <div className="mt-1 flex items-center justify-between gap-2 text-xs text-slate-500">
         <span>{f?.status_quinzena === 'CRITICO' ? 'Crítico' : f?.status_quinzena === 'ATENCAO' ? 'Atenção' : f?.status_quinzena === 'OK' ? 'Dentro da referência' : 'Dado parcial'}</span>
         {f?.natureza_dado === 'PROJECAO' ? <span>Projeção</span> : null}
       </div>
@@ -131,7 +131,7 @@ export function FrmsOverview({
                 <span aria-hidden="true" className="text-base">›</span>
               </div>
               <div className="mt-2 text-3xl font-extrabold tabular-nums">{card.value}</div>
-              <div className="mt-1 text-[11px] font-semibold">{activeFilter === card.key ? 'Filtro aplicado' : 'Ver pessoas ›'}</div>
+              <div className="mt-1 text-xs font-semibold">{activeFilter === card.key ? 'Filtro aplicado' : 'Ver pessoas ›'}</div>
             </button>
           ))}
         </div>
@@ -252,12 +252,12 @@ export function FrmsScoreExplanation({ item }: { item: FrmsOperationalSnapshotIt
             <p className="text-xs font-bold text-slate-700 dark:text-slate-200">Qualidade e conformidade da coleta — não são medidas fisiológicas</p>
             {qualityModifiers.map((m, i) =>
               <ModifierBar key={m.codigo + i} modifier={m} max={max} good={m.impacto_score < 0} />)}
-            <p className="text-[11px] text-slate-500">
+            <p className="text-xs text-slate-500">
               Estes pontos integram o índice legado, mas check-in pendente ou dado estimado representam
               incerteza e pendência de coleta, não intensidade de fadiga medida.
             </p>
           </div>}
-          <p className="text-[11px] text-slate-500">Impactos em pontos informados pelo motor. Não representam sozinhos a fórmula completa nem garantem aptidão.</p>
+          <p className="text-xs text-slate-500">Impactos em pontos informados pelo motor. Não representam sozinhos a fórmula completa nem garantem aptidão.</p>
         </div>}
   </section>;
 }

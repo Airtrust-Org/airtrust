@@ -67,7 +67,7 @@ function EffCircle({
         </span>
       </div>
       <span className="text-xs text-slate-500 text-center leading-tight">{label}</span>
-      <span className="text-[10px] font-medium" style={{ color }}>
+      <span className="text-xs font-medium" style={{ color }}>
         {nivelLabel}
       </span>
     </div>
@@ -80,7 +80,7 @@ function ComponenteBadge({ nome, value }: { nome: string; value: number | null }
   const positive = pct >= 0;
   return (
     <span
-      className={`inline-flex items-center gap-0.5 px-2 py-0.5 rounded-full text-[10px] font-medium border ${
+      className={`inline-flex items-center gap-0.5 px-2 py-0.5 rounded-full text-xs font-medium border ${
         positive
           ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
           : 'bg-red-50 text-red-700 border-red-200'
@@ -197,7 +197,7 @@ export default function FrmsJornadaEffectivenessCard({
           📅 {formatDate(jornada.data_apresentacao)}
         </p>
         {showRisk && (
-          <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 border border-amber-200">
+          <span className="text-xs px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 border border-amber-200">
             ⚠️ {tempoRisco > 0 ? `~${tempoRisco} min abaixo de ${amarelo}%` : 'Atenção'}
           </span>
         )}
@@ -206,7 +206,7 @@ export default function FrmsJornadaEffectivenessCard({
         {c2Badge ? (
           <span
             title={c2Badge.help}
-            className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold ${c2Badge.tone}`}
+            className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-semibold ${c2Badge.tone}`}
           >
             {c2Badge.label}
           </span>
@@ -214,7 +214,7 @@ export default function FrmsJornadaEffectivenessCard({
         {recalcPendencia ? (
           <span
             title="Sem horário de apresentação registrado para esse cálculo."
-            className="inline-flex items-center rounded-full border border-rose-200 bg-rose-50 px-2 py-0.5 text-[10px] font-semibold text-rose-700"
+            className="inline-flex items-center rounded-full border border-rose-200 bg-rose-50 px-2 py-0.5 text-xs font-semibold text-rose-700"
           >
             Sem horário de apresentação: recálculo pendente
           </span>
@@ -252,7 +252,7 @@ export default function FrmsJornadaEffectivenessCard({
           </div>
           <span className="text-xs text-slate-400 text-center">Risco</span>
           <span
-            className={`text-[10px] font-medium ${showRisk ? 'text-amber-600' : 'text-emerald-600'}`}
+            className={`text-xs font-medium ${showRisk ? 'text-amber-600' : 'text-emerald-600'}`}
           >
             {showRisk ? tempoRiscoLabel : 'OK'}
           </span>

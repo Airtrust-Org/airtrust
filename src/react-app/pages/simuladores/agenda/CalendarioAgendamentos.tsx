@@ -841,21 +841,21 @@ export default function CalendarioAgendamentos() {
               </span>
             )}
             {concluida && (
-              <span title="Todas as fichas concluídas" className="text-[9px] text-slate-400">
+              <span title="Todas as fichas concluídas" className="text-xs text-slate-400">
                 ✓
               </span>
             )}
           </div>
-          <div className="text-slate-700 font-medium truncate text-[11px]">
+          <div className="text-slate-700 font-medium truncate text-xs">
             {agendamento.tema_sessao || agendamento.tipo_sessao || agendamento.simulador_nome}
           </div>
           {agendamento.examinador_nome && (
-            <div className="text-emerald-900 font-semibold truncate text-[10px]">
+            <div className="text-emerald-900 font-semibold truncate text-xs">
               👨‍✈️ {t('sim.calendar.card.examiner')}: {agendamento.examinador_nome}
             </div>
           )}
           {participantesText && (
-            <div className="text-slate-500 truncate text-[10px]">{participantesText}</div>
+            <div className="text-slate-500 truncate text-xs">{participantesText}</div>
           )}
         </div>
       );
@@ -869,7 +869,7 @@ export default function CalendarioAgendamentos() {
         <div className={`font-bold ${cores.text} text-sm flex items-center gap-1`}>
           {agendamento.tema_sessao || agendamento.tipo_sessao || agendamento.simulador_nome}
           {Boolean(agendamento.modo_compartilhado) && (
-            <span className="rounded bg-indigo-100 px-1.5 py-0.5 text-[9px] font-semibold uppercase text-indigo-700">
+            <span className="rounded bg-indigo-100 px-1.5 py-0.5 text-xs font-semibold uppercase text-indigo-700">
               Compartilhada
             </span>
           )}

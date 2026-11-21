@@ -294,7 +294,7 @@ export default function ModalFeriasAfastamentoGlobal({ onClose, onSaved }: Props
                     className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900"
                   />
                   {dataInicio && (
-                    <span className="mt-1 block px-1 text-[11px] font-medium text-slate-500">
+                    <span className="mt-1 block px-1 text-xs font-medium text-slate-500">
                       {fmtDateShort(dataInicio)}
                     </span>
                   )}
@@ -310,7 +310,7 @@ export default function ModalFeriasAfastamentoGlobal({ onClose, onSaved }: Props
                     className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900"
                   />
                   {dataFim && (
-                    <span className="mt-1 block px-1 text-[11px] font-medium text-slate-500">
+                    <span className="mt-1 block px-1 text-xs font-medium text-slate-500">
                       {fmtDateShort(dataFim)}
                     </span>
                   )}

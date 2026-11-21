@@ -73,7 +73,7 @@ export default function ModalNotechsReferencia({
                             className="rounded border border-slate-200 bg-slate-50 p-2"
                           >
                             <span
-                              className="mb-1 inline-block rounded px-1.5 py-0.5 text-[10px] font-bold text-white"
+                              className="mb-1 inline-block rounded px-1.5 py-0.5 text-xs font-bold text-white"
                               style={{ backgroundColor: faixa?.color || '#94a3b8' }}
                             >
                               {descritor.rangeLabel}

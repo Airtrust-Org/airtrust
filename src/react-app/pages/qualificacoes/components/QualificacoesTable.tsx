@@ -73,7 +73,7 @@ export default function QualificacoesTable({
               {configColunas
                 .filter((col) => col.visivel)
                 .map((col) => (
-                  <th
+                  <th scope="col"
                     key={col.id}
                     onClick={() => col.id !== 'acoes' && onSort(col.id)}
                     className={`px-2 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider ${

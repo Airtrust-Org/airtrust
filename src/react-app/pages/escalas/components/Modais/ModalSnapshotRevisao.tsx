@@ -125,17 +125,17 @@ export default function ModalSnapshotRevisao({
                         <p className="text-xs font-semibold text-slate-900 truncate">
                           {al.funcionario?.nome ?? al.funcionario_nome ?? '—'}
                         </p>
-                        <p className="text-[11px] text-slate-500">
+                        <p className="text-xs text-slate-500">
                           {al.funcao} · {al.aeronave?.prefixo ?? al.aeronave_prefixo ?? 'Sem aeronave'}
                           {al.quinzena_id != null ? ` · Q${al.quinzena_id}` : ''}
                         </p>
                       </div>
-                      <div className="flex items-center gap-1 text-[11px] text-slate-500 shrink-0">
+                      <div className="flex items-center gap-1 text-xs text-slate-500 shrink-0">
                         <Calendar className="h-3 w-3" />
                         <span>{fmtDate(al.data_inicio)} → {fmtDate(al.data_fim)}</span>
                       </div>
                       <span
-                        className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold ${
+                        className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-semibold ${
                           al.status === 'confirmado'
                             ? 'bg-emerald-100 text-emerald-700'
                             : al.status === 'cancelado'
@@ -174,10 +174,10 @@ export default function ModalSnapshotRevisao({
                           ) : null}
                         </p>
                         {trip.aeronave && (
-                          <p className="text-[11px] text-slate-500">{trip.aeronave}</p>
+                          <p className="text-xs text-slate-500">{trip.aeronave}</p>
                         )}
                       </div>
-                      <div className="flex items-center gap-1 text-[11px] text-slate-500 shrink-0">
+                      <div className="flex items-center gap-1 text-xs text-slate-500 shrink-0">
                         <Calendar className="h-3 w-3" />
                         <span>{fmtDate(trip.data_inicio)} → {fmtDate(trip.data_fim)}</span>
                       </div>

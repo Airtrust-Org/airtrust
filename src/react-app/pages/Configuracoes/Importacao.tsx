@@ -709,7 +709,7 @@ export default function ImportacaoPage() {
                       <thead className="bg-slate-50">
                         <tr>
                           {Object.keys(validationSummary.preview[0]).map((column) => (
-                            <th
+                            <th scope="col"
                               key={column}
                               className="px-3 py-2 text-left font-semibold text-slate-600"
                             >

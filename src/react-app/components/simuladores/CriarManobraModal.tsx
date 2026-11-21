@@ -135,7 +135,7 @@ const CriarManobraModal: React.FC<CriarManobraModalProps> = ({
           <h2 className="text-xl font-semibold text-gray-900">
             {manobraEdit ? 'Editar Manobra' : 'Criar Nova Manobra'}
           </h2>
-          <button
+          <button type="button"
             onClick={onClose}
             className="text-gray-400 hover:text-gray-600 transition-colors"
             disabled={loading}

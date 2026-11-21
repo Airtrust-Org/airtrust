@@ -147,13 +147,13 @@ export default function Empresas() {
             <table className="w-full">
               <thead>
                 <tr className="border-b border-neutral-200 bg-neutral-50">
-                  <th className=" py-3 text-left text-xs font-medium text-neutral-700 uppercase">
+                  <th scope="col" className=" py-3 text-left text-xs font-medium text-neutral-700 uppercase">
                     Nome
                   </th>
-                  <th className=" py-3 text-left text-xs font-medium text-neutral-700 uppercase">
+                  <th scope="col" className=" py-3 text-left text-xs font-medium text-neutral-700 uppercase">
                     CNPJ
                   </th>
-                  <th className=" py-3 text-right text-xs font-medium text-neutral-700 uppercase">
+                  <th scope="col" className=" py-3 text-right text-xs font-medium text-neutral-700 uppercase">
                     Ações
                   </th>
                 </tr>

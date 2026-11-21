@@ -126,22 +126,22 @@ const Exames = () => {
         <table className="min-w-full divide-y divide-gray-200">
           <thead className="bg-gray-50">
             <tr>
-              <th className=" py-3 text-left text-xs font-medium text-gray-500 uppercase">
+              <th scope="col" className=" py-3 text-left text-xs font-medium text-gray-500 uppercase">
                 Funcionário
               </th>
-              <th className=" py-3 text-left text-xs font-medium text-gray-500 uppercase">
+              <th scope="col" className=" py-3 text-left text-xs font-medium text-gray-500 uppercase">
                 Categoria
               </th>
-              <th className=" py-3 text-left text-xs font-medium text-gray-500 uppercase">
+              <th scope="col" className=" py-3 text-left text-xs font-medium text-gray-500 uppercase">
                 Número
               </th>
-              <th className=" py-3 text-left text-xs font-medium text-gray-500 uppercase">
+              <th scope="col" className=" py-3 text-left text-xs font-medium text-gray-500 uppercase">
                 Validade
               </th>
-              <th className=" py-3 text-left text-xs font-medium text-gray-500 uppercase">
+              <th scope="col" className=" py-3 text-left text-xs font-medium text-gray-500 uppercase">
                 Status
               </th>
-              <th className=" py-3 text-left text-xs font-medium text-gray-500 uppercase">Ações</th>
+              <th scope="col" className=" py-3 text-left text-xs font-medium text-gray-500 uppercase">Ações</th>
             </tr>
           </thead>
           <tbody className="bg-white divide-y divide-gray-200">

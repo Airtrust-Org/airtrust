@@ -1480,7 +1480,7 @@ export default function FichaDetalhe() {
                             : ''}
                         </span>
                         {confirmed && (
-                          <span className="ml-auto inline-flex items-center rounded border border-slate-200 bg-slate-50 px-2 py-0.5 text-[11px] font-medium text-slate-600">
+                          <span className="ml-auto inline-flex items-center rounded border border-slate-200 bg-slate-50 px-2 py-0.5 text-xs font-medium text-slate-600">
                             Evidência imutável
                           </span>
                         )}
@@ -1780,7 +1780,7 @@ export default function FichaDetalhe() {
                             </div>
                             {!specialDefinition?.hideTripulanteBadge ? (
                               <span
-                                className={`shrink-0 text-[10px] font-bold px-1.5 py-0.5 rounded border ${
+                                className={`shrink-0 text-xs font-bold px-1.5 py-0.5 rounded border ${
                                   manobra.tripulante === 'A'
                                     ? 'bg-blue-100 text-blue-700 border-blue-300'
                                     : manobra.tripulante === 'B'
@@ -1850,7 +1850,7 @@ export default function FichaDetalhe() {
                           ) : null}
                         </div>
                         <span
-                          className={`shrink-0 text-[10px] font-bold px-1.5 py-0.5 rounded border ${
+                          className={`shrink-0 text-xs font-bold px-1.5 py-0.5 rounded border ${
                             manobra.tripulante === 'A'
                               ? 'bg-blue-100 text-blue-700 border-blue-300'
                               : manobra.tripulante === 'B'
@@ -1918,7 +1918,7 @@ export default function FichaDetalhe() {
                           ) : null}
                         </div>
                         <span
-                          className={`shrink-0 text-[10px] font-bold px-1.5 py-0.5 rounded border ${
+                          className={`shrink-0 text-xs font-bold px-1.5 py-0.5 rounded border ${
                             manobra.tripulante === 'A'
                               ? 'bg-blue-100 text-blue-700 border-blue-300'
                               : manobra.tripulante === 'B'
@@ -2197,7 +2197,7 @@ export default function FichaDetalhe() {
                                   </p>
                                   <div className="mt-2 grid gap-2 md:grid-cols-2">
                                     <div className="rounded border border-rose-100 bg-rose-50 p-2">
-                                      <p className="mb-1 text-[11px] font-semibold text-rose-700">
+                                      <p className="mb-1 text-xs font-semibold text-rose-700">
                                         Antes
                                       </p>
                                       <p className="whitespace-pre-wrap text-xs text-slate-700">
@@ -2205,7 +2205,7 @@ export default function FichaDetalhe() {
                                       </p>
                                     </div>
                                     <div className="rounded border border-emerald-100 bg-emerald-50 p-2">
-                                      <p className="mb-1 text-[11px] font-semibold text-emerald-700">
+                                      <p className="mb-1 text-xs font-semibold text-emerald-700">
                                         Depois
                                       </p>
                                       <p className="whitespace-pre-wrap text-xs text-slate-700">

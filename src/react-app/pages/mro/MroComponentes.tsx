@@ -37,15 +37,15 @@ export default function MroComponentes() {
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead className="border-b border-slate-200 bg-slate-50 dark:border-slate-700 dark:bg-slate-800"><tr>
-                <th className="px-4 py-3 text-left font-medium text-slate-600 dark:text-slate-300">PN</th>
-                <th className="px-4 py-3 text-left font-medium text-slate-600 dark:text-slate-300">SN</th>
-                <th className="px-4 py-3 text-left font-medium text-slate-600 dark:text-slate-300">Descrição</th>
-                <th className="px-4 py-3 text-left font-medium text-slate-600 dark:text-slate-300">ATA</th>
-                <th className="px-4 py-3 text-left font-medium text-slate-600 dark:text-slate-300">Aeronave</th>
-                <th className="px-4 py-3 text-left font-medium text-slate-600 dark:text-slate-300">Status</th>
-                <th className="px-4 py-3 text-left font-medium text-slate-600 dark:text-slate-300">TSO (FH)</th>
-                <th className="px-4 py-3 text-left font-medium text-slate-600 dark:text-slate-300">Criticidade</th>
-                <th className="px-4 py-3 text-center font-medium text-slate-600 dark:text-slate-300">Ação</th>
+                <th scope="col" className="px-4 py-3 text-left font-medium text-slate-600 dark:text-slate-300">PN</th>
+                <th scope="col" className="px-4 py-3 text-left font-medium text-slate-600 dark:text-slate-300">SN</th>
+                <th scope="col" className="px-4 py-3 text-left font-medium text-slate-600 dark:text-slate-300">Descrição</th>
+                <th scope="col" className="px-4 py-3 text-left font-medium text-slate-600 dark:text-slate-300">ATA</th>
+                <th scope="col" className="px-4 py-3 text-left font-medium text-slate-600 dark:text-slate-300">Aeronave</th>
+                <th scope="col" className="px-4 py-3 text-left font-medium text-slate-600 dark:text-slate-300">Status</th>
+                <th scope="col" className="px-4 py-3 text-left font-medium text-slate-600 dark:text-slate-300">TSO (FH)</th>
+                <th scope="col" className="px-4 py-3 text-left font-medium text-slate-600 dark:text-slate-300">Criticidade</th>
+                <th scope="col" className="px-4 py-3 text-center font-medium text-slate-600 dark:text-slate-300">Ação</th>
               </tr></thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                 {filtered.map((c) => {

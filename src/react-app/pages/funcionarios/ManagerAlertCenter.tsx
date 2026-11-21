@@ -70,14 +70,14 @@ function AlertRow({ item }: { item: ManagerAlertItem }) {
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
             <span
-              className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide ${tone.badge}`}
+              className={`inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-bold uppercase tracking-wide ${tone.badge}`}
             >
               {item.severity}
             </span>
-            <span className="inline-flex items-center rounded-full bg-white/80 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide text-slate-600">
+            <span className="inline-flex items-center rounded-full bg-white/80 px-2.5 py-1 text-xs font-semibold uppercase tracking-wide text-slate-600">
               {item.module}
             </span>
-            <span className="text-[11px] text-slate-500">{item.freshness}</span>
+            <span className="text-xs text-slate-500">{item.freshness}</span>
           </div>
           <h3 className="mt-2 text-sm font-extrabold text-slate-900">{item.title}</h3>
           <p className="mt-1 text-sm text-slate-600">{item.description}</p>

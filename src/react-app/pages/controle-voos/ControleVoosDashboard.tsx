@@ -264,12 +264,12 @@ function ControleVoosDashboardContent({ edbShadowEnabled }: { edbShadowEnabled: 
                       <table className="w-full text-sm">
                         <thead className="border-b border-slate-200 bg-slate-50 dark:border-slate-700 dark:bg-slate-800">
                           <tr>
-                            <th className="px-4 py-3 text-left font-medium text-slate-600 dark:text-slate-300">Data</th>
-                            <th className="px-4 py-3 text-left font-medium text-slate-600 dark:text-slate-300">Aeronave</th>
-                            <th className="px-4 py-3 text-left font-medium text-slate-600 dark:text-slate-300">Rota operacional</th>
-                            <th className="px-4 py-3 text-left font-medium text-slate-600 dark:text-slate-300">Previsto</th>
-                            <th className="px-4 py-3 text-left font-medium text-slate-600 dark:text-slate-300">Status</th>
-                            <th className="w-16 px-4 py-3 text-left"><span className="sr-only">Ação</span></th>
+                            <th scope="col" className="px-4 py-3 text-left font-medium text-slate-600 dark:text-slate-300">Data</th>
+                            <th scope="col" className="px-4 py-3 text-left font-medium text-slate-600 dark:text-slate-300">Aeronave</th>
+                            <th scope="col" className="px-4 py-3 text-left font-medium text-slate-600 dark:text-slate-300">Rota operacional</th>
+                            <th scope="col" className="px-4 py-3 text-left font-medium text-slate-600 dark:text-slate-300">Previsto</th>
+                            <th scope="col" className="px-4 py-3 text-left font-medium text-slate-600 dark:text-slate-300">Status</th>
+                            <th scope="col" className="w-16 px-4 py-3 text-left"><span className="sr-only">Ação</span></th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100 dark:divide-slate-800">

@@ -104,16 +104,16 @@ export function RelatoriosSimuladores() {
               <table className="w-full">
                 <thead>
                   <tr className="border-b border-slate-200">
-                    <th className="text-left py-3 px-4 text-sm font-semibold text-slate-700">
+                    <th scope="col" className="text-left py-3 px-4 text-sm font-semibold text-slate-700">
                       Simulador
                     </th>
-                    <th className="text-center py-3 px-4 text-sm font-semibold text-slate-700">
+                    <th scope="col" className="text-center py-3 px-4 text-sm font-semibold text-slate-700">
                       Sessões
                     </th>
-                    <th className="text-center py-3 px-4 text-sm font-semibold text-slate-700">
+                    <th scope="col" className="text-center py-3 px-4 text-sm font-semibold text-slate-700">
                       Horas
                     </th>
-                    <th className="text-center py-3 px-4 text-sm font-semibold text-slate-700">
+                    <th scope="col" className="text-center py-3 px-4 text-sm font-semibold text-slate-700">
                       Equipamento
                     </th>
                   </tr>
@@ -163,19 +163,19 @@ export function RelatoriosSimuladores() {
               <table className="w-full">
                 <thead>
                   <tr className="border-b border-slate-200">
-                    <th className="text-left py-3 px-4 text-sm font-semibold text-slate-700">
+                    <th scope="col" className="text-left py-3 px-4 text-sm font-semibold text-slate-700">
                       Tripulante
                     </th>
-                    <th className="text-center py-3 px-4 text-sm font-semibold text-slate-700">
+                    <th scope="col" className="text-center py-3 px-4 text-sm font-semibold text-slate-700">
                       Sessões
                     </th>
-                    <th className="text-center py-3 px-4 text-sm font-semibold text-slate-700">
+                    <th scope="col" className="text-center py-3 px-4 text-sm font-semibold text-slate-700">
                       Aprovações
                     </th>
-                    <th className="text-center py-3 px-4 text-sm font-semibold text-slate-700">
+                    <th scope="col" className="text-center py-3 px-4 text-sm font-semibold text-slate-700">
                       Reprovações
                     </th>
-                    <th className="text-center py-3 px-4 text-sm font-semibold text-slate-700">
+                    <th scope="col" className="text-center py-3 px-4 text-sm font-semibold text-slate-700">
                       Taxa
                     </th>
                   </tr>
@@ -230,19 +230,19 @@ export function RelatoriosSimuladores() {
               <table className="w-full">
                 <thead>
                   <tr className="border-b border-slate-200">
-                    <th className="text-left py-3 px-4 text-sm font-semibold text-slate-700">
+                    <th scope="col" className="text-left py-3 px-4 text-sm font-semibold text-slate-700">
                       Tipo Sessão
                     </th>
-                    <th className="text-center py-3 px-4 text-sm font-semibold text-slate-700">
+                    <th scope="col" className="text-center py-3 px-4 text-sm font-semibold text-slate-700">
                       Total
                     </th>
-                    <th className="text-center py-3 px-4 text-sm font-semibold text-slate-700">
+                    <th scope="col" className="text-center py-3 px-4 text-sm font-semibold text-slate-700">
                       Aprovação %
                     </th>
-                    <th className="text-center py-3 px-4 text-sm font-semibold text-slate-700">
+                    <th scope="col" className="text-center py-3 px-4 text-sm font-semibold text-slate-700">
                       Aprovações
                     </th>
-                    <th className="text-center py-3 px-4 text-sm font-semibold text-slate-700">
+                    <th scope="col" className="text-center py-3 px-4 text-sm font-semibold text-slate-700">
                       Reprovações
                     </th>
                   </tr>

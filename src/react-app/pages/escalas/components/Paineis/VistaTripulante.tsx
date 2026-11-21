@@ -198,7 +198,7 @@ export default function VistaTripulante({
           <div className="grid grid-cols-7 gap-1">
             {/* Day headers */}
             {['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'].map((d) => (
-              <div key={d} className="text-center text-[10px] font-medium text-gray-400 pb-1">
+              <div key={d} className="text-center text-xs font-medium text-gray-400 pb-1">
                 {d}
               </div>
             ))}
@@ -221,7 +221,7 @@ export default function VistaTripulante({
                   } ${isWeekend ? 'bg-gray-50/50' : ''}`}
                 >
                   <div
-                    className={`text-[10px] font-medium ${isToday ? 'text-blue-600' : 'text-gray-400'}`}
+                    className={`text-xs font-medium ${isToday ? 'text-blue-600' : 'text-gray-400'}`}
                   >
                     {dia.getDate()}
                   </div>
@@ -232,7 +232,7 @@ export default function VistaTripulante({
                     return (
                       <div
                         key={evt.id}
-                        className="text-[9px] px-1 py-0.5 rounded mt-0.5 truncate font-medium"
+                        className="text-xs px-1 py-0.5 rounded mt-0.5 truncate font-medium"
                         style={{
                           backgroundColor,
                           color: '#FFFFFF',
@@ -268,12 +268,12 @@ export default function VistaTripulante({
                       <span className="text-xs font-medium text-gray-800">
                         {cfg?.label || evt.tipo_evento}
                       </span>
-                      <span className="text-[10px] text-gray-400 ml-auto">
+                      <span className="text-xs text-gray-400 ml-auto">
                         {formatDate(evt.data_inicio)}
                         {evt.data_inicio !== evt.data_fim ? ` → ${formatDate(evt.data_fim)}` : ''}
                       </span>
                       {evt.status === 'pendente' && (
-                        <span className="text-[9px] px-1.5 py-0.5 bg-amber-100 text-amber-700 rounded">
+                        <span className="text-xs px-1.5 py-0.5 bg-amber-100 text-amber-700 rounded">
                           Pendente
                         </span>
                       )}

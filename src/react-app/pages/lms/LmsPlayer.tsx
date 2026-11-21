@@ -1532,7 +1532,7 @@ export default function LmsPlayer() {
 
           <div className="min-w-0 flex-1">
             <p className="truncate text-sm font-semibold">{matricula.titulo ?? 'Curso SCORM'}</p>
-            <p className="truncate text-[11px] text-white/60">
+            <p className="truncate text-xs text-white/60">
               {liveLocation || persistedLocation
                 ? `Onde você está: ${liveLocation ?? persistedLocation}`
                 : 'Onde você está: início do curso'}
@@ -1635,7 +1635,7 @@ export default function LmsPlayer() {
           <Eye className="h-4 w-4 text-blue-400 flex-shrink-0" />
           <div>
             <p className="text-xs font-medium text-blue-300">Modo consulta — somente leitura</p>
-            <p className="text-[10px] text-blue-400/70">
+            <p className="text-xs text-blue-400/70">
               {examConsultation
                 ? 'Consulta durante a prova final: esta aba não altera o progresso nem a tentativa.'
                 : 'Você está consultando o treinamento. O progresso não será alterado.'}
@@ -1893,7 +1893,7 @@ export default function LmsPlayer() {
               {completionMessage || 'Conclusão recebida, mas ainda não confirmada pelo servidor.'}
             </div>
             {completionState === 'error' && completionErrorInfo?.code ? (
-              <div className="mb-2 font-mono text-[10px] uppercase tracking-wide text-amber-200/80">
+              <div className="mb-2 font-mono text-xs uppercase tracking-wide text-amber-200/80">
                 Código de diagnóstico: {completionErrorInfo.code}
                 {completionErrorInfo.reason && completionErrorInfo.reason !== completionErrorInfo.code
                   ? ` · ${completionErrorInfo.reason}`

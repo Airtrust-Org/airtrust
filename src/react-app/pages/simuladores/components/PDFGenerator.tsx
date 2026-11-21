@@ -341,10 +341,10 @@ export const PDFGeneratorNativo: React.FC<PDFGeneratorProps> = ({ fichaUuid, onP
         <table class="manobras-table">
             <thead>
                 <tr>
-                    <th style="width: 50%;">MANOBRA / PROCEDIMENTO</th>
-                    <th style="width: 15%;">NOTA</th>
-                    <th style="width: 15%;">STATUS</th>
-                    <th style="width: 20%;">OBSERVAÇÕES</th>
+                    <th scope="col" style="width: 50%;">MANOBRA / PROCEDIMENTO</th>
+                    <th scope="col" style="width: 15%;">NOTA</th>
+                    <th scope="col" style="width: 15%;">STATUS</th>
+                    <th scope="col" style="width: 20%;">OBSERVAÇÕES</th>
                 </tr>
             </thead>
             <tbody>

@@ -133,7 +133,7 @@ function EscalaFormModal({ tripulanteId, escala, onClose, onSaved }: FormModalPr
           <h2 className="text-base font-bold text-gray-900">
             {isEdit ? 'Editar Escala' : 'Nova Escala Quinzenal'}
           </h2>
-          <button onClick={onClose} className="rounded-lg p-1 hover:bg-gray-100">
+          <button type="button" onClick={onClose} className="rounded-lg p-1 hover:bg-gray-100">
             <X className="h-5 w-5 text-gray-400" />
           </button>
         </div>
@@ -167,7 +167,7 @@ function EscalaFormModal({ tripulanteId, escala, onClose, onSaved }: FormModalPr
               </div>
             </div>
             {diasEmb > 0 && (
-              <p className="text-[11px] text-blue-600 mt-1">{diasEmb} dias de embarque</p>
+              <p className="text-xs text-blue-600 mt-1">{diasEmb} dias de embarque</p>
             )}
           </div>
 
@@ -199,7 +199,7 @@ function EscalaFormModal({ tripulanteId, escala, onClose, onSaved }: FormModalPr
               </div>
             </div>
             {diasFolga > 0 && (
-              <p className="text-[11px] text-emerald-600 mt-1">{diasFolga} dias de folga</p>
+              <p className="text-xs text-emerald-600 mt-1">{diasFolga} dias de folga</p>
             )}
           </div>
 
@@ -300,7 +300,7 @@ export default function FrmsEscalas() {
       <div className="space-y-4">
         {/* Header */}
         <div className="flex items-center gap-4">
-          <button
+          <button type="button"
             onClick={() => navigate('/frms')}
             className="flex items-center gap-1 rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-600 hover:bg-gray-50 transition-colors"
           >
@@ -313,7 +313,7 @@ export default function FrmsEscalas() {
             </p>
           </div>
           {tripulanteId && (
-            <button
+            <button type="button"
               onClick={() => {
                 setEditingEscala(null);
                 setShowForm(true);
@@ -355,7 +355,7 @@ export default function FrmsEscalas() {
               <span className="text-sm font-semibold text-gray-700">
                 Escalas de {tripulanteNome ?? `#${tripulanteId}`}
               </span>
-              <span className="ml-2 rounded-full bg-gray-100 px-2 py-0.5 text-[11px] font-bold text-gray-500">
+              <span className="ml-2 rounded-full bg-gray-100 px-2 py-0.5 text-xs font-bold text-gray-500">
                 {escalas.length}
               </span>
             </div>
@@ -379,31 +379,31 @@ export default function FrmsEscalas() {
                 />
               </div>
             ) : (
-              <table className="w-full text-sm">
+              <div className="overflow-x-auto"><table className="w-full text-sm">
                 <thead>
                   <tr className="bg-gray-50/70 border-b border-gray-100">
-                    <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase text-gray-500">
+                    <th scope="col" className="px-4 py-3 text-left text-xs font-semibold uppercase text-gray-500">
                       Ciclo
                     </th>
-                    <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase text-gray-500">
+                    <th scope="col" className="px-4 py-3 text-left text-xs font-semibold uppercase text-gray-500">
                       Embarque
                     </th>
-                    <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase text-gray-500">
+                    <th scope="col" className="px-4 py-3 text-left text-xs font-semibold uppercase text-gray-500">
                       Folga
                     </th>
-                    <th className="px-4 py-3 text-center text-[11px] font-semibold uppercase text-gray-500">
+                    <th scope="col" className="px-4 py-3 text-center text-xs font-semibold uppercase text-gray-500">
                       Dias Emb
                     </th>
-                    <th className="px-4 py-3 text-center text-[11px] font-semibold uppercase text-gray-500">
+                    <th scope="col" className="px-4 py-3 text-center text-xs font-semibold uppercase text-gray-500">
                       Dias Folga
                     </th>
-                    <th className="px-4 py-3 text-center text-[11px] font-semibold uppercase text-gray-500">
+                    <th scope="col" className="px-4 py-3 text-center text-xs font-semibold uppercase text-gray-500">
                       Status
                     </th>
-                    <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase text-gray-500">
+                    <th scope="col" className="px-4 py-3 text-left text-xs font-semibold uppercase text-gray-500">
                       Obs.
                     </th>
-                    <th className="px-4 py-3" />
+                    <th scope="col" className="px-4 py-3" />
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-50">
@@ -435,7 +435,7 @@ export default function FrmsEscalas() {
                         </td>
                         <td className="px-4 py-2.5 text-center">
                           <span
-                            className={`rounded-full px-2.5 py-0.5 text-[11px] font-bold ${st.color}`}
+                            className={`rounded-full px-2.5 py-0.5 text-xs font-bold ${st.color}`}
                           >
                             {st.label}
                           </span>
@@ -444,7 +444,7 @@ export default function FrmsEscalas() {
                           {e.observacao ?? '—'}
                         </td>
                         <td className="px-4 py-2.5">
-                          <button
+                          <button type="button"
                             onClick={() => {
                               setEditingEscala(e);
                               setShowForm(true);
@@ -459,7 +459,7 @@ export default function FrmsEscalas() {
                     );
                   })}
                 </tbody>
-              </table>
+              </table></div>
             )}
           </div>
         )}

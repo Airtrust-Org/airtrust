@@ -482,12 +482,12 @@ export function ComplianceSettings() {
               <table className="w-full text-sm">
                 <thead className="bg-gray-50">
                   <tr>
-                    <th className="px-4 py-3 text-left font-medium text-gray-600">Função</th>
-                    <th className="px-4 py-3 text-left font-medium text-gray-600">Tipo</th>
-                    <th className="px-4 py-3 text-left font-medium text-gray-600">Referência</th>
-                    <th className="px-4 py-3 text-left font-medium text-gray-600">Descrição</th>
-                    <th className="px-4 py-3 text-center font-medium text-gray-600">Obrigatório</th>
-                    <th className="px-4 py-3 text-center font-medium text-gray-600">Ações</th>
+                    <th scope="col" className="px-4 py-3 text-left font-medium text-gray-600">Função</th>
+                    <th scope="col" className="px-4 py-3 text-left font-medium text-gray-600">Tipo</th>
+                    <th scope="col" className="px-4 py-3 text-left font-medium text-gray-600">Referência</th>
+                    <th scope="col" className="px-4 py-3 text-left font-medium text-gray-600">Descrição</th>
+                    <th scope="col" className="px-4 py-3 text-center font-medium text-gray-600">Obrigatório</th>
+                    <th scope="col" className="px-4 py-3 text-center font-medium text-gray-600">Ações</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">

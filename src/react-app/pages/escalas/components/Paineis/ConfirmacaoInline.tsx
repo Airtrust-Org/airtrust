@@ -103,7 +103,7 @@ export default function ConfirmacaoInline({
           <button
             onClick={confirmarTodos}
             disabled={isLoading}
-            className="text-[10px] px-2.5 py-1 bg-amber-600 text-white rounded-lg hover:bg-amber-700 font-medium disabled:opacity-50"
+            className="text-xs px-2.5 py-1 bg-amber-600 text-white rounded-lg hover:bg-amber-700 font-medium disabled:opacity-50"
           >
             Confirmar Todos
           </button>
@@ -127,7 +127,7 @@ export default function ConfirmacaoInline({
                 <span className="text-xs font-medium text-gray-800">
                   {cfg?.label || evt.tipo_evento}
                 </span>
-                <span className="text-[10px] text-gray-400 ml-2">
+                <span className="text-xs text-gray-400 ml-2">
                   <FuncionarioLink
                     funcionarioId={evt.funcionario_id}
                     nome={evt.funcionario_nome}

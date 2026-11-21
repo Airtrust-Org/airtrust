@@ -194,13 +194,13 @@ export default function ControleVoosJornadas() {
                 <table className="min-w-full text-sm">
                   <thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500 dark:bg-slate-800/60 dark:text-slate-400">
                     <tr>
-                      <th className="px-4 py-3">Tripulante</th>
-                      <th className="px-4 py-3">Função</th>
-                      <th className="px-4 py-3">Aeronave / Trecho</th>
-                      <th className="px-4 py-3">Horários</th>
-                      <th className="px-4 py-3">Origem</th>
-                      <th className="px-4 py-3">Qualidade</th>
-                      <th className="px-4 py-3">Sync</th>
+                      <th scope="col" className="px-4 py-3">Tripulante</th>
+                      <th scope="col" className="px-4 py-3">Função</th>
+                      <th scope="col" className="px-4 py-3">Aeronave / Trecho</th>
+                      <th scope="col" className="px-4 py-3">Horários</th>
+                      <th scope="col" className="px-4 py-3">Origem</th>
+                      <th scope="col" className="px-4 py-3">Qualidade</th>
+                      <th scope="col" className="px-4 py-3">Sync</th>
                     </tr>
                   </thead>
                   <tbody>

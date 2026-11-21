@@ -63,7 +63,7 @@ export function TesteApiPuro() {
       {funcionarios.length > 0 && (
         <>
           <h2>Tabela de Funcionários</h2>
-          <table
+          <div className="overflow-x-auto"><table
             style={{
               width: '100%',
               borderCollapse: 'collapse',
@@ -72,11 +72,11 @@ export function TesteApiPuro() {
           >
             <thead>
               <tr style={{ backgroundColor: '#f8f9fa', borderBottom: '2px solid #ddd' }}>
-                <th style={{ padding: '10px', textAlign: 'left' }}>ID</th>
-                <th style={{ padding: '10px', textAlign: 'left' }}>Nome</th>
-                <th style={{ padding: '10px', textAlign: 'left' }}>Email</th>
-                <th style={{ padding: '10px', textAlign: 'left' }}>Cargo</th>
-                <th style={{ padding: '10px', textAlign: 'left' }}>Matrícula</th>
+                <th scope="col" style={{ padding: '10px', textAlign: 'left' }}>ID</th>
+                <th scope="col" style={{ padding: '10px', textAlign: 'left' }}>Nome</th>
+                <th scope="col" style={{ padding: '10px', textAlign: 'left' }}>Email</th>
+                <th scope="col" style={{ padding: '10px', textAlign: 'left' }}>Cargo</th>
+                <th scope="col" style={{ padding: '10px', textAlign: 'left' }}>Matrícula</th>
               </tr>
             </thead>
             <tbody>
@@ -90,7 +90,7 @@ export function TesteApiPuro() {
                 </tr>
               ))}
             </tbody>
-          </table>
+          </table></div>
         </>
       )}
 

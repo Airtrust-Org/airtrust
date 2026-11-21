@@ -1825,7 +1825,7 @@ function CourseCard({
                   {actionLabel}
                 </Button>
               ) : (
-                <button
+                <button type="button"
                   onClick={() => onAction(curso)}
                   className={`flex-1 inline-flex items-center justify-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${getLmsActionButtonClasses(matricula?.status ?? 'NAO_INICIADO')}`}
                 >

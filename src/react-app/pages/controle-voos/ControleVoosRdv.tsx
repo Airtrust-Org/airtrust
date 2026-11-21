@@ -62,12 +62,12 @@ export default function ControleVoosRdv() {
                   <table className="w-full text-sm">
                     <thead className="border-b border-slate-200 bg-slate-50 dark:border-slate-700 dark:bg-slate-800">
                       <tr>
-                        <th className="px-4 py-3 text-left font-medium text-slate-600 dark:text-slate-300">Data</th>
-                        <th className="px-4 py-3 text-left font-medium text-slate-600 dark:text-slate-300">Aeronave</th>
-                        <th className="px-4 py-3 text-left font-medium text-slate-600 dark:text-slate-300">Rota operacional</th>
-                        <th className="px-4 py-3 text-left font-medium text-slate-600 dark:text-slate-300">Prev. saída</th>
-                        <th className="px-4 py-3 text-left font-medium text-slate-600 dark:text-slate-300">Status RDV</th>
-                        <th className="px-4 py-3 w-16" />
+                        <th scope="col" className="px-4 py-3 text-left font-medium text-slate-600 dark:text-slate-300">Data</th>
+                        <th scope="col" className="px-4 py-3 text-left font-medium text-slate-600 dark:text-slate-300">Aeronave</th>
+                        <th scope="col" className="px-4 py-3 text-left font-medium text-slate-600 dark:text-slate-300">Rota operacional</th>
+                        <th scope="col" className="px-4 py-3 text-left font-medium text-slate-600 dark:text-slate-300">Prev. saída</th>
+                        <th scope="col" className="px-4 py-3 text-left font-medium text-slate-600 dark:text-slate-300">Status RDV</th>
+                        <th scope="col" className="px-4 py-3 w-16" />
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100 dark:divide-slate-800">

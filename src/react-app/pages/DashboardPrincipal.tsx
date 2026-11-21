@@ -295,7 +295,7 @@ function PriorityActionList({ actions }: { actions: OperationalAction[] }) {
             <div className="min-w-0 flex-1">
               <div className="flex flex-wrap items-center gap-2">
                 <span
-                  className={`text-[11px] font-black uppercase tracking-wide ${
+                  className={`text-xs font-black uppercase tracking-wide ${
                     critical
                       ? 'text-red-700 dark:text-red-300'
                       : 'text-amber-700 dark:text-amber-300'

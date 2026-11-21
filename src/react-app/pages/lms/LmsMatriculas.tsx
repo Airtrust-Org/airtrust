@@ -922,7 +922,7 @@ export default function LmsMatriculas() {
                 <table className="w-full text-sm">
                   <thead className="border-b border-slate-100 bg-slate-50 dark:border-slate-800 dark:bg-slate-800">
                     <tr>
-                      <th className="w-10 px-3 py-3 text-center">
+                      <th scope="col" className="w-10 px-3 py-3 text-center">
                         <input
                           type="checkbox"
                           aria-label="Selecionar matrículas pendentes visíveis"
@@ -932,31 +932,31 @@ export default function LmsMatriculas() {
                           className="rounded"
                         />
                       </th>
-                      <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500">
+                      <th scope="col" className="px-4 py-3 text-left text-xs font-semibold text-slate-500">
                         Funcionário
                       </th>
-                      <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500">
+                      <th scope="col" className="px-4 py-3 text-left text-xs font-semibold text-slate-500">
                         Status
                       </th>
-                      <th className="hidden px-4 py-3 text-left text-xs font-semibold text-slate-500 md:table-cell">
+                      <th scope="col" className="hidden px-4 py-3 text-left text-xs font-semibold text-slate-500 md:table-cell">
                         Progresso
                       </th>
-                      <th className="hidden px-4 py-3 text-left text-xs font-semibold text-slate-500 lg:table-cell">
+                      <th scope="col" className="hidden px-4 py-3 text-left text-xs font-semibold text-slate-500 lg:table-cell">
                         Nota
                       </th>
-                      <th className="hidden px-4 py-3 text-left text-xs font-semibold text-slate-500 lg:table-cell">
+                      <th scope="col" className="hidden px-4 py-3 text-left text-xs font-semibold text-slate-500 lg:table-cell">
                         Início
                       </th>
-                      <th className="hidden px-4 py-3 text-left text-xs font-semibold text-slate-500 lg:table-cell">
+                      <th scope="col" className="hidden px-4 py-3 text-left text-xs font-semibold text-slate-500 lg:table-cell">
                         Conclusão
                       </th>
-                      <th className="hidden px-4 py-3 text-left text-xs font-semibold text-slate-500 sm:table-cell">
+                      <th scope="col" className="hidden px-4 py-3 text-left text-xs font-semibold text-slate-500 sm:table-cell">
                         <span className="flex items-center gap-1">
                           <Calendar className="h-3.5 w-3.5" />
                           Prazo
                         </span>
                       </th>
-                      <th className="px-4 py-3 text-right text-xs font-semibold text-slate-500">
+                      <th scope="col" className="px-4 py-3 text-right text-xs font-semibold text-slate-500">
                         Ações
                       </th>
                     </tr>

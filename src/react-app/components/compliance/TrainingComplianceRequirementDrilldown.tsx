@@ -214,7 +214,7 @@ export function TrainingComplianceRequirementDrilldown({
                       {row.referencias_normativas.join(' · ')}
                     </div>
                   ) : null}
-                  <div className="mt-2 flex flex-wrap gap-1.5 text-[11px] text-slate-500">
+                  <div className="mt-2 flex flex-wrap gap-1.5 text-xs text-slate-500">
                     {[...row.escopos.map((v) => `Aplicação: ${v.replace(/_/g, ' ')}`),
                       ...row.origens.map((v) => `Origem: ${v}`),
                       ...row.modalidades.map((v) => `Modalidade: ${v}`),

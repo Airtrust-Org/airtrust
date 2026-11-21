@@ -429,20 +429,20 @@ export default function ControleVoosTabelas() {
                 <table className="w-full min-w-[760px] text-sm">
                   <thead className="bg-slate-50 dark:bg-slate-800/70">
                     <tr>
-                      <th className="px-4 py-3 text-left font-medium text-slate-600 dark:text-slate-300">{activeCatalog === 'pontos' ? 'Código' : activeCatalog === 'aeroportos' ? 'Aeródromo' : 'Código'}</th>
+                      <th scope="col" className="px-4 py-3 text-left font-medium text-slate-600 dark:text-slate-300">{activeCatalog === 'pontos' ? 'Código' : activeCatalog === 'aeroportos' ? 'Aeródromo' : 'Código'}</th>
                       {activeCatalog === 'aeroportos' && (
-                        <th className="px-4 py-3 text-left font-medium text-slate-600 dark:text-slate-300">ICAO / IATA</th>
+                        <th scope="col" className="px-4 py-3 text-left font-medium text-slate-600 dark:text-slate-300">ICAO / IATA</th>
                       )}
                       {activeCatalog === 'pontos' && (
-                        <th className="px-4 py-3 text-left font-medium text-slate-600 dark:text-slate-300">Código ICAO</th>
+                        <th scope="col" className="px-4 py-3 text-left font-medium text-slate-600 dark:text-slate-300">Código ICAO</th>
                       )}
                       {activeCatalog === 'pontos' && (
-                        <th className="px-4 py-3 text-left font-medium text-slate-600 dark:text-slate-300">Coordenadas / elevação</th>
+                        <th scope="col" className="px-4 py-3 text-left font-medium text-slate-600 dark:text-slate-300">Coordenadas / elevação</th>
                       )}
-                      <th className="px-4 py-3 text-left font-medium text-slate-600 dark:text-slate-300">{activeCatalog === 'pontos' ? 'Local' : 'Nome'}</th>
-                      <th className="px-4 py-3 text-left font-medium text-slate-600 dark:text-slate-300">{activeCatalog === 'justificativas' ? 'Categoria' : activeCatalog === 'pontos' ? 'Tipo' : 'Tipo / Localidade'}</th>
-                      <th className="px-4 py-3 text-left font-medium text-slate-600 dark:text-slate-300">Status</th>
-                      {canManage && activeCatalog !== 'pontos' && <th className="px-4 py-3 text-right font-medium text-slate-600 dark:text-slate-300">Ações</th>}
+                      <th scope="col" className="px-4 py-3 text-left font-medium text-slate-600 dark:text-slate-300">{activeCatalog === 'pontos' ? 'Local' : 'Nome'}</th>
+                      <th scope="col" className="px-4 py-3 text-left font-medium text-slate-600 dark:text-slate-300">{activeCatalog === 'justificativas' ? 'Categoria' : activeCatalog === 'pontos' ? 'Tipo' : 'Tipo / Localidade'}</th>
+                      <th scope="col" className="px-4 py-3 text-left font-medium text-slate-600 dark:text-slate-300">Status</th>
+                      {canManage && activeCatalog !== 'pontos' && <th scope="col" className="px-4 py-3 text-right font-medium text-slate-600 dark:text-slate-300">Ações</th>}
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 dark:divide-slate-800">

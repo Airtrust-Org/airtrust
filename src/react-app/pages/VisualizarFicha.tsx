@@ -257,11 +257,11 @@ const VisualizarFicha: React.FC = () => {
             <table className="w-full table-auto">
               <thead>
                 <tr className="border-b border-gray-200">
-                  <th className="text-left py-2 px-3 text-sm font-medium text-gray-600">Código</th>
-                  <th className="text-left py-2 px-3 text-sm font-medium text-gray-600">Descrição</th>
-                  <th className="text-center py-2 px-3 text-sm font-medium text-gray-600">Nota Mínima</th>
-                  <th className="text-center py-2 px-3 text-sm font-medium text-gray-600">Nota Obtida</th>
-                  <th className="text-left py-2 px-3 text-sm font-medium text-gray-600">Observações</th>
+                  <th scope="col" className="text-left py-2 px-3 text-sm font-medium text-gray-600">Código</th>
+                  <th scope="col" className="text-left py-2 px-3 text-sm font-medium text-gray-600">Descrição</th>
+                  <th scope="col" className="text-center py-2 px-3 text-sm font-medium text-gray-600">Nota Mínima</th>
+                  <th scope="col" className="text-center py-2 px-3 text-sm font-medium text-gray-600">Nota Obtida</th>
+                  <th scope="col" className="text-left py-2 px-3 text-sm font-medium text-gray-600">Observações</th>
                 </tr>
               </thead>
               <tbody>

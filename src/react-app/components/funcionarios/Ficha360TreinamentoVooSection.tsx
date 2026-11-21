@@ -206,7 +206,7 @@ export default function Ficha360TreinamentoVooSection({
 
                   <div className="flex flex-col items-start gap-3 lg:items-end">
                     <div className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2">
-                      <p className="text-[11px] font-semibold uppercase tracking-wide text-rose-600">
+                      <p className="text-xs font-semibold uppercase tracking-wide text-rose-600">
                         Nota geral
                       </p>
                       <p className="mt-1 text-lg font-semibold text-rose-700">
@@ -235,7 +235,7 @@ export default function Ficha360TreinamentoVooSection({
                         <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
                           <div>
                             <div className="flex flex-wrap items-center gap-2">
-                              <span className="inline-flex rounded-full bg-rose-100 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-rose-700">
+                              <span className="inline-flex rounded-full bg-rose-100 px-2 py-0.5 text-xs font-semibold uppercase tracking-wide text-rose-700">
                                 {getTipoLabel(item.tipo)}
                               </span>
                               <p className="text-sm font-semibold text-slate-900">{item.nome}</p>

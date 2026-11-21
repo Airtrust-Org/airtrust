@@ -139,7 +139,7 @@ export function NotificacoesEscala() {
       >
         <CalendarClock className="w-5 h-5" />
         {unread > 0 && (
-          <span className="absolute -top-0.5 -right-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-[9px] font-bold text-white">
+          <span className="absolute -top-0.5 -right-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-xs font-bold text-white">
             {unread > 9 ? '9+' : unread}
           </span>
         )}
@@ -154,14 +154,14 @@ export function NotificacoesEscala() {
               {unread > 0 && (
                 <button
                   onClick={marcarTodas}
-                  className="text-[10px] text-primary hover:underline font-medium"
+                  className="text-xs text-primary hover:underline font-medium"
                 >
                   Marcar todas
                 </button>
               )}
               <button
                 onClick={() => navigate('/escalas')}
-                className="text-[10px] text-slate-400 hover:text-slate-600"
+                className="text-xs text-slate-400 hover:text-slate-600"
               >
                 ver escalas →
               </button>
@@ -204,10 +204,10 @@ export function NotificacoesEscala() {
                     >
                       {n.titulo}
                     </p>
-                    <p className="text-[10px] text-slate-400 mt-0.5 line-clamp-2 leading-tight">
+                    <p className="text-xs text-slate-400 mt-0.5 line-clamp-2 leading-tight">
                       {n.mensagem}
                     </p>
-                    <p className="text-[9px] text-slate-300 mt-1">{formatDate(n.created_at)}</p>
+                    <p className="text-xs text-slate-300 mt-1">{formatDate(n.created_at)}</p>
                   </div>
                   {!n.lida && (
                     <span className="w-1.5 h-1.5 rounded-full bg-blue-500 flex-shrink-0 mt-2" />

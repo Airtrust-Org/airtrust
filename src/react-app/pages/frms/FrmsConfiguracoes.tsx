@@ -560,7 +560,7 @@ export default function FrmsConfiguracoes() {
                 className="w-full rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-sm focus:border-transparent focus:ring-2 focus:ring-primary/40"
               />
               {FIELD_HELPERS[key] ? (
-                <p className="text-[11px] leading-relaxed text-gray-500">{FIELD_HELPERS[key]}</p>
+                <p className="text-xs leading-relaxed text-gray-500">{FIELD_HELPERS[key]}</p>
               ) : null}
             </div>
           ))}

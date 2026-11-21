@@ -164,7 +164,7 @@ export default function ModalVerificarConflitos({ escalaId, onClose }: Props) {
                     </div>
                     {r.motivo && <div className="text-xs text-orange-600 mt-1">{r.motivo}</div>}
                     {r.contrato_referencia && (
-                      <div className="text-[10px] text-orange-500 mt-0.5">
+                      <div className="text-xs text-orange-500 mt-0.5">
                         📋 Ref: {r.contrato_referencia}
                       </div>
                     )}

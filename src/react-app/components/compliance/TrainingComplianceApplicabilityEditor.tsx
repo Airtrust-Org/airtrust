@@ -494,7 +494,7 @@ export function TrainingComplianceApplicabilityEditor({
             <option value="NAO_APLICA">Excluir / não se aplica (exceção)</option>
           </select>
           {obrigatoriedade === 'NAO_APLICA' ? (
-            <span className="mt-1 block text-[11px] font-normal leading-4 text-amber-700">
+            <span className="mt-1 block text-xs font-normal leading-4 text-amber-700">
               Sem regra aplicável, o treinamento já não é obrigatório. Use esta opção somente para
               criar uma exceção explícita a uma regra mais ampla.
             </span>
@@ -684,16 +684,16 @@ export function TrainingComplianceApplicabilityEditor({
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="break-words text-sm font-semibold text-slate-800">{scopeLabel(rule)}</span>
                   {rule.critico_operacional ? (
-                    <span className="rounded bg-orange-100 px-2 py-0.5 text-[11px] font-semibold text-orange-700">
+                    <span className="rounded bg-orange-100 px-2 py-0.5 text-xs font-semibold text-orange-700">
                       Crítico
                     </span>
                   ) : null}
                   {governedDesignationRule ? (
-                    <span className="rounded bg-indigo-100 px-2 py-0.5 text-[11px] font-semibold text-indigo-700">
+                    <span className="rounded bg-indigo-100 px-2 py-0.5 text-xs font-semibold text-indigo-700">
                       Regra governada
                     </span>
                   ) : globalBlocked ? (
-                    <span className="rounded bg-slate-200 px-2 py-0.5 text-[11px] text-slate-600">
+                    <span className="rounded bg-slate-200 px-2 py-0.5 text-xs text-slate-600">
                       Regra global
                     </span>
                   ) : null}

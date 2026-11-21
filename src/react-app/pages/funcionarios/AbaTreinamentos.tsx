@@ -167,11 +167,11 @@ export default function AbaTreinamentos({
               <table className="min-w-full divide-y divide-slate-100 text-sm">
                 <thead className="bg-slate-50 text-slate-500">
                   <tr>
-                    <th className="px-3 py-2 text-left font-semibold">Qualificação</th>
-                    <th className="px-3 py-2 text-left font-semibold">Obrigatoriedade</th>
-                    <th className="px-3 py-2 text-left font-semibold">Status</th>
-                    <th className="px-3 py-2 text-left font-semibold">Validade</th>
-                    <th className="px-3 py-2 text-right font-semibold">Dias</th>
+                    <th scope="col" className="px-3 py-2 text-left font-semibold">Qualificação</th>
+                    <th scope="col" className="px-3 py-2 text-left font-semibold">Obrigatoriedade</th>
+                    <th scope="col" className="px-3 py-2 text-left font-semibold">Status</th>
+                    <th scope="col" className="px-3 py-2 text-left font-semibold">Validade</th>
+                    <th scope="col" className="px-3 py-2 text-right font-semibold">Dias</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 bg-white">
@@ -239,11 +239,11 @@ export default function AbaTreinamentos({
             <table className="min-w-full divide-y divide-slate-100 text-sm">
               <thead className="bg-slate-50 text-slate-500">
                 <tr>
-                  <th className="px-4 py-3 text-left font-semibold">Curso</th>
-                  <th className="px-4 py-3 text-left font-semibold">Tipo</th>
-                  <th className="px-4 py-3 text-right font-semibold">Progresso</th>
-                  <th className="px-4 py-3 text-left font-semibold">Status</th>
-                  <th className="px-4 py-3 text-left font-semibold">Prazo</th>
+                  <th scope="col" className="px-4 py-3 text-left font-semibold">Curso</th>
+                  <th scope="col" className="px-4 py-3 text-left font-semibold">Tipo</th>
+                  <th scope="col" className="px-4 py-3 text-right font-semibold">Progresso</th>
+                  <th scope="col" className="px-4 py-3 text-left font-semibold">Status</th>
+                  <th scope="col" className="px-4 py-3 text-left font-semibold">Prazo</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 bg-white">

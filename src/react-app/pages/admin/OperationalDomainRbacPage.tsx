@@ -361,7 +361,7 @@ function ClassificationTable(props: {
       <h2 className="font-medium">
         {title} ({items.length})
       </h2>
-      <table className="w-full text-sm">
+      <div className="overflow-x-auto"><table className="w-full text-sm">
         <tbody>
           {items.map((item) => {
             const key = `${resourceType}:${item.id}`;
@@ -402,7 +402,7 @@ function ClassificationTable(props: {
             );
           })}
         </tbody>
-      </table>
+      </table></div>
     </section>
   );
 }

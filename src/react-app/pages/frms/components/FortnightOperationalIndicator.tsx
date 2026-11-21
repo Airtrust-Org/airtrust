@@ -109,13 +109,13 @@ function FortnightTimelinePanel({
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
           <p className="text-sm font-semibold text-slate-900">{title}</p>
-          <p className="text-[11px] text-slate-500">
+          <p className="text-xs text-slate-500">
             Leitura diária de carga, recuperação e qualidade dos dados em{' '}
             {formatFortnightPeriod(indicator?.periodo_inicio, indicator?.periodo_fim)}.
           </p>
         </div>
         {focusDate ? (
-          <span className="rounded-md border border-sky-200 bg-sky-50 px-2 py-0.5 text-[11px] font-medium text-sky-700">
+          <span className="rounded-md border border-sky-200 bg-sky-50 px-2 py-0.5 text-xs font-medium text-sky-700">
             Hoje {focusDate.slice(8, 10)}/{focusDate.slice(5, 7)}
           </span>
         ) : null}
@@ -131,23 +131,23 @@ function FortnightTimelinePanel({
         <>
           <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-5">
             <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2">
-              <p className="text-[11px] text-slate-500">Dias com atividade</p>
+              <p className="text-xs text-slate-500">Dias com atividade</p>
               <p className="text-sm font-semibold text-slate-900">{timeline.summary.jornadas_days}</p>
             </div>
             <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2">
-              <p className="text-[11px] text-slate-500">Check-ins recebidos</p>
+              <p className="text-xs text-slate-500">Check-ins recebidos</p>
               <p className="text-sm font-semibold text-slate-900">{timeline.summary.received_checkins}</p>
             </div>
             <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2">
-              <p className="text-[11px] text-slate-500">Check-ins pendentes</p>
+              <p className="text-xs text-slate-500">Check-ins pendentes</p>
               <p className="text-sm font-semibold text-slate-900">{timeline.summary.pending_checkins}</p>
             </div>
             <div className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2">
-              <p className="text-[11px] text-emerald-700">Dias com crédito calculado</p>
+              <p className="text-xs text-emerald-700">Dias com crédito calculado</p>
               <p className="text-sm font-semibold text-emerald-900">{timeline.summary.recovery_credit_days}</p>
             </div>
             <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2">
-              <p className="text-[11px] text-slate-500">Crítico / atenção</p>
+              <p className="text-xs text-slate-500">Crítico / atenção</p>
               <p className="text-sm font-semibold text-slate-900">
                 {timeline.summary.critical_days} / {timeline.summary.attention_days}
               </p>
@@ -156,12 +156,12 @@ function FortnightTimelinePanel({
 
           <div className="rounded-lg border border-slate-200 bg-slate-50/70 p-3">
             <p className="text-xs font-semibold text-slate-800">Padrões do período</p>
-            <p className="mt-0.5 text-[11px] text-slate-500">
+            <p className="mt-0.5 text-xs text-slate-500">
               Resumo descritivo dos dados confirmados. Não cria um novo score nem substitui a regra FRMS. Créditos calculados não comprovam sono efetivo nem recuperação fisiológica.
             </p>
             <div className="mt-2 grid gap-2 sm:grid-cols-2 xl:grid-cols-5">
               <div>
-                <p className="text-[10px] uppercase tracking-wide text-slate-500">Queda de efetividade</p>
+                <p className="text-xs uppercase tracking-wide text-slate-500">Queda de efetividade</p>
                 <p className="text-xs font-semibold text-slate-800">
                   {timeline.summary.max_effectiveness_decline_streak_days >= 2
                     ? `${timeline.summary.max_effectiveness_decline_streak_days} dias seguidos`
@@ -169,13 +169,13 @@ function FortnightTimelinePanel({
                 </p>
               </div>
               <div>
-                <p className="text-[10px] uppercase tracking-wide text-slate-500">Sono insuficiente</p>
+                <p className="text-xs uppercase tracking-wide text-slate-500">Sono insuficiente</p>
                 <p className="text-xs font-semibold text-slate-800">
                   {timeline.summary.low_sleep_days} dia(s) com alerta canônico
                 </p>
               </div>
               <div>
-                <p className="text-[10px] uppercase tracking-wide text-slate-500">Sequência de atividade</p>
+                <p className="text-xs uppercase tracking-wide text-slate-500">Sequência de atividade</p>
                 <p className="text-xs font-semibold text-slate-800">
                   {(indicator?.dias_consecutivos_com_atividade ?? indicator?.dias_consecutivos_com_jornada) == null
                     ? 'Não confirmada'
@@ -183,13 +183,13 @@ function FortnightTimelinePanel({
                 </p>
               </div>
               <div>
-                <p className="text-[10px] uppercase tracking-wide text-slate-500">Crédito de recuperação calculado</p>
+                <p className="text-xs uppercase tracking-wide text-slate-500">Crédito de recuperação calculado</p>
                 <p className="text-xs font-semibold text-emerald-800">
                   {timeline.summary.recovery_credit_days} dia(s) registrado(s)
                 </p>
               </div>
               <div>
-                <p className="text-[10px] uppercase tracking-wide text-slate-500">Sem voo + crédito calculado</p>
+                <p className="text-xs uppercase tracking-wide text-slate-500">Sem voo + crédito calculado</p>
                 <p className="text-xs font-semibold text-slate-800">
                   {timeline.summary.no_flight_recovery_credit_days} dia(s)
                 </p>
@@ -199,15 +199,15 @@ function FortnightTimelinePanel({
 
           <div className="overflow-x-auto">
             <table className="min-w-full border-collapse text-xs">
-              <thead className="bg-slate-50 text-[11px] uppercase tracking-wide text-slate-500">
+              <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
                 <tr>
-                  <th className="px-2 py-2 text-left">Dia</th>
-                  <th className="px-2 py-2 text-left">Atividade / jornada</th>
-                  <th className="px-2 py-2 text-left">Sono / KSS</th>
-                  <th className="px-2 py-2 text-left">Voo / simulador</th>
-                  <th className="px-2 py-2 text-left">Crédito calculado / estado do modelo</th>
-                  <th className="px-2 py-2 text-left">Efetividade</th>
-                  <th className="px-2 py-2 text-left">Situação / ação</th>
+                  <th scope="col" className="px-2 py-2 text-left">Dia</th>
+                  <th scope="col" className="px-2 py-2 text-left">Atividade / jornada</th>
+                  <th scope="col" className="px-2 py-2 text-left">Sono / KSS</th>
+                  <th scope="col" className="px-2 py-2 text-left">Voo / simulador</th>
+                  <th scope="col" className="px-2 py-2 text-left">Crédito calculado / estado do modelo</th>
+                  <th scope="col" className="px-2 py-2 text-left">Efetividade</th>
+                  <th scope="col" className="px-2 py-2 text-left">Situação / ação</th>
                 </tr>
               </thead>
               <tbody>
@@ -220,7 +220,7 @@ function FortnightTimelinePanel({
                     >
                       <td className="px-2 py-2">
                         <div className="font-medium text-slate-900">{day.label}</div>
-                        <div className="text-[11px] text-slate-500">Dia {day.day_index}/{day.total_days}</div>
+                        <div className="text-xs text-slate-500">Dia {day.day_index}/{day.total_days}</div>
                       </td>
                       <td className="px-2 py-2 text-slate-700">
                         {!day.has_snapshot_data ? (
@@ -240,11 +240,11 @@ function FortnightTimelinePanel({
                               {' · '}
                               {formatFortnightMinutes(day.atividade_min)}
                             </div>
-                            <div className="text-[11px] text-slate-500">
+                            <div className="text-xs text-slate-500">
                               {day.hora_apresentacao?.slice(0, 5) || '—'} → {day.hora_termino?.slice(0, 5) || '—'}
                             </div>
                             {day.atividade_rotulos[0] ? (
-                              <div className="mt-0.5 max-w-[220px] truncate text-[11px] text-slate-500">
+                              <div className="mt-0.5 max-w-[220px] truncate text-xs text-slate-500">
                                 {day.atividade_rotulos[0]}
                               </div>
                             ) : null}
@@ -257,7 +257,7 @@ function FortnightTimelinePanel({
                       </td>
                       <td className="px-2 py-2 text-slate-700">
                         <div>{day.horas_sono == null ? 'Não informado' : `${Number(day.horas_sono).toFixed(1)} h`}</div>
-                        <div className="text-[11px] text-slate-500">KSS {day.kss_score ?? '—'}</div>
+                        <div className="text-xs text-slate-500">KSS {day.kss_score ?? '—'}</div>
                       </td>
                       <td className="px-2 py-2 text-slate-700">
                         {day.voo_real_min > 0 || day.simulador_min > 0 ? (
@@ -275,7 +275,7 @@ function FortnightTimelinePanel({
                         {day.recovery_credit_points != null && day.recovery_credit_points > 0 ? (
                           <>
                             <div className="font-semibold text-emerald-700">{formatRecoveryCredit(day.recovery_credit_points)}</div>
-                            <div className="text-[11px] text-slate-500">{activity || (formatRecoveryState(day.recovery_state) ? formatRecoveryState(day.recovery_state) : 'Crédito calculado')}</div>
+                            <div className="text-xs text-slate-500">{activity || (formatRecoveryState(day.recovery_state) ? formatRecoveryState(day.recovery_state) : 'Crédito calculado')}</div>
                           </>
                         ) : (
                           <div className="text-slate-500">{activity || (formatRecoveryState(day.recovery_state) ? formatRecoveryState(day.recovery_state) : 'Sem crédito calculado')}</div>
@@ -283,16 +283,16 @@ function FortnightTimelinePanel({
                       </td>
                       <td className="px-2 py-2">
                         <div className="font-semibold text-slate-800">{formatTimelinePct(day.effectiveness_pct)}</div>
-                        <div className="text-[11px] text-slate-500">{formatTimelineCheckin(day.checkin_status)}</div>
+                        <div className="text-xs text-slate-500">{formatTimelineCheckin(day.checkin_status)}</div>
                       </td>
                       <td className="px-2 py-2">
-                        <span className={`inline-flex rounded-md border px-2 py-0.5 text-[11px] font-medium ${toneByTimelineStatus(day.snapshot_status)}`}>
+                        <span className={`inline-flex rounded-md border px-2 py-0.5 text-xs font-medium ${toneByTimelineStatus(day.snapshot_status)}`}>
                           {formatTimelineStatus(day.snapshot_status)}
                         </span>
                         {day.acao_recomendada_texto ? (
-                          <div className="mt-1 max-w-[260px] text-[11px] text-sky-700">{day.acao_recomendada_texto}</div>
+                          <div className="mt-1 max-w-[260px] text-xs text-sky-700">{day.acao_recomendada_texto}</div>
                         ) : day.highlights.length > 0 ? (
-                          <div className="mt-1 max-w-[260px] text-[11px] text-slate-500">{formatTimelineHighlight(day.highlights)}</div>
+                          <div className="mt-1 max-w-[260px] text-xs text-slate-500">{formatTimelineHighlight(day.highlights)}</div>
                         ) : null}
                       </td>
                     </tr>
@@ -310,14 +310,14 @@ function FortnightTimelinePanel({
 export function FortnightOperationalDisclaimer({ compact = false }: { compact?: boolean }) {
   if (compact) {
     return (
-      <p className="text-[10px] text-slate-500">
+      <p className="text-xs text-slate-500">
         {FORTNIGHT_OPERATIONAL_DISCLAIMER}. {FORTNIGHT_MANAGER_DISCLAIMER}.
       </p>
     );
   }
 
   return (
-      <div className="space-y-1 rounded-md border border-slate-200 bg-slate-50 px-2 py-2 text-[11px] text-slate-600">
+      <div className="space-y-1 rounded-md border border-slate-200 bg-slate-50 px-2 py-2 text-xs text-slate-600">
       <p className="font-medium text-slate-700">{FORTNIGHT_OPERATIONAL_DISCLAIMER}</p>
       <p>{FORTNIGHT_MANAGER_DISCLAIMER}</p>
       <p>Não é diagnóstico, não redefine a fórmula regulatória e não encerra a decisão final.</p>
@@ -328,7 +328,7 @@ export function FortnightOperationalDisclaimer({ compact = false }: { compact?: 
 export function FortnightStatusBadge({ status }: { status: string }) {
   return (
     <span
-      className={`inline-flex rounded-md border px-2 py-0.5 text-[11px] font-medium ${toneByFortnightStatus(status)}`}
+      className={`inline-flex rounded-md border px-2 py-0.5 text-xs font-medium ${toneByFortnightStatus(status)}`}
     >
       {FORTNIGHT_STATUS_LABELS[status] || status}
     </span>
@@ -338,7 +338,7 @@ export function FortnightStatusBadge({ status }: { status: string }) {
 function FortnightNaturezaBadge({ natureza }: { natureza: string | null | undefined }) {
   if (!natureza) return null;
   return (
-    <span className="inline-flex rounded-md border border-slate-200 bg-white px-2 py-0.5 text-[10px] font-medium text-slate-600">
+    <span className="inline-flex rounded-md border border-slate-200 bg-white px-2 py-0.5 text-xs font-medium text-slate-600">
       {formatFortnightNatureza(natureza)}
     </span>
   );
@@ -358,7 +358,7 @@ export function FortnightOperationalCore({
       <div className="flex flex-wrap items-center gap-2">
         <FortnightStatusBadge status={indicator.status_quinzena} />
         <FortnightNaturezaBadge natureza={indicator.natureza_dado} />
-        <span className="text-[10px] text-slate-500">{formatFortnightFreshness(indicator.freshness_dado)}</span>
+        <span className="text-xs text-slate-500">{formatFortnightFreshness(indicator.freshness_dado)}</span>
       </div>
       <div className="grid gap-2 sm:grid-cols-2">
         <div className="rounded-md border border-amber-100 bg-amber-50/50 p-2">
@@ -403,7 +403,7 @@ export function FortnightDetailPanel({
       className="mt-2 rounded-md border border-slate-200 bg-slate-50/80 p-2"
       onToggle={(event) => setIsOpen((event.currentTarget as HTMLDetailsElement).open)}
     >
-      <summary className="cursor-pointer text-[11px] font-medium text-slate-600">
+      <summary className="cursor-pointer text-xs font-medium text-slate-600">
         Ver evolução diária
       </summary>
       <div className="mt-2 space-y-2">
@@ -441,7 +441,7 @@ export function FortnightDetailPanel({
               <div className="flex items-center gap-2">
                 <span className="font-medium text-slate-700">Fonte do período:</span>
                 <span
-                  className={`inline-flex rounded-md border px-2 py-0.5 text-[11px] font-medium ${
+                  className={`inline-flex rounded-md border px-2 py-0.5 text-xs font-medium ${
                     toneByFortnightSource(indicator?.fonte_periodo)
                   }`}
                 >
@@ -520,7 +520,7 @@ export function FortnightCrewSummaryCard({
           <div className="flex flex-wrap items-center gap-2">
             <FortnightStatusBadge status={indicator.status_quinzena} />
             {checkinPendente || (indicator.dias_com_checkin_pendente ?? 0) > 0 ? (
-              <span className="rounded-md border border-amber-200 bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-800">
+              <span className="rounded-md border border-amber-200 bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-800">
                 Check-in pendente
               </span>
             ) : null}

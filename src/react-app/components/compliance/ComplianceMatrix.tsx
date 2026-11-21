@@ -269,14 +269,14 @@ export default function ComplianceMatrix({ onBack }: ComplianceMatrixProps) {
             <table className="w-full">
               <thead className="bg-gray-50 border-b border-gray-200">
                 <tr>
-                  <th className="text-left py-3 px-4 font-medium text-gray-900 sticky left-0 bg-gray-50 min-w-[200px]">
+                  <th scope="col" className="text-left py-3 px-4 font-medium text-gray-900 sticky left-0 bg-gray-50 min-w-[200px]">
                     <div className="flex items-center">
                       <BookOpen className="w-4 h-4 mr-2" />
                       Treinamento
                     </div>
                   </th>
                   {funcoes.map((funcao) => (
-                    <th
+                    <th scope="col"
                       key={funcao.id}
                       className="text-center py-3 px-3 font-medium text-gray-900 min-w-[120px]"
                     >
@@ -289,7 +289,7 @@ export default function ComplianceMatrix({ onBack }: ComplianceMatrixProps) {
                       </div>
                     </th>
                   ))}
-                  <th className="text-center py-3 px-3 font-medium text-gray-900 min-w-[80px]">
+                  <th scope="col" className="text-center py-3 px-3 font-medium text-gray-900 min-w-[80px]">
                     Total
                   </th>
                 </tr>

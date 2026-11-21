@@ -106,7 +106,7 @@ export default function ModuleGovernanceBanner({
         {chips.map((chip) => (
           <span
             key={chip}
-            className="inline-flex max-w-full items-center rounded-full border border-current/15 bg-white/60 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-current dark:bg-black/10"
+            className="inline-flex max-w-full items-center rounded-full border border-current/15 bg-white/60 px-2 py-0.5 text-xs font-semibold uppercase tracking-wide text-current dark:bg-black/10"
           >
             {chip}
           </span>

@@ -508,14 +508,14 @@ function ComplianceTable({ data }: { data: FrmsReportRow[] }) {
       <table className="w-full text-left text-sm">
         <thead>
           <tr className="border-b border-gray-100 bg-gray-50/50">
-            <th className="px-4 py-3 text-xs font-semibold uppercase text-gray-500">Tripulante</th>
-            <th className="px-4 py-3 text-center text-xs font-semibold uppercase text-gray-500">Avaliados</th>
-            <th className="px-4 py-3 text-center text-xs font-semibold uppercase text-gray-500">Conformes</th>
-            <th className="px-4 py-3 text-center text-xs font-semibold uppercase text-gray-500">Violações</th>
-            <th className="px-4 py-3 text-center text-xs font-semibold uppercase text-gray-500">Não avaliados</th>
-            <th className="px-4 py-3 text-center text-xs font-semibold uppercase text-gray-500">Possível desconformidade a validar</th>
-            <th className="px-4 py-3 text-center text-xs font-semibold uppercase text-gray-500">Mitigação</th>
-            <th className="px-4 py-3 text-center text-xs font-semibold uppercase text-gray-500">Atenção</th>
+            <th scope="col" className="px-4 py-3 text-xs font-semibold uppercase text-gray-500">Tripulante</th>
+            <th scope="col" className="px-4 py-3 text-center text-xs font-semibold uppercase text-gray-500">Avaliados</th>
+            <th scope="col" className="px-4 py-3 text-center text-xs font-semibold uppercase text-gray-500">Conformes</th>
+            <th scope="col" className="px-4 py-3 text-center text-xs font-semibold uppercase text-gray-500">Violações</th>
+            <th scope="col" className="px-4 py-3 text-center text-xs font-semibold uppercase text-gray-500">Não avaliados</th>
+            <th scope="col" className="px-4 py-3 text-center text-xs font-semibold uppercase text-gray-500">Possível desconformidade a validar</th>
+            <th scope="col" className="px-4 py-3 text-center text-xs font-semibold uppercase text-gray-500">Mitigação</th>
+            <th scope="col" className="px-4 py-3 text-center text-xs font-semibold uppercase text-gray-500">Atenção</th>
           </tr>
         </thead>
         <tbody className="divide-y divide-gray-50">
@@ -553,12 +553,12 @@ function MapaFadigaTable({ data }: { data: FrmsReportRow[] }) {
     <table className="w-full text-left text-sm">
       <thead>
         <tr className="border-b border-gray-100 bg-gray-50/50">
-          <th className="px-4 py-3 text-xs font-semibold uppercase text-gray-500">Tripulante</th>
-          <th className="px-4 py-3 text-right text-xs font-semibold uppercase text-gray-500">HV 7d%</th>
-          <th className="px-4 py-3 text-right text-xs font-semibold uppercase text-gray-500">HV Mês%</th>
-          <th className="px-4 py-3 text-right text-xs font-semibold uppercase text-gray-500">HV 365d%</th>
-          <th className="px-4 py-3 text-center text-xs font-semibold uppercase text-gray-500">Nível</th>
-          <th className="px-4 py-3 text-center text-xs font-semibold uppercase text-gray-500">Repouso</th>
+          <th scope="col" className="px-4 py-3 text-xs font-semibold uppercase text-gray-500">Tripulante</th>
+          <th scope="col" className="px-4 py-3 text-right text-xs font-semibold uppercase text-gray-500">HV 7d%</th>
+          <th scope="col" className="px-4 py-3 text-right text-xs font-semibold uppercase text-gray-500">HV Mês%</th>
+          <th scope="col" className="px-4 py-3 text-right text-xs font-semibold uppercase text-gray-500">HV 365d%</th>
+          <th scope="col" className="px-4 py-3 text-center text-xs font-semibold uppercase text-gray-500">Nível</th>
+          <th scope="col" className="px-4 py-3 text-center text-xs font-semibold uppercase text-gray-500">Repouso</th>
         </tr>
       </thead>
       <tbody className="divide-y divide-gray-50">
@@ -577,12 +577,12 @@ function MapaFadigaTable({ data }: { data: FrmsReportRow[] }) {
                     : 'bg-slate-100 text-slate-600';
           return (
             <tr key={i} className="hover:bg-gray-50/50">
-              <td className="px-4 py-2.5 font-medium text-gray-700">{r.nome || `#${r.tripulante_id}`}<div className="text-[10px] font-normal text-slate-500">Exposição HV: {r.exposicao_referencia ?? 'data não informada'}</div></td>
+              <td className="px-4 py-2.5 font-medium text-gray-700">{r.nome || `#${r.tripulante_id}`}<div className="text-xs font-normal text-slate-500">Exposição HV: {r.exposicao_referencia ?? 'data não informada'}</div></td>
               <td className="px-4 py-2.5 text-right tabular-nums text-gray-600">{r.pct_7d == null ? '—' : `${r.pct_7d.toFixed(1)}%`}</td>
               <td className="px-4 py-2.5 text-right tabular-nums text-gray-600">{r.pct_mes == null ? '—' : `${r.pct_mes.toFixed(1)}%`}</td>
               <td className="px-4 py-2.5 text-right tabular-nums text-gray-600">{r.pct_365d == null ? '—' : `${r.pct_365d.toFixed(1)}%`}</td>
               <td className="px-4 py-2.5 text-center">
-                <span className={`inline-block rounded-full px-2 py-0.5 text-[10px] font-bold ${nivelColor}`}>
+                <span className={`inline-block rounded-full px-2 py-0.5 text-xs font-bold ${nivelColor}`}>
                   {r.nivel_max || 'Não avaliado'}
                 </span>
               </td>
@@ -594,7 +594,7 @@ function MapaFadigaTable({ data }: { data: FrmsReportRow[] }) {
                 ) : (
                   <span className="text-xs font-bold text-red-600">Insuficiente</span>
                 )}
-                <div className="mt-1 text-[10px] text-slate-500">
+                <div className="mt-1 text-xs text-slate-500">
                   {r.repouso_referencia ? `FRMS rolling: ${r.repouso_referencia} · ${r.repouso_atualidade === 'ATUAL' ? 'atual' : 'histórico, não comprova repouso atual'}` : 'Sem registro de repouso no recorte'}
                 </div>
               </td>
@@ -612,12 +612,12 @@ function AlertasHistoricoTable({ data }: { data: FrmsReportRow[] }) {
     <table className="w-full text-left text-sm">
       <thead>
         <tr className="border-b border-gray-100 bg-gray-50/50">
-          <th className="px-4 py-3 text-xs font-semibold uppercase text-gray-500">Data</th>
-          <th className="px-4 py-3 text-xs font-semibold uppercase text-gray-500">Tripulante</th>
-          <th className="px-4 py-3 text-xs font-semibold uppercase text-gray-500">Nível</th>
-          <th className="px-4 py-3 text-xs font-semibold uppercase text-gray-500">Tipo Limite</th>
-          <th className="px-4 py-3 text-xs font-semibold uppercase text-gray-500">Mensagem</th>
-          <th className="px-4 py-3 text-center text-xs font-semibold uppercase text-gray-500">Resolvido</th>
+          <th scope="col" className="px-4 py-3 text-xs font-semibold uppercase text-gray-500">Data</th>
+          <th scope="col" className="px-4 py-3 text-xs font-semibold uppercase text-gray-500">Tripulante</th>
+          <th scope="col" className="px-4 py-3 text-xs font-semibold uppercase text-gray-500">Nível</th>
+          <th scope="col" className="px-4 py-3 text-xs font-semibold uppercase text-gray-500">Tipo Limite</th>
+          <th scope="col" className="px-4 py-3 text-xs font-semibold uppercase text-gray-500">Mensagem</th>
+          <th scope="col" className="px-4 py-3 text-center text-xs font-semibold uppercase text-gray-500">Resolvido</th>
         </tr>
       </thead>
       <tbody className="divide-y divide-gray-50">
@@ -626,7 +626,7 @@ function AlertasHistoricoTable({ data }: { data: FrmsReportRow[] }) {
             <td className="px-4 py-2.5 tabular-nums text-gray-600">{r.created_at ? r.created_at.slice(0, 10) : '—'}</td>
             <td className="px-4 py-2.5 text-gray-700">{r.nome_tripulante ?? `#${r.tripulante_id}`}</td>
             <td className="px-4 py-2.5">
-              <span className={`inline-block rounded-full px-2 py-0.5 text-[10px] font-bold ${r.nivel === 'VIOLACAO' ? 'bg-red-200 text-red-900' : r.nivel === 'CRITICO' ? 'bg-red-100 text-red-800' : r.nivel === 'ATENCAO' ? 'bg-amber-100 text-amber-800' : 'bg-yellow-100 text-yellow-800'}`}>
+              <span className={`inline-block rounded-full px-2 py-0.5 text-xs font-bold ${r.nivel === 'VIOLACAO' ? 'bg-red-200 text-red-900' : r.nivel === 'CRITICO' ? 'bg-red-100 text-red-800' : r.nivel === 'ATENCAO' ? 'bg-amber-100 text-amber-800' : 'bg-yellow-100 text-yellow-800'}`}>
                 {r.nivel}
               </span>
             </td>

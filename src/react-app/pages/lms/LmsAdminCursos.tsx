@@ -277,12 +277,12 @@ export default function LmsAdminCursos() {
                         Sincronização EAD
                       </p>
                       {lastSyncSummary ? (
-                        <span className="inline-flex rounded-full border border-slate-200 bg-white px-2 py-0.5 text-[11px] font-medium text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">
+                        <span className="inline-flex rounded-full border border-slate-200 bg-white px-2 py-0.5 text-xs font-medium text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">
                           {lastSyncSummary.created} novo(s) · {lastSyncSummary.updated}{' '}
                           atualizado(s)
                         </span>
                       ) : (
-                        <span className="inline-flex rounded-full border border-slate-200 bg-white px-2 py-0.5 text-[11px] font-medium text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">
+                        <span className="inline-flex rounded-full border border-slate-200 bg-white px-2 py-0.5 text-xs font-medium text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">
                           Sob demanda
                         </span>
                       )}
@@ -311,11 +311,11 @@ export default function LmsAdminCursos() {
                       </p>
                       {legacySummary ? (
                         <>
-                          <span className="inline-flex rounded-full border border-amber-200 bg-white/80 px-2 py-0.5 text-[11px] font-medium text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-300">
+                          <span className="inline-flex rounded-full border border-amber-200 bg-white/80 px-2 py-0.5 text-xs font-medium text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-300">
                             {legacySummary.total_importado} registro(s)
                           </span>
                           {legacySummary.total_pendentes_vinculo > 0 ? (
-                            <span className="inline-flex rounded-full border border-rose-200 bg-white/80 px-2 py-0.5 text-[11px] font-medium text-rose-700 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-300">
+                            <span className="inline-flex rounded-full border border-rose-200 bg-white/80 px-2 py-0.5 text-xs font-medium text-rose-700 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-300">
                               {legacySummary.total_pendentes_vinculo} vínculo(s) pendente(s)
                             </span>
                           ) : null}
@@ -431,12 +431,12 @@ export default function LmsAdminCursos() {
                       <table className="min-w-full text-sm">
                         <thead className="bg-slate-50 text-left text-xs font-semibold uppercase tracking-[0.12em] text-slate-500 dark:bg-slate-800 dark:text-slate-400">
                           <tr>
-                            <th className="px-4 py-3">Curso</th>
-                            <th className="px-4 py-3">Qualificação</th>
-                            <th className="px-4 py-3">Tipo / Player</th>
-                            <th className="px-4 py-3">Alcance</th>
-                            <th className="px-4 py-3">Situação</th>
-                            <th className="px-4 py-3 text-right">Ações</th>
+                            <th scope="col" className="px-4 py-3">Curso</th>
+                            <th scope="col" className="px-4 py-3">Qualificação</th>
+                            <th scope="col" className="px-4 py-3">Tipo / Player</th>
+                            <th scope="col" className="px-4 py-3">Alcance</th>
+                            <th scope="col" className="px-4 py-3">Situação</th>
+                            <th scope="col" className="px-4 py-3 text-right">Ações</th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
@@ -460,7 +460,7 @@ export default function LmsAdminCursos() {
                                         {curso.titulo}
                                       </p>
                                       {critical ? (
-                                        <span className="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[11px] font-semibold text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-300">
+                                        <span className="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-xs font-semibold text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-300">
                                           <BadgeCheck className="h-3 w-3" />
                                           Crítico
                                         </span>
@@ -475,7 +475,7 @@ export default function LmsAdminCursos() {
                                         {curso.setores.map((s) => (
                                           <span
                                             key={s.id}
-                                            className="inline-flex rounded-full border border-blue-200 bg-blue-50 px-2 py-0.5 text-[11px] font-medium text-blue-700 dark:border-blue-500/30 dark:bg-blue-500/10 dark:text-blue-300"
+                                            className="inline-flex rounded-full border border-blue-200 bg-blue-50 px-2 py-0.5 text-xs font-medium text-blue-700 dark:border-blue-500/30 dark:bg-blue-500/10 dark:text-blue-300"
                                           >
                                             {s.nome}
                                           </span>

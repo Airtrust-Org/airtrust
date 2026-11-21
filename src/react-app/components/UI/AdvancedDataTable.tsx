@@ -530,7 +530,7 @@ export function AdvancedDataTable({
           <thead>
             <tr className="border-b border-neutral-200 bg-neutral-50">
               {enableCheckboxes && (
-                <th className="px-4 py-3 w-10">
+                <th scope="col" className="px-4 py-3 w-10">
                   <input
                     type="checkbox"
                     checked={selectAll}
@@ -544,7 +544,7 @@ export function AdvancedDataTable({
                 const width = columnWidths[column.key] || column.width || 200;
                 const isActiveSortColumn = sortColumn === column.key;
                 return (
-                  <th
+                  <th scope="col"
                     key={column.key}
                     style={{ width }}
                     aria-sort={
@@ -589,7 +589,7 @@ export function AdvancedDataTable({
                 );
               })}
               {showActions && (
-                <th className="px-6 py-3 text-left text-sm font-semibold text-neutral-900">
+                <th scope="col" className="px-6 py-3 text-left text-sm font-semibold text-neutral-900">
                   Ações
                 </th>
               )}

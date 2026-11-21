@@ -384,7 +384,7 @@ export default function LmsPlayerH5p() {
             <ArrowLeft className="h-4 w-4" />
             {matricula.titulo ?? 'Curso'}
           </button>
-          <span className="rounded-full bg-orange-500/20 px-2 py-0.5 text-[10px] font-medium text-orange-400">
+          <span className="rounded-full bg-orange-500/20 px-2 py-0.5 text-xs font-medium text-orange-400">
             H5P
           </span>
         </div>

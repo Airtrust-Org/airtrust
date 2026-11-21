@@ -91,7 +91,7 @@ export default function ControleVoosRdvStepper({
                 {done ? <Check className="h-3.5 w-3.5" /> : index + 1}
               </span>
               <span
-                className={`text-[11px] font-medium leading-tight ${
+                className={`text-xs font-medium leading-tight ${
                   active
                     ? 'text-blue-700 dark:text-blue-300'
                     : done

@@ -240,7 +240,7 @@ export default function NativeCoursePreview({
               className="h-12 w-[144px] shrink-0 object-contain sm:w-[174px]" />
           ) : null}
           <div className="min-w-0">
-            <p className="text-[10px] font-extrabold uppercase tracking-[0.16em] text-[#e65300]">PLATAFORMA DE TREINAMENTO</p>
+            <p className="text-xs font-extrabold uppercase tracking-[0.16em] text-[#e65300]">PLATAFORMA DE TREINAMENTO</p>
             <h1 className="truncate text-sm font-extrabold text-[#10243d] sm:text-base">{course.title}</h1>
           </div>
         </div>
@@ -252,7 +252,7 @@ export default function NativeCoursePreview({
             <div className="h-full rounded-full bg-[#e65300] transition-all" style={{ width: navigationProgress + '%' }} />
           </div>
         </div>
-        <span className="shrink-0 rounded-full border border-[#f3d3b7] bg-[#fff5eb] px-3 py-1.5 text-[11px] font-extrabold uppercase tracking-wide text-[#a84b0f]">
+        <span className="shrink-0 rounded-full border border-[#f3d3b7] bg-[#fff5eb] px-3 py-1.5 text-xs font-extrabold uppercase tracking-wide text-[#a84b0f]">
           Prévia
         </span>
       </header>
@@ -264,7 +264,7 @@ export default function NativeCoursePreview({
             aria-label="Menu de unidades">
             <div className="flex items-start justify-between gap-4 border-b border-white/15 px-6 py-6">
               <div className="space-y-2">
-                <span className="text-[11px] font-bold uppercase tracking-[0.16em] text-[#ef9b6b]">CONTEÚDO DO CURSO</span>
+                <span className="text-xs font-bold uppercase tracking-[0.16em] text-[#ef9b6b]">CONTEÚDO DO CURSO</span>
                 <p className="text-lg font-extrabold leading-snug">{course.title}</p>
                 <p className="text-sm text-[#b9cada]">{course.units.length} unidades disponíveis</p>
               </div>
@@ -400,7 +400,7 @@ export default function NativeCoursePreview({
               ? 'Piloto de staging — visitas e avaliações são registradas; conclusão e certificados ainda indisponíveis.'
               : 'Prévia técnica — respostas e navegação não são gravadas e não concluem treinamentos.'}
           </span>
-          {serverSeenLessonIds && <p className="mt-1 text-[11px] text-[#789]">Aulas com registro de visita no servidor: {serverSeenLessonIds.length}. Registros de visita não comprovam conclusão ou aprovação.</p>}
+          {serverSeenLessonIds && <p className="mt-1 text-xs text-[#789]">Aulas com registro de visita no servidor: {serverSeenLessonIds.length}. Registros de visita não comprovam conclusão ou aprovação.</p>}
         </div>
         <button type="button" disabled={unitIndex === course.units.length - 1}
           onClick={() => navigateTo(unitIndex + 1)}
@@ -408,7 +408,7 @@ export default function NativeCoursePreview({
           Próximo <ChevronRight className="h-4 w-4" aria-hidden="true" />
         </button>
       </footer>
-      <p className="border-t border-[#edf2f6] bg-[#f7fafc] px-5 py-2 text-center text-[11px] leading-snug text-[#60788b] md:hidden">
+      <p className="border-t border-[#edf2f6] bg-[#f7fafc] px-5 py-2 text-center text-xs leading-snug text-[#60788b] md:hidden">
         {onRecordLessonVisit || onSubmitAssessment
           ? 'Piloto de staging — sem conclusão ou certificados.'
           : 'Acesso demonstrativo — sem registro de conclusão ou certificado.'}

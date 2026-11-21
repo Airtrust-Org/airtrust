@@ -364,12 +364,12 @@ export default function ImportarFuncionariosCSVModal({
                   Erros Encontrados:
                 </p>
                 <div className="max-h-40 overflow-y-auto">
-                  <table className="w-full text-xs">
+                  <div className="overflow-x-auto"><table className="w-full text-xs">
                     <thead className="border-b border-red-300">
                       <tr>
-                        <th className="text-left p-1">Linha</th>
-                        <th className="text-left p-1">Campo</th>
-                        <th className="text-left p-1">Erro</th>
+                        <th scope="col" className="text-left p-1">Linha</th>
+                        <th scope="col" className="text-left p-1">Campo</th>
+                        <th scope="col" className="text-left p-1">Erro</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -388,7 +388,7 @@ export default function ImportarFuncionariosCSVModal({
                         </tr>
                       )}
                     </tbody>
-                  </table>
+                  </table></div>
                 </div>
               </div>
             )}

@@ -125,7 +125,7 @@ export function DesafioDiarioCard({ enabled = true }: DesafioDiarioCardProps) {
                   className={classeAlternativa(alternativa.id)}
                 >
                   <span className="flex items-start gap-2.5">
-                    <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-slate-100 text-[11px] font-bold text-slate-600">
+                    <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-slate-100 text-xs font-bold text-slate-600">
                       {String.fromCharCode(64 + alternativa.ordem)}
                     </span>
                     <span className="flex-1 leading-relaxed">{alternativa.texto}</span>
@@ -175,7 +175,7 @@ export function DesafioDiarioCard({ enabled = true }: DesafioDiarioCardProps) {
                   </p>
                 )}
                 {feedback.fontes[0] && (
-                  <p className="mt-2 text-[11px] leading-relaxed text-slate-500">
+                  <p className="mt-2 text-xs leading-relaxed text-slate-500">
                     Fonte: {feedback.fontes[0].tipoDocumento} · {feedback.fontes[0].titulo} · rev.{' '}
                     {feedback.fontes[0].revisao}
                     {feedback.fontes[0].secao ? ` · ${feedback.fontes[0].secao}` : ''}

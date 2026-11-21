@@ -141,7 +141,7 @@ export default function ModalPublicarEscala({
           <Clock className="h-4 w-4 shrink-0 text-slate-400" />
           <span className="text-sm font-semibold text-slate-800">{escalaLabel}</span>
           {isRevisao && (
-            <span className="ml-auto rounded-full bg-indigo-100 px-2 py-0.5 text-[10px] font-semibold text-indigo-700">
+            <span className="ml-auto rounded-full bg-indigo-100 px-2 py-0.5 text-xs font-semibold text-indigo-700">
               Revisão {numeroRevisaoAtual} → {proximaRevisao}
             </span>
           )}
@@ -158,7 +158,7 @@ export default function ModalPublicarEscala({
             <div className="grid grid-cols-3 gap-2 text-center">
               <div className="rounded-xl border border-slate-200 bg-white p-3">
                 <p className="text-lg font-bold text-slate-900">{totalAlocacoes}</p>
-                <p className="text-[11px] text-slate-500">Alocações</p>
+                <p className="text-xs text-slate-500">Alocações</p>
               </div>
               <div
                 className={`rounded-xl border p-3 ${cobertura.livres > 0 ? 'border-amber-200 bg-amber-50' : 'border-emerald-200 bg-emerald-50'}`}
@@ -169,7 +169,7 @@ export default function ModalPublicarEscala({
                   {cobertura.completos}
                 </p>
                 <p
-                  className={`text-[11px] ${cobertura.livres > 0 ? 'text-amber-600' : 'text-emerald-600'}`}
+                  className={`text-xs ${cobertura.livres > 0 ? 'text-amber-600' : 'text-emerald-600'}`}
                 >
                   Completos
                 </p>
@@ -182,7 +182,7 @@ export default function ModalPublicarEscala({
                 >
                   {conflitosVerificados ? totalConflitos : '—'}
                 </p>
-                <p className={`text-[11px] ${totalConflitos > 0 ? 'text-red-600' : 'text-slate-400'}`}>
+                <p className={`text-xs ${totalConflitos > 0 ? 'text-red-600' : 'text-slate-400'}`}>
                   Conflitos
                 </p>
               </div>
@@ -281,17 +281,17 @@ export default function ModalPublicarEscala({
             <div className="grid grid-cols-4 gap-2 text-center">
               <div className="rounded-xl bg-slate-50 p-2">
                 <p className="text-base font-bold text-slate-800">{cobertura.total}</p>
-                <p className="text-[10px] text-slate-500 leading-tight">Tripulantes</p>
+                <p className="text-xs text-slate-500 leading-tight">Tripulantes</p>
               </div>
               <div className="rounded-xl bg-emerald-50 p-2">
                 <p className="text-base font-bold text-emerald-700">{cobertura.completos}</p>
-                <p className="text-[10px] text-emerald-600 leading-tight">Completos</p>
+                <p className="text-xs text-emerald-600 leading-tight">Completos</p>
               </div>
               <div className={`rounded-xl p-2 ${cobertura.livres > 0 ? 'bg-red-50' : 'bg-slate-50'}`}>
                 <p className={`text-base font-bold ${cobertura.livres > 0 ? 'text-red-700' : 'text-slate-400'}`}>
                   {cobertura.livres}
                 </p>
-                <p className={`text-[10px] leading-tight ${cobertura.livres > 0 ? 'text-red-600' : 'text-slate-400'}`}>
+                <p className={`text-xs leading-tight ${cobertura.livres > 0 ? 'text-red-600' : 'text-slate-400'}`}>
                   Livres
                 </p>
               </div>
@@ -299,7 +299,7 @@ export default function ModalPublicarEscala({
                 <p className={`text-base font-bold ${totalConflitos > 0 ? 'text-red-700' : 'text-slate-400'}`}>
                   {conflitosVerificados ? totalConflitos : '—'}
                 </p>
-                <p className={`text-[10px] leading-tight ${totalConflitos > 0 ? 'text-red-600' : 'text-slate-400'}`}>
+                <p className={`text-xs leading-tight ${totalConflitos > 0 ? 'text-red-600' : 'text-slate-400'}`}>
                   Conflitos
                 </p>
               </div>

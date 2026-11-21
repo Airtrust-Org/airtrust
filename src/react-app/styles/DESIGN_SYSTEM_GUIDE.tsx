@@ -73,8 +73,8 @@ function Tabela() {
       <table className="w-full">
         <thead className="bg-gray-50">
           <tr>
-            <th className={DesignSystemGlobal.tables.header}>Coluna 1</th>
-            <th className={DesignSystemGlobal.tables.header}>Coluna 2</th>
+            <th scope="col" className={DesignSystemGlobal.tables.header}>Coluna 1</th>
+            <th scope="col" className={DesignSystemGlobal.tables.header}>Coluna 2</th>
           </tr>
         </thead>
         <tbody>

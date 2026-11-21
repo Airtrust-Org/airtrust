@@ -284,25 +284,25 @@ export default function Certificacoes() {
             <table className="w-full">
               <thead className="bg-gray-50">
                 <tr>
-                  <th className=" py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th scope="col" className=" py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Funcionário
                   </th>
-                  <th className=" py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th scope="col" className=" py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Treinamento
                   </th>
-                  <th className=" py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th scope="col" className=" py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Data Conclusão
                   </th>
-                  <th className=" py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th scope="col" className=" py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Data Vencimento
                   </th>
-                  <th className=" py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th scope="col" className=" py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Status
                   </th>
-                  <th className=" py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th scope="col" className=" py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Instrutor
                   </th>
-                  <th className=" py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th scope="col" className=" py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Ações
                   </th>
                 </tr>

@@ -276,12 +276,12 @@ export default function PermissoesPage() {
               <RefreshCw className="h-6 w-6 text-slate-400 animate-spin" />
             </div>
           ) : (
-            <table className="w-full text-sm">
+            <div className="overflow-x-auto"><table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-slate-100 bg-slate-50/50">
-                  <th className="text-left px-5 py-3 font-medium text-slate-600 w-1/2">Módulo</th>
+                  <th scope="col" className="text-left px-5 py-3 font-medium text-slate-600 w-1/2">Módulo</th>
                   {ACOES.map((a) => (
-                    <th
+                    <th scope="col"
                       key={a}
                       className="text-center px-4 py-3 font-medium text-slate-600 capitalize"
                     >
@@ -312,7 +312,7 @@ export default function PermissoesPage() {
                   </tr>
                 ))}
               </tbody>
-            </table>
+            </table></div>
           )}
         </div>
 

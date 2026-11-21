@@ -172,7 +172,7 @@ export default function LmsAvaliacoesGestao(){
     {(data.coursesTruncated||data.plansTruncated)&&<p role="status" className="text-sm text-amber-700">Catálogo parcial: o servidor aplicou limite de resultados.</p>}
     <div className="hidden overflow-x-auto md:block"><table className="w-full min-w-[680px] text-left text-sm">
      <thead className="border-b text-xs uppercase text-slate-500"><tr>
-      <th className="py-3 pr-3">Treinamento</th><th>Questões</th><th>Provas</th><th>Situação</th><th className="text-right">Ação</th>
+      <th scope="col" className="py-3 pr-3">Treinamento</th><th scope="col">Questões</th><th scope="col">Provas</th><th scope="col">Situação</th><th scope="col" className="text-right">Ação</th>
      </tr></thead>
      <tbody className="divide-y dark:divide-slate-800">{visible.map(({c,published,draft,plans,binds})=><tr key={c.id}>
       <td className="py-3 pr-3"><strong className="block">{c.titulo}</strong>
@@ -236,8 +236,8 @@ export default function LmsAvaliacoesGestao(){
       <button className="ml-3 underline" type="button" onClick={()=>setReportRefresh(n=>n+1)}>Tentar novamente</button>
     </div>}
     <div className="hidden overflow-x-auto md:block"><table className="w-full min-w-[680px] text-left text-sm">
-     <thead className="border-b text-xs uppercase text-slate-500"><tr><th className="py-3">Treinamento / Prova</th>
-      <th>Aluno / Matrícula</th><th>Tentativa</th><th>Nota</th><th>Resultado</th><th>Data</th></tr></thead>
+     <thead className="border-b text-xs uppercase text-slate-500"><tr><th scope="col" className="py-3">Treinamento / Prova</th>
+      <th scope="col">Aluno / Matrícula</th><th scope="col">Tentativa</th><th scope="col">Nota</th><th scope="col">Resultado</th><th scope="col">Data</th></tr></thead>
      <tbody className="divide-y dark:divide-slate-800">{attempts.map((a,i)=><tr key={[a.matriculaId,a.examId,a.version,a.attemptNo,i].join(':')}>
       <td className="py-3"><strong className="block">{a.cursoTitulo||names.get(a.cursoId)||'Curso #'+a.cursoId}</strong>
        <small className="text-slate-500">{a.examId} v{a.version}</small>

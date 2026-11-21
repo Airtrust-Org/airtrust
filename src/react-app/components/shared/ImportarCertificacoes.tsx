@@ -566,7 +566,7 @@ export default function ImportarCertificacoes({
               <thead className="bg-gray-100 sticky top-0">
                 <tr>
                   {previewData.headers.map((header, index) => (
-                    <th
+                    <th scope="col"
                       key={index}
                       className="px-4 py-3 text-left font-medium text-gray-700 border-r last:border-r-0 min-w-[140px] whitespace-nowrap"
                     >

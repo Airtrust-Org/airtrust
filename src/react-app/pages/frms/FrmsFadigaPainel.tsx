@@ -181,7 +181,7 @@ export default function FrmsFadigaPainel() {
                           <p className="text-lg font-bold">
                             {item.score_fadiga == null ? '—' : Number(item.score_fadiga)}
                           </p>
-                          <p className="text-[11px] uppercase tracking-wide">{statusLabel}</p>
+                          <p className="text-xs uppercase tracking-wide">{statusLabel}</p>
                         </div>
                       </div>
                     </div>

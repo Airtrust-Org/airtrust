@@ -121,13 +121,13 @@ export function SkeletonTableRow({ columns = 5 }: { columns?: number }) {
 
 export function SkeletonTable({ rows = 5, columns = 5 }: { rows?: number; columns?: number }) {
   return (
-    <table className="w-full">
+    <div className="overflow-x-auto"><table className="w-full">
       <tbody>
         {Array.from({ length: rows }).map((_, i) => (
           <SkeletonTableRow key={i} columns={columns} />
         ))}
       </tbody>
-    </table>
+    </table></div>
   );
 }
 

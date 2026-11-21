@@ -138,7 +138,7 @@ export default function ModalAdicionarEvento({
                   type="button"
                   onClick={() => setTipoEvento(tipo)}
                   className={[
-                    'flex flex-col items-center gap-1 p-2 rounded-md border text-[10px] font-medium transition-all',
+                    'flex flex-col items-center gap-1 p-2 rounded-md border text-xs font-medium transition-all',
                     ativo
                       ? 'text-white border-transparent shadow-sm'
                       : 'border-slate-200 text-slate-600 hover:bg-slate-50',

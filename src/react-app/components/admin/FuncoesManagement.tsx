@@ -242,7 +242,7 @@ export default function FuncoesManagement() {
               </p>
             </div>
             <div className="flex gap-3">
-              <button
+              <button type="button"
                 onClick={() => setShowImportModal(true)}
                 className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 flex items-center gap-2"
               >
@@ -280,10 +280,10 @@ export default function FuncoesManagement() {
               <table className="w-full">
                 <thead className="bg-gray-50 border-b border-gray-200">
                   <tr>
-                    <th className="text-left py-3 px-6 font-medium text-gray-900">Nome</th>
-                    <th className="text-left py-3 px-6 font-medium text-gray-900">Categoria</th>
-                    <th className="text-left py-3 px-6 font-medium text-gray-900">Descrição</th>
-                    <th className="text-center py-3 px-6 font-medium text-gray-900">Ações</th>
+                    <th scope="col" className="text-left py-3 px-6 font-medium text-gray-900">Nome</th>
+                    <th scope="col" className="text-left py-3 px-6 font-medium text-gray-900">Categoria</th>
+                    <th scope="col" className="text-left py-3 px-6 font-medium text-gray-900">Descrição</th>
+                    <th scope="col" className="text-center py-3 px-6 font-medium text-gray-900">Ações</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-200">

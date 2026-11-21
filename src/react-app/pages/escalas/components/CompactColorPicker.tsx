@@ -202,7 +202,7 @@ export default function CompactColorPicker({
         </div>
 
         <div className="flex-1 space-y-3">
-          <div className="flex items-center justify-between gap-3 text-[11px] font-medium uppercase tracking-[0.14em] text-slate-500">
+          <div className="flex items-center justify-between gap-3 text-xs font-medium uppercase tracking-[0.14em] text-slate-500">
             <span>Matiz</span>
             <span className="rounded-full border border-slate-200 bg-white px-2 py-1 font-mono normal-case tracking-normal text-slate-700">
               {currentHex}
@@ -223,7 +223,7 @@ export default function CompactColorPicker({
           />
 
           <div>
-            <div className="mb-2 flex items-center justify-between gap-3 text-[11px] font-medium uppercase tracking-[0.14em] text-slate-500">
+            <div className="mb-2 flex items-center justify-between gap-3 text-xs font-medium uppercase tracking-[0.14em] text-slate-500">
               <span>Atalhos</span>
               <span className="normal-case tracking-normal text-slate-400">
                 {presets.length} cores base

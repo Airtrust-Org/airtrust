@@ -34,7 +34,7 @@ export function CardConhecimentoAtivo() {
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-2">
               <h2 className="text-base font-semibold text-slate-900">Conhecimento Ativo</h2>
-              <span className="inline-flex items-center gap-1 rounded-full bg-sky-100 px-2 py-0.5 text-[11px] font-semibold text-sky-700">
+              <span className="inline-flex items-center gap-1 rounded-full bg-sky-100 px-2 py-0.5 text-xs font-semibold text-sky-700">
                 <Sparkles className="h-3 w-3" />
                 Desafio Técnico
               </span>

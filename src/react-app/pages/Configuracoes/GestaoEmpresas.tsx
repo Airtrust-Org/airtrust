@@ -341,7 +341,7 @@ export function GestaoEmpresas() {
                       <div className="flex flex-wrap items-center gap-2">
                         <h3 className="text-lg font-bold text-slate-900">{empresa.nome}</h3>
                         {empresaAtualId === empresa.id && (
-                          <span className="inline-flex items-center gap-1 rounded-full border border-blue-200 bg-blue-50 px-2.5 py-1 text-[11px] font-semibold text-blue-700">
+                          <span className="inline-flex items-center gap-1 rounded-full border border-blue-200 bg-blue-50 px-2.5 py-1 text-xs font-semibold text-blue-700">
                             <BadgeCheck className="h-3.5 w-3.5" />
                             Atual
                           </span>
@@ -375,7 +375,7 @@ export function GestaoEmpresas() {
                 </div>
 
                 <div className="mt-5 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
-                  <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
                     {t('settings.companies.cnpj')}
                   </p>
                   <p className="mt-1 font-medium text-slate-900">
@@ -387,7 +387,7 @@ export function GestaoEmpresas() {
                   <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
                     <div className="flex items-center gap-2 text-slate-500">
                       <Users className="h-4 w-4" />
-                      <span className="text-[11px] font-semibold uppercase tracking-wide">
+                      <span className="text-xs font-semibold uppercase tracking-wide">
                         {t('settings.companies.usersLimit')}
                       </span>
                     </div>
@@ -399,7 +399,7 @@ export function GestaoEmpresas() {
                   <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
                     <div className="flex items-center gap-2 text-slate-500">
                       <Briefcase className="h-4 w-4" />
-                      <span className="text-[11px] font-semibold uppercase tracking-wide">
+                      <span className="text-xs font-semibold uppercase tracking-wide">
                         {t('settings.companies.storage')}
                       </span>
                     </div>

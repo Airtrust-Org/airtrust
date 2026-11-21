@@ -637,7 +637,7 @@ export default function SgsoRelato() {
               )}
             </div>
           </div>
-          <p className="mt-3 border-t border-blue-200 pt-3 text-[11px] text-blue-700">O envio não inicia análise nem consome crédito.</p>
+          <p className="mt-3 border-t border-blue-200 pt-3 text-xs text-blue-700">O envio não inicia análise nem consome crédito.</p>
         </div>
       )}
 
@@ -862,9 +862,9 @@ export default function SgsoRelato() {
               <table className="w-full text-center text-xs border-collapse">
                 <thead>
                   <tr>
-                    <th className="p-2 text-slate-500 font-normal">Prob ↓ / Sev →</th>
+                    <th scope="col" className="p-2 text-slate-500 font-normal">Prob ↓ / Sev →</th>
                     {[1, 2, 3, 4, 5].map((s) => (
-                      <th key={s} className="p-2 font-semibold text-slate-600">
+                      <th scope="col" key={s} className="p-2 font-semibold text-slate-600">
                         {s}
                       </th>
                     ))}

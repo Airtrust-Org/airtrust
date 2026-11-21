@@ -223,23 +223,23 @@ function AbaQuinzenas({ ano, setAno }: { ano: number; setAno: (a: number) => voi
         </div>
       ) : (
         <div className="border border-slate-200 rounded-xl overflow-hidden">
-          <table className="w-full text-sm">
+          <div className="overflow-x-auto"><table className="w-full text-sm">
             <thead className="bg-slate-50 border-b border-slate-200">
               <tr>
-                <th className="text-left px-4 py-3 font-semibold text-slate-700 w-36">Mês</th>
-                <th className="text-left px-4 py-3 font-semibold text-sky-700">
+                <th scope="col" className="text-left px-4 py-3 font-semibold text-slate-700 w-36">Mês</th>
+                <th scope="col" className="text-left px-4 py-3 font-semibold text-sky-700">
                   <span className="flex items-center gap-1.5">
                     <span className="w-2.5 h-2.5 rounded-full bg-fuchsia-400 inline-block" />
                     1ª Quinzena
                   </span>
                 </th>
-                <th className="text-left px-4 py-3 font-semibold text-violet-700">
+                <th scope="col" className="text-left px-4 py-3 font-semibold text-violet-700">
                   <span className="flex items-center gap-1.5">
                     <span className="w-2.5 h-2.5 rounded-full bg-amber-400 inline-block" />
                     2ª Quinzena
                   </span>
                 </th>
-                <th className="text-left px-4 py-3 font-semibold text-slate-700 w-36">Dias</th>
+                <th scope="col" className="text-left px-4 py-3 font-semibold text-slate-700 w-36">Dias</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -417,7 +417,7 @@ function AbaQuinzenas({ ano, setAno }: { ano: number; setAno: (a: number) => voi
                 );
               })}
             </tbody>
-          </table>
+          </table></div>
         </div>
       )}
     </div>
@@ -717,7 +717,7 @@ function AbaTiposEvento() {
             <CompactColorPicker value={novoCor} onChange={setNovoCor} />
             <div className="flex items-center gap-2">
               <div
-                className="w-8 h-8 rounded-lg border border-slate-200 shadow-sm flex items-center justify-center text-[11px] font-bold"
+                className="w-8 h-8 rounded-lg border border-slate-200 shadow-sm flex items-center justify-center text-xs font-bold"
                 style={{ backgroundColor: novoCor, color: '#FFFFFF' }}
               >
                 {novoSigla || (normalizeCodigo(novoCodigo) || '?').slice(0, 2)}
@@ -817,7 +817,7 @@ function AbaTiposEvento() {
                         />
                       </div>
                     </div>
-                    <p className="text-[11px] text-slate-400">
+                    <p className="text-xs text-slate-400">
                       Sigla exibida no quadrado da escala. Use 1 ou 2 caracteres.
                     </p>
                     <div className="flex flex-col gap-3">
@@ -837,13 +837,13 @@ function AbaTiposEvento() {
                           className="w-28 rounded-lg border border-slate-200 px-2 py-1.5 text-xs font-mono text-slate-600 focus:outline-none focus:ring-2 focus:ring-blue-300"
                           placeholder="#000000"
                         />
-                        <p className="text-[11px] text-slate-400">
+                        <p className="text-xs text-slate-400">
                           Arraste o cursor na palheta para escolher qualquer tom.
                         </p>
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
-                      <span className="text-[11px] text-slate-400 font-mono">
+                      <span className="text-xs text-slate-400 font-mono">
                         Código: {codigo} (readonly)
                       </span>
                       <div className="ml-auto flex items-center gap-1.5">
@@ -878,7 +878,7 @@ function AbaTiposEvento() {
                 >
                   {/* Color square */}
                   <div
-                    className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-md border border-slate-200/60 text-[10px] font-bold tracking-tight shadow-sm"
+                    className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-md border border-slate-200/60 text-xs font-bold tracking-tight shadow-sm"
                     style={{ backgroundColor: corAtual, color: siglaTextColor }}
                   >
                     {row.sigla}
@@ -890,26 +890,26 @@ function AbaTiposEvento() {
                       <span className="text-sm font-medium text-slate-800 truncate">
                         {row.label}
                       </span>
-                      <span className="rounded border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-[10px] font-semibold tracking-wide text-slate-700">
+                      <span className="rounded border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-xs font-semibold tracking-wide text-slate-700">
                         {row.sigla}
                       </span>
-                      <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-mono text-slate-500">
+                      <span className="rounded bg-slate-100 px-1.5 py-0.5 text-xs font-mono text-slate-500">
                         {codigo}
                       </span>
                     </div>
-                    <div className="text-[11px] text-slate-400 mt-0.5">Cor: {corAtual}</div>
+                    <div className="text-xs text-slate-400 mt-0.5">Cor: {corAtual}</div>
                   </div>
 
                   {/* Status badge */}
                   {ativo ? (
-                    <span className="rounded-full px-2 py-0.5 text-[10px] font-semibold flex-shrink-0 bg-emerald-50 text-emerald-700 border border-emerald-200">
+                    <span className="rounded-full px-2 py-0.5 text-xs font-semibold flex-shrink-0 bg-emerald-50 text-emerald-700 border border-emerald-200">
                       Ativo
                     </span>
                   ) : (
                     <button
                       onClick={() => handleToggleAtivo(row)}
                       disabled={savingTipoConfig}
-                      className="rounded-full px-2.5 py-0.5 text-[10px] font-semibold flex-shrink-0 bg-slate-100 text-slate-500 border border-slate-200 hover:bg-emerald-50 hover:text-emerald-700 hover:border-emerald-300 transition-colors disabled:opacity-50 cursor-pointer"
+                      className="rounded-full px-2.5 py-0.5 text-xs font-semibold flex-shrink-0 bg-slate-100 text-slate-500 border border-slate-200 hover:bg-emerald-50 hover:text-emerald-700 hover:border-emerald-300 transition-colors disabled:opacity-50 cursor-pointer"
                       title="Clique para ativar"
                     >
                       Inativo — Ativar
@@ -955,7 +955,7 @@ function AbaTiposEvento() {
                   return (
                     <div key={codigo} className="flex items-center gap-2">
                       <span
-                        className="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded text-[9px] font-bold tracking-tight"
+                        className="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded text-xs font-bold tracking-tight"
                         style={{
                           backgroundColor: conf.cor,
                           color: '#FFFFFF',
@@ -964,7 +964,7 @@ function AbaTiposEvento() {
                         {conf.sigla}
                       </span>
                       <span className="text-sm text-gray-700">{conf.label}</span>
-                      <span className="rounded border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-[10px] font-semibold tracking-wide text-slate-700">
+                      <span className="rounded border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-xs font-semibold tracking-wide text-slate-700">
                         {conf.sigla}
                       </span>
                     </div>
@@ -972,7 +972,7 @@ function AbaTiposEvento() {
                 })
               )}
             </div>
-            <p className="text-[10px] text-slate-400 mt-3">
+            <p className="text-xs text-slate-400 mt-3">
               A legenda mostra nome e a sigla exibida no quadrado.
             </p>
           </div>
@@ -1050,7 +1050,7 @@ function AbaTemplates() {
             <div key={t.id} className="flex items-center gap-4 px-4 py-3 hover:bg-slate-50 group">
               <div className="flex-1 min-w-0">
                 <p className="font-medium text-slate-800 text-sm">{t.nome}</p>
-                <p className="text-[11px] text-slate-400 mt-0.5 truncate flex items-center gap-1.5 flex-wrap">
+                <p className="text-xs text-slate-400 mt-0.5 truncate flex items-center gap-1.5 flex-wrap">
                   {t.aeronave ? `✈️ ${t.aeronave} · ` : ''}
                   {t.pic_nome ? `PIC: ${t.pic_nome}` : ''}
                   {t.sic_nome ? ` · SIC: ${t.sic_nome}` : ''}
@@ -1062,13 +1062,13 @@ function AbaTemplates() {
                 </p>
               </div>
               <div className="flex items-center gap-3 flex-shrink-0">
-                <span className="text-[11px] text-slate-400">
+                <span className="text-xs text-slate-400">
                   <span className="font-medium text-slate-600">{t.usos}</span> uso
                   {t.usos !== 1 ? 's' : ''}
                 </span>
                 <button
                   onClick={() => navigate('/escalas')}
-                  className="text-[10px] px-2 py-1 rounded border border-slate-200 text-slate-600 hover:bg-slate-50"
+                  className="text-xs px-2 py-1 rounded border border-slate-200 text-slate-600 hover:bg-slate-50"
                 >
                   Usar agora
                 </button>

@@ -243,13 +243,13 @@ export default function CadernetaHorasVoo({ funcionarioId, funcionarioNome, canE
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b text-left text-gray-600">
-                      <th className="py-2">Data</th>
-                      <th>Equipamento</th>
-                      <th>Rota</th>
-                      <th>Duração</th>
-                      <th>Função</th>
-                      <th>Origem</th>
-                      <th></th>
+                      <th scope="col" className="py-2">Data</th>
+                      <th scope="col">Equipamento</th>
+                      <th scope="col">Rota</th>
+                      <th scope="col">Duração</th>
+                      <th scope="col">Função</th>
+                      <th scope="col">Origem</th>
+                      <th scope="col"></th>
                     </tr>
                   </thead>
                   <tbody>

@@ -46,7 +46,7 @@ export default function PainelEstatisticas({ eventos, tripulacoes, onClose }: Pr
       <div className="flex items-center justify-between">
         <div>
           <h3 className="font-semibold text-slate-900">Estatísticas</h3>
-          <p className="text-[11px] text-slate-500">Leitura rápida da escala selecionada</p>
+          <p className="text-xs text-slate-500">Leitura rápida da escala selecionada</p>
         </div>
         <button onClick={onClose} className="text-sm text-slate-400 hover:text-slate-600">
           ✕
@@ -56,19 +56,19 @@ export default function PainelEstatisticas({ eventos, tripulacoes, onClose }: Pr
       <div className="grid grid-cols-2 gap-2">
         <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3 text-center">
           <div className="text-xl font-bold text-slate-900">{tripulacoes.length}</div>
-          <div className="text-[11px] text-slate-500">Tripulações</div>
+          <div className="text-xs text-slate-500">Tripulações</div>
         </div>
         <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3 text-center">
           <div className="text-xl font-bold text-slate-900">{eventos.length}</div>
-          <div className="text-[11px] text-slate-500">Eventos</div>
+          <div className="text-xs text-slate-500">Eventos</div>
         </div>
         <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3 text-center">
           <div className="text-xl font-bold text-slate-900">{stats.eventosAuto}</div>
-          <div className="text-[11px] text-slate-500">Automáticos</div>
+          <div className="text-xs text-slate-500">Automáticos</div>
         </div>
         <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3 text-center">
           <div className="text-xl font-bold text-slate-900">{stats.eventosPendentes}</div>
-          <div className="text-[11px] text-slate-500">Pendentes</div>
+          <div className="text-xs text-slate-500">Pendentes</div>
         </div>
       </div>
 
@@ -133,7 +133,7 @@ export default function PainelEstatisticas({ eventos, tripulacoes, onClose }: Pr
               <div className="text-xs font-semibold text-amber-800">
                 {stats.eventosAuto} eventos automáticos
               </div>
-              <div className="mt-0.5 text-[11px] text-amber-700">
+              <div className="mt-0.5 text-xs text-amber-700">
                 Exames CMA gerados pelo sistema
               </div>
             </div>
@@ -143,7 +143,7 @@ export default function PainelEstatisticas({ eventos, tripulacoes, onClose }: Pr
               <div className="text-xs font-semibold text-yellow-800">
                 {stats.eventosPendentes} eventos pendentes
               </div>
-              <div className="mt-0.5 text-[11px] text-yellow-700">Aguardando confirmação</div>
+              <div className="mt-0.5 text-xs text-yellow-700">Aguardando confirmação</div>
             </div>
           )}
         </div>

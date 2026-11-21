@@ -367,7 +367,7 @@ export default function GradeTripulantes({
           </div>
         </div>
 
-        <div className="mt-1.5 flex flex-wrap items-center gap-1 text-[10px] text-gray-400">
+        <div className="mt-1.5 flex flex-wrap items-center gap-1 text-xs text-gray-400">
           <span className="font-medium text-gray-500">{total} ativos</span>
           {statsModelos.map((item) => (
             <span key={item.modelo} className="flex items-center gap-1">
@@ -464,10 +464,10 @@ function TripulanteGrupoRows({
           colSpan={diasDoMes.length + 1}
           className="border-y border-gray-200 bg-gray-100/80 px-4 py-1.5"
         >
-          <span className="text-[10px] font-black uppercase tracking-[0.12em] text-gray-500">
+          <span className="text-xs font-black uppercase tracking-[0.12em] text-gray-500">
             {grupo.label}
           </span>
-          <span className="ml-2 text-[10px] font-normal text-gray-400">({grupo.total})</span>
+          <span className="ml-2 text-xs font-normal text-gray-400">({grupo.total})</span>
         </td>
       </tr>
 
@@ -483,11 +483,11 @@ function TripulanteGrupoRows({
                 <div className="flex items-center gap-2">
                   <div className={cn('h-2.5 w-0.5 rounded-full', style.bar)} />
                   <span
-                    className={cn('text-[10px] font-bold uppercase tracking-wider', style.label)}
+                    className={cn('text-xs font-bold uppercase tracking-wider', style.label)}
                   >
                     {subgrupo.modelo}
                   </span>
-                  <span className="text-[10px] text-gray-400">
+                  <span className="text-xs text-gray-400">
                     {subgrupo.items.length} tripulante{subgrupo.items.length !== 1 ? 's' : ''}
                   </span>
                 </div>
@@ -580,12 +580,12 @@ function TripulanteRow({
           </div>
 
           <div className="mt-0.5 flex flex-wrap items-center gap-1.5">
-            <span className="text-[10px] font-medium uppercase tracking-wide text-gray-400">
+            <span className="text-xs font-medium uppercase tracking-wide text-gray-400">
               {cargo === 'comandante' ? 'CMD' : 'COP'}
             </span>
             <span
               className={cn(
-                'inline-flex items-center rounded border px-1 py-px text-[9px] font-bold uppercase tracking-wide',
+                'inline-flex items-center rounded border px-1 py-px text-xs font-bold uppercase tracking-wide',
                 quinzenaLabel
                   ? getQuinzenaBadgeClasses(tripulante.quinzena_numero)
                   : 'border-slate-200 bg-slate-100 text-slate-500',
@@ -597,7 +597,7 @@ function TripulanteRow({
               <span
                 key={modelo}
                 className={cn(
-                  'inline-flex items-center rounded border px-1 py-px text-[9px] font-bold uppercase tracking-wide ring-1',
+                  'inline-flex items-center rounded border px-1 py-px text-xs font-bold uppercase tracking-wide ring-1',
                   getModeloBadgeClass(modelo),
                 )}
               >

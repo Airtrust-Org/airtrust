@@ -650,11 +650,11 @@ export function TrainingComplianceReportBuilder({
                   <table className="w-full text-left text-sm">
                     <thead>
                       <tr className="border-b border-sky-200 text-slate-600">
-                        <th className="p-2">Funcionário</th>
-                        <th className="p-2">Setor</th>
-                        <th className="p-2">Situação</th>
-                        <th className="p-2">Conclusão</th>
-                        <th className="p-2">Vencimento</th>
+                        <th scope="col" className="p-2">Funcionário</th>
+                        <th scope="col" className="p-2">Setor</th>
+                        <th scope="col" className="p-2">Situação</th>
+                        <th scope="col" className="p-2">Conclusão</th>
+                        <th scope="col" className="p-2">Vencimento</th>
                       </tr>
                     </thead>
                     <tbody>

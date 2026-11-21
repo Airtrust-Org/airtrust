@@ -312,13 +312,13 @@ export function SetoresGestores() {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-slate-200">
-                <th className="px-4 py-2 text-left font-medium text-slate-600">Setor</th>
-                <th className="px-4 py-2 text-left font-medium text-slate-600">
+                <th scope="col" className="px-4 py-2 text-left font-medium text-slate-600">Setor</th>
+                <th scope="col" className="px-4 py-2 text-left font-medium text-slate-600">
                   Responsável pelo Setor
                 </th>
-                <th className="px-4 py-2 text-left font-medium text-slate-600">Perfil</th>
-                <th className="px-4 py-2 text-left font-medium text-slate-600">Status</th>
-                <th className="px-4 py-2 text-center font-medium text-slate-600">Ação</th>
+                <th scope="col" className="px-4 py-2 text-left font-medium text-slate-600">Perfil</th>
+                <th scope="col" className="px-4 py-2 text-left font-medium text-slate-600">Status</th>
+                <th scope="col" className="px-4 py-2 text-center font-medium text-slate-600">Ação</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-200">

@@ -135,7 +135,7 @@ export default function NovoAgendamento() {
       <div className="max-w-4xl mx-auto">
         {/* Header */}
         <div className="mb-8">
-          <button
+          <button type="button"
             onClick={() => navigate(`/simuladores/${simuladorId}`)}
             className="flex items-center gap-2 text-primary hover:text-blue-700 mb-4 transition-colors"
           >

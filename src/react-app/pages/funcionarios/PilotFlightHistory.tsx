@@ -197,14 +197,14 @@ export default function PilotFlightHistory() {
               <table className="w-full min-w-[760px] text-sm">
                 <thead>
                   <tr className="border-b border-slate-200 text-left text-xs text-slate-500">
-                    <th className="py-2 pr-3">Data</th>
-                    <th className="pr-3">Aeronave</th>
-                    <th className="pr-3">Rota</th>
-                    <th className="pr-3">Função</th>
-                    <th className="pr-3">Voo</th>
-                    <th className="pr-3">Noturno</th>
-                    <th className="pr-3">IFR</th>
-                    <th />
+                    <th scope="col" className="py-2 pr-3">Data</th>
+                    <th scope="col" className="pr-3">Aeronave</th>
+                    <th scope="col" className="pr-3">Rota</th>
+                    <th scope="col" className="pr-3">Função</th>
+                    <th scope="col" className="pr-3">Voo</th>
+                    <th scope="col" className="pr-3">Noturno</th>
+                    <th scope="col" className="pr-3">IFR</th>
+                    <th scope="col" />
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 dark:divide-slate-800">

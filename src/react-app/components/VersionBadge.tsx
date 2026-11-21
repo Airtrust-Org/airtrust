@@ -111,16 +111,16 @@ export function VersionBadge() {
 
   return (
     <div
-      className={`flex items-center justify-end gap-2 border-t px-4 py-2 text-[10px] font-medium ${bgColor} ${textColor}`}
+      className={`flex items-center justify-end gap-2 border-t px-4 py-2 text-xs font-medium ${bgColor} ${textColor}`}
       title={`Versão: ${version}${buildTime ? ` | Build: ${buildTime}` : ''} | Ambiente: ${environment}`}
     >
       {environment === 'development' && (
-        <span className="rounded bg-yellow-100 px-1.5 py-0.5 text-[9px] font-bold uppercase text-yellow-700 dark:bg-yellow-500/15 dark:text-yellow-200">
+        <span className="rounded bg-yellow-100 px-1.5 py-0.5 text-xs font-bold uppercase text-yellow-700 dark:bg-yellow-500/15 dark:text-yellow-200">
           DEV
         </span>
       )}
       {environment === 'staging' && (
-        <span className="rounded bg-orange-100 px-1.5 py-0.5 text-[9px] font-bold uppercase text-orange-700 dark:bg-orange-500/15 dark:text-orange-200">
+        <span className="rounded bg-orange-100 px-1.5 py-0.5 text-xs font-bold uppercase text-orange-700 dark:bg-orange-500/15 dark:text-orange-200">
           STG
         </span>
       )}
@@ -131,7 +131,7 @@ export function VersionBadge() {
       {buildTime && (
         <>
           <span className="opacity-75">•</span>
-          <span className="hidden sm:inline text-[9px]">{buildTime}</span>
+          <span className="hidden sm:inline text-xs">{buildTime}</span>
         </>
       )}
     </div>

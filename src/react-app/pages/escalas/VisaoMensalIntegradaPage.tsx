@@ -168,7 +168,7 @@ function EventPill({ event }: { event: IntegratedMonthlyEvent }) {
     event.status === 'CONCLUIDO' ||
     event.status === 'CONCLUIDA';
   const className = [
-    'group block rounded border px-1.5 py-1 text-[11px] leading-tight transition hover:shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500',
+    'group block rounded border px-1.5 py-1 text-xs leading-tight transition hover:shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500',
     isConcluded
       ? 'border-slate-200 bg-slate-100 text-slate-400 line-through decoration-slate-300'
       : SEVERITY_CLASS[event.severity],
@@ -226,7 +226,7 @@ function DayCell({ date, events }: { date: string; events: IntegratedMonthlyEven
             type="button"
             onClick={() => setExpanded((value) => !value)}
             aria-expanded={expanded}
-            className="w-full rounded border border-slate-200 bg-slate-50 px-1.5 py-1 text-left text-[11px] text-slate-600 hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-slate-400"
+            className="w-full rounded border border-slate-200 bg-slate-50 px-1.5 py-1 text-left text-xs text-slate-600 hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-slate-400"
           >
             {expanded ? 'Mostrar menos' : `+${events.length - 4} itens`}
           </button>

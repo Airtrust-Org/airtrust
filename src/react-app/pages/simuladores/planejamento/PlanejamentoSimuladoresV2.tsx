@@ -375,7 +375,7 @@ export default function PlanejamentoSimuladoresV2() {
             <input type="date" className={`${inputClass} mt-1 w-full`} value={fim} onChange={(event) => setFim(event.target.value)} />
           </label>
           <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 dark:border-slate-800 dark:bg-slate-900/50">
-            <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Regra da empresa</div>
+            <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Regra da empresa</div>
             <div className="mt-1 text-sm font-medium text-slate-800 dark:text-slate-100">{rosterPolicyLabel(config?.roster_policy)}</div>
             <div className="mt-0.5 text-xs text-slate-500">Horizonte: {config?.planning_horizon_days ?? '—'} dias · {config?.preferred_sessions_per_day ?? '—'} sessão(ões)/dia</div>
           </div>

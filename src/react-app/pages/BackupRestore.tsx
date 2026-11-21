@@ -543,12 +543,12 @@ const BackupRestorePage = () => {
           <table className="w-full">
             <thead>
               <tr className="border-b border-neutral-200">
-                <th className="text-left py-3  font-semibold text-neutral-700">Data/Hora</th>
-                <th className="text-left py-3  font-semibold text-neutral-700">Operação</th>
-                <th className="text-left py-3  font-semibold text-neutral-700">Tamanho</th>
-                <th className="text-left py-3  font-semibold text-neutral-700">Status</th>
-                <th className="text-left py-3  font-semibold text-neutral-700">Usuário</th>
-                <th className="text-left py-3  font-semibold text-neutral-700">Ações</th>
+                <th scope="col" className="text-left py-3  font-semibold text-neutral-700">Data/Hora</th>
+                <th scope="col" className="text-left py-3  font-semibold text-neutral-700">Operação</th>
+                <th scope="col" className="text-left py-3  font-semibold text-neutral-700">Tamanho</th>
+                <th scope="col" className="text-left py-3  font-semibold text-neutral-700">Status</th>
+                <th scope="col" className="text-left py-3  font-semibold text-neutral-700">Usuário</th>
+                <th scope="col" className="text-left py-3  font-semibold text-neutral-700">Ações</th>
               </tr>
             </thead>
             <tbody>

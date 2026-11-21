@@ -262,7 +262,7 @@ export default function DesafioTecnico() {
                     >
                       <span
                         className={[
-                          'mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border text-[10px] font-bold',
+                          'mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border text-xs font-bold',
                           selected ? 'border-sky-500 bg-sky-600 text-white' : 'border-slate-300 text-slate-400',
                         ].join(' ')}
                       >
@@ -294,7 +294,7 @@ export default function DesafioTecnico() {
                         ].join(' ')}
                       >
                         <p className="text-sm font-semibold text-slate-800">{item.label}</p>
-                        <p className="mt-0.5 text-[11px] leading-relaxed text-slate-500">{item.description}</p>
+                        <p className="mt-0.5 text-xs leading-relaxed text-slate-500">{item.description}</p>
                       </button>
                     ))}
                   </div>

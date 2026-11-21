@@ -468,7 +468,7 @@ export const GlobalTableEnhanced: React.FC<GlobalTablePropsEnhanced> = ({
           >
             <tr>
               {displayColumns.map((col) => (
-                <th
+                <th scope="col"
                   key={col.key}
                   draggable={enableColumnReorder && col.sortable !== false}
                   onDragStart={(e) => handleColumnDragStart(e, col.key)}

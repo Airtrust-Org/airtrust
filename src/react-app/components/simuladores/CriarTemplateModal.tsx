@@ -171,7 +171,7 @@ export const CriarTemplateModal: React.FC<CriarTemplateModalProps> = ({
           <h2 className="text-xl font-semibold">
             {templateEdit ? 'Editar Modelo' : 'Criar Modelo de Sessão'}
           </h2>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
+          <button type="button" onClick={onClose} className="text-gray-400 hover:text-gray-600">
             <X className="h-6 w-6" />
           </button>
         </div>

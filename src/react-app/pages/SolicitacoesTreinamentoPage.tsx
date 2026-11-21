@@ -621,7 +621,7 @@ export default function SolicitacoesTreinamentoPage() {
         {/* Filtros */}
         <div className="flex flex-wrap gap-2 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
           {ALL_STATUSES.map((s) => (
-            <button
+            <button type="button"
               key={s.value}
               onClick={() => setFilterStatus(s.value)}
               className={`rounded-full px-3 py-1 text-sm font-medium transition-colors ${
@@ -643,7 +643,7 @@ export default function SolicitacoesTreinamentoPage() {
             <div className="flex flex-col items-center justify-center py-20 text-center">
               <AlertTriangle className="mb-3 h-8 w-8 text-slate-300" />
               <p className="text-sm text-slate-400">Nenhuma solicitação encontrada.</p>
-              <button
+              <button type="button"
                 className="mt-3 text-sm text-blue-600 hover:underline"
                 onClick={() => setShowCriar(true)}
               >

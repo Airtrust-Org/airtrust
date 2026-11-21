@@ -172,19 +172,19 @@ export default function CrudInstrutores() {
       </div>
       {!carregando && (
         <SimuladoresCard padding="none">
-          <table className="min-w-full divide-y divide-slate-200">
+          <div className="overflow-x-auto"><table className="min-w-full divide-y divide-slate-200">
             <thead className="bg-slate-50">
               <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase">
+                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase">
                   Nome
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase">
+                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase">
                   Habilitações
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase">
+                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase">
                   Observações
                 </th>
-                <th className="px-6 py-3 text-right text-xs font-medium text-slate-500 uppercase">
+                <th scope="col" className="px-6 py-3 text-right text-xs font-medium text-slate-500 uppercase">
                   Ações
                 </th>
               </tr>
@@ -226,7 +226,7 @@ export default function CrudInstrutores() {
                 </tr>
               ))}
             </tbody>
-          </table>
+          </table></div>
 
           {instrutores.length === 0 && (
             <EmptyState

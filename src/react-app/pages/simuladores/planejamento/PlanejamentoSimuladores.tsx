@@ -355,7 +355,7 @@ function ResourceAssignmentCell({
         )}
       </div>
       {current.resource_assignment && !current.resource_assignment.complete && (
-        <span className="text-[10px] font-medium text-amber-700">
+        <span className="text-xs font-medium text-amber-700">
           Pendente: {current.resource_assignment.pending.join(', ')}
         </span>
       )}
@@ -1146,13 +1146,13 @@ export default function PlanejamentoSimuladores() {
             <table className="min-w-[1000px] w-full text-sm">
               <thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500 dark:bg-slate-950/70">
                 <tr>
-                  <th className="px-3 py-3">Vencimento</th>
-                  <th className="px-3 py-3">Qualificação</th>
-                  <th className="px-3 py-3">Aeronave</th>
-                  <th className="px-3 py-3">Tripulante(s)</th>
-                  <th className="px-3 py-3">Janela sugerida</th>
-                  <th className="px-3 py-3">Carga / sessões</th>
-                  <th className="px-3 py-3">Situação</th>
+                  <th scope="col" className="px-3 py-3">Vencimento</th>
+                  <th scope="col" className="px-3 py-3">Qualificação</th>
+                  <th scope="col" className="px-3 py-3">Aeronave</th>
+                  <th scope="col" className="px-3 py-3">Tripulante(s)</th>
+                  <th scope="col" className="px-3 py-3">Janela sugerida</th>
+                  <th scope="col" className="px-3 py-3">Carga / sessões</th>
+                  <th scope="col" className="px-3 py-3">Situação</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
@@ -1255,13 +1255,13 @@ export default function PlanejamentoSimuladores() {
               <table className="min-w-[850px] w-full text-sm">
                 <thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500 dark:bg-slate-950/70">
                   <tr>
-                    <th className="px-3 py-2">Aeronave</th>
-                    <th className="px-3 py-2">Data</th>
-                    <th className="px-3 py-2">Horário</th>
-                    <th className="px-3 py-2">Duração</th>
-                    <th className="px-3 py-2">Estado</th>
-                    <th className="px-3 py-2">Confiança</th>
-                    <th className="px-3 py-2">Fonte</th>
+                    <th scope="col" className="px-3 py-2">Aeronave</th>
+                    <th scope="col" className="px-3 py-2">Data</th>
+                    <th scope="col" className="px-3 py-2">Horário</th>
+                    <th scope="col" className="px-3 py-2">Duração</th>
+                    <th scope="col" className="px-3 py-2">Estado</th>
+                    <th scope="col" className="px-3 py-2">Confiança</th>
+                    <th scope="col" className="px-3 py-2">Fonte</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
@@ -1302,14 +1302,14 @@ export default function PlanejamentoSimuladores() {
               <table className="min-w-[1100px] w-full text-sm">
                 <thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500 dark:bg-slate-950/70">
                   <tr>
-                    <th className="px-3 py-2">Tripulação</th>
-                    <th className="px-3 py-2">Aeronave</th>
-                    <th className="px-3 py-2">Vencimento</th>
-                    <th className="px-3 py-2">Currículo</th>
-                    <th className="px-3 py-2">Slots recomendados</th>
-                    <th className="px-3 py-2">Margem</th>
-                    <th className="px-3 py-2">Conflitos</th>
-                    <th className="px-3 py-2">Resultado</th>
+                    <th scope="col" className="px-3 py-2">Tripulação</th>
+                    <th scope="col" className="px-3 py-2">Aeronave</th>
+                    <th scope="col" className="px-3 py-2">Vencimento</th>
+                    <th scope="col" className="px-3 py-2">Currículo</th>
+                    <th scope="col" className="px-3 py-2">Slots recomendados</th>
+                    <th scope="col" className="px-3 py-2">Margem</th>
+                    <th scope="col" className="px-3 py-2">Conflitos</th>
+                    <th scope="col" className="px-3 py-2">Resultado</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
@@ -1424,18 +1424,18 @@ export default function PlanejamentoSimuladores() {
             <table className="min-w-[1500px] w-full text-sm">
               <thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500 dark:bg-slate-950/70">
                 <tr>
-                  <th className="px-3 py-3">Aprovação</th>
-                  <th className="px-3 py-3">Recursos</th>
-                  <th className="px-3 py-3">Status</th>
-                  <th className="px-3 py-3">Vencimento</th>
-                  <th className="px-3 py-3">Qualificação</th>
-                  <th className="px-3 py-3">Aeronave</th>
-                  <th className="px-3 py-3">Tripulação</th>
-                  <th className="px-3 py-3">Quinzena / janela</th>
-                  <th className="px-3 py-3">Data prevista</th>
-                  <th className="px-3 py-3">Carga / sessões</th>
-                  <th className="px-3 py-3">Escala publicada</th>
-                  <th className="px-3 py-3">Ação</th>
+                  <th scope="col" className="px-3 py-3">Aprovação</th>
+                  <th scope="col" className="px-3 py-3">Recursos</th>
+                  <th scope="col" className="px-3 py-3">Status</th>
+                  <th scope="col" className="px-3 py-3">Vencimento</th>
+                  <th scope="col" className="px-3 py-3">Qualificação</th>
+                  <th scope="col" className="px-3 py-3">Aeronave</th>
+                  <th scope="col" className="px-3 py-3">Tripulação</th>
+                  <th scope="col" className="px-3 py-3">Quinzena / janela</th>
+                  <th scope="col" className="px-3 py-3">Data prevista</th>
+                  <th scope="col" className="px-3 py-3">Carga / sessões</th>
+                  <th scope="col" className="px-3 py-3">Escala publicada</th>
+                  <th scope="col" className="px-3 py-3">Ação</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
@@ -1466,7 +1466,7 @@ export default function PlanejamentoSimuladores() {
                             </span>
                             {item.planejamento_snapshot?.resource_assignment &&
                               !item.planejamento_snapshot.resource_assignment.complete && (
-                                <span className="text-[10px] font-medium text-amber-700">
+                                <span className="text-xs font-medium text-amber-700">
                                   Defina o simulador e o instrutor/examinador antes da aprovação.
                                 </span>
                               )}
@@ -1517,7 +1517,7 @@ export default function PlanejamentoSimuladores() {
                             <span className="inline-flex items-center rounded-md bg-red-50 px-2 py-1 text-xs font-medium text-red-700 ring-1 ring-inset ring-red-600/10">
                               Devolvido
                             </span>
-                            <span className="text-[10px] text-slate-500">{item.planejamento_aprovacao_observacoes}</span>
+                            <span className="text-xs text-slate-500">{item.planejamento_aprovacao_observacoes}</span>
                             <button
                               onClick={() => handleSubmeter(item.id)}
                               disabled={actioningId === item.id}
@@ -1571,7 +1571,7 @@ export default function PlanejamentoSimuladores() {
                           ))}
                         </select>
                         {item.planejamento_editado_manualmente ? (
-                          <span className="mt-1 block text-[11px] font-medium text-violet-600">
+                          <span className="mt-1 block text-xs font-medium text-violet-600">
                             edição preservada
                           </span>
                         ) : null}

@@ -768,7 +768,7 @@ export default function ModelosSessaoPage({ embedded = false, onBack }: ModelosS
                   ? (sortDirection === 'asc' ? 'ascending' : 'descending')
                   : 'none';
                 return (
-                  <th
+                  <th scope="col"
                     key={field}
                     aria-sort={ariaSort}
                     className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-slate-400 uppercase"
@@ -794,7 +794,7 @@ export default function ModelosSessaoPage({ embedded = false, onBack }: ModelosS
                   </th>
                 );
               })}
-              <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 dark:text-slate-400 uppercase">
+              <th scope="col" className="px-4 py-3 text-center text-xs font-medium text-gray-500 dark:text-slate-400 uppercase">
                 Ações
               </th>
             </tr>
