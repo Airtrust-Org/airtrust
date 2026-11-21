@@ -1,0 +1,87 @@
+# BOA-specific, branch-scoped staging source readback. NEVER deploys or writes D1/R2.
+# Snapshot-only: success does not mean authorization to release or scientific approval.
+name: BOA Staging Source Lineage (Read Only)
+
+on:
+  push:
+    branches:
+      - feat/frms-boa-mensal-consolidado-20261020
+
+permissions:
+  contents: read
+
+concurrency:
+  group: boa-staging-source-readback-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  staging-source-readback:
+    name: staging-source-readback
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    if: github.repository == 'Airtrust-Org/airtrust'
+    steps:
+      - name: Checkout exact BOA branch commit
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Confirm candidate ref and capture current main
+        shell: bash
+        env:
+          CANDIDATE_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          [[ "$GITHUB_REF" == "refs/heads/feat/frms-boa-mensal-consolidado-20261020" ]] || exit 1
+          [[ "$(git rev-parse HEAD)" == "$CANDIDATE_SHA" ]] || exit 1
+          git fetch origin main --quiet
+          main_sha="$(git rev-parse refs/remotes/origin/main)"
+          [[ "$main_sha" =~ ^[0-9a-f]{40}$ ]] || exit 1
+          echo "BOA_CANDIDATE_SHA=$CANDIDATE_SHA" >> "$GITHUB_ENV"
+          echo "BOA_MAIN_SHA=$main_sha" >> "$GITHUB_ENV"
+      - name: Read live Worker source SHA and check both ancestry requirements
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/staging/check-boa-staging-release-lineage.mjs \
+            --candidate-sha="$BOA_CANDIDATE_SHA" \
+            --main-sha="$BOA_MAIN_SHA" | tee "$RUNNER_TEMP/boa-staging-source-readback.json"
+      - name: Publish sanitized evidence regardless of result
+        if: always()
+        shell: bash
+        run: |
+          node --input-type=module <<'NODE'
+          import { existsSync, readFileSync, appendFileSync } from 'node:fs';
+          const path = process.env.RUNNER_TEMP + '/boa-staging-source-readback.json';
+          let data = {};
+          try {
+            if (existsSync(path)) data = JSON.parse(readFileSync(path, 'utf8'));
+          } catch {
+            data = {};
+          }
+          const hash = /^[0-9a-f]{40}$/;
+          const statuses = new Set([
+            'BLOCK_UNVERIFIABLE_PROVENANCE', 'BLOCK_MISSING_ANCESTRY_CHECK',
+            'NOOP_ALREADY_DEPLOYED', 'BLOCK_CANDIDATE_BEHIND_MAIN',
+            'BLOCK_CANDIDATE_DIVERGES_FROM_STAGING',
+            'BLOCK_UNVERIFIABLE_GIT_LINEAGE',
+            'BLOCK_STAGING_READBACK_UNAVAILABLE',
+            'BLOCK_UNVERIFIABLE_PREDEPLOY_CHECK',
+            'ANCESTRY_ONLY_COMPATIBLE_NOT_RELEASE_AUTHORIZED',
+          ]);
+          const status = statuses.has(data.status) ? data.status : 'BLOCK_NO_VERIFIED_EVIDENCE';
+          const sha = value => hash.test(value || '') ? value : 'NOT_VERIFIED';
+          const lines = [
+            '## BOA staging source lineage — observation only',
+            '',
+            '- outcome: ' + status,
+            '- candidate SHA: ' + sha(process.env.BOA_CANDIDATE_SHA),
+            '- main SHA observed: ' + sha(process.env.BOA_MAIN_SHA),
+            '- staging Worker source SHA observed: ' + sha(data.deployedSourceSha),
+            '- deploy authorized: **NO**',
+            '- staging mutation or secrets access: **NONE**',
+            '- scientific/LGPD/tenant grants: **NOT ATTESTED**',
+            '- evidence is a timestamped snapshot, not the release-time guard',
+          ];
+          appendFileSync(process.env.GITHUB_STEP_SUMMARY, lines.join('\n') + '\n');
+          NODE
