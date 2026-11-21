@@ -30,10 +30,19 @@ PINNED_FORMATIVE_V3_RECOVERY = {
     **PINNED_FORMATIVE_V3,
     "app.js": "abf5b151561ca6f362f98b6c12faf98ec9893de56455be8c112a064c5e8a995f",
 }
+# V3 RC6 is a CANDIDATE (proposal): registering its bytes only lets the lock verify a
+# private ZIP that declares it. It does not review, certify or activate anything; RC4/RC5
+# stay immutable and a package must still pass QA, governance and an edition handoff.
+FORMATIVE_V3_RC6_VERSION = "AIRTRUST_GOLDEN_MASTER_CORE_V3_RC6_FINISH_ON_COMPLETE_CANDIDATE"
+PINNED_FORMATIVE_V3_RC6 = {
+    **PINNED_FORMATIVE_V3,
+    "app.js": "5c86a4d603e4d612498341255371cf7a3bd90a4b4291e257dfc167ad19947007",
+}
 REGISTERED_VERSIONS = {
     GOLDEN_MASTER_VERSION: PINNED_CORE,
     FORMATIVE_V3_VERSION: PINNED_FORMATIVE_V3,
     FORMATIVE_V3_RECOVERY_VERSION: PINNED_FORMATIVE_V3_RECOVERY,
+    FORMATIVE_V3_RC6_VERSION: PINNED_FORMATIVE_V3_RC6,
 }
 REQUIRED_METADATA = ("imsmanifest.xml", "airtrust-completion-manifest.json")
 MAX_CORE_BYTES = 512 * 1024
