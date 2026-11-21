@@ -49,6 +49,27 @@ describe('Gestão de Avaliações, responsividade e transparência',()=>{
   expect(screen.getAllByRole('link',{name:'Vincular prova'})[0].getAttribute('href'))
     .toBe('/lms/admin/provas/26');
  });
+ it('distribui as cinco colunas no desktop sem comprimir contadores e botões, e mantém cartões no tablet',async()=>{
+  renderPage();
+  const table=await screen.findByRole('table',{name:'Avaliações por treinamento'});
+  expect(table.className).toContain('table-fixed');
+  expect(table.parentElement?.className).toContain('hidden lg:block');
+  const headers=table.querySelectorAll('th[scope="col"]');
+  expect([...headers].map(h=>h.textContent)).toEqual(['Treinamento','Questões','Provas','Situação','Ação']);
+  const widths=[...table.querySelectorAll('col')].map(col=>col.className);
+  expect(widths).toEqual(['w-[36%]','w-[12%]','w-[10%]','w-[27%]','w-[15%]']);
+  const row=table.querySelector('tbody tr');
+  expect(row?.querySelectorAll('td')).toHaveLength(5);
+  expect(row?.textContent).toContain('SCORM: FORMATIVE');
+  expect(row?.textContent).not.toContain('a exigência externa depende da edição homologada');
+  const link=row?.querySelector('td:last-child a');
+  expect(link?.className).toContain('whitespace-nowrap');
+  expect(link?.getAttribute('href')).toBe('/lms/admin/provas/26');
+  const cards=screen.getByLabelText('Treinamentos e situação das provas');
+  expect(cards.className).toContain('lg:hidden');
+  expect(cards.textContent).toContain('SCORM: FORMATIVE');
+  expect(screen.getByText(/não torna a prova externa obrigatória/)).toBeTruthy();
+ });
  it('nunca disponibiliza CSV parcial quando nova tentativa desloca uma página e duplica ID',async()=>{
   const pageItems=(ids:string[])=>ids.map((attemptId,i)=>({
     ...attempt,attemptId,matriculaId:200+i,alunoNome:'Aluno '+attemptId,
