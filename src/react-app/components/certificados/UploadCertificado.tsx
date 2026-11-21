@@ -141,7 +141,7 @@ export default function UploadCertificado({ qualificacaoId, onSuccess, onClose }
         {/* Body */}
         <div className="p-6">
           {/* Drag & Drop Area */}
-          <div role="button" tabIndex={0} onKeyDown={(e) => { if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); e.currentTarget.click(); } }}
+          <div
             className={`
               border-2 border-dashed rounded-lg p-8
               ${dragActive ? 'border-primary bg-primary/10' : 'border-gray-300'}
