@@ -998,7 +998,9 @@ router.get(
     const statsExtraClause =
       statsConditions.length > 0 ? ` AND ${statsConditions.join(' AND ')}` : '';
 
-    const datePredicates = buildVencimentoStatusPredicates('date(qh.data_vencimento)');
+    // Keep stats aligned with the canonical list without mutating legacy PDFs.
+    const effectiveExpiryExpr = `COALESCE(qh.data_vencimento, ${sqlAddMonthsClamped('qh.data_conclusao', sqlEffectiveValidityMonths('qh.validade_meses', 'qt.codigo', 'qt.validade', sqlCmaAgeValidityMonths('qh.data_conclusao', 'f.nascimento')))})`;
+    const datePredicates = buildVencimentoStatusPredicates(effectiveExpiryExpr);
     const statsResult = await db
       .prepare(
         `${renewalWindowWithClause}
@@ -1006,7 +1008,7 @@ router.get(
         COUNT(*) as total,
         SUM(CASE
           WHEN ${renewedQualificationPredicate} THEN 0
-          WHEN qh.data_vencimento IS NOT NULL AND ${datePredicates.valida} THEN 1
+          WHEN ${effectiveExpiryExpr} IS NOT NULL AND ${datePredicates.valida} THEN 1
           ELSE 0
         END) as validas,
         SUM(CASE
@@ -1123,7 +1125,9 @@ router.get(
       qualificacaoId,
     });
     const now = Date.now();
-    const datePredicates = buildVencimentoStatusPredicates('date(qh.data_vencimento)');
+    // Keep stats aligned with the canonical list without mutating legacy PDFs.
+    const effectiveExpiryExpr = `COALESCE(qh.data_vencimento, ${sqlAddMonthsClamped('qh.data_conclusao', sqlEffectiveValidityMonths('qh.validade_meses', 'qt.codigo', 'qt.validade', sqlCmaAgeValidityMonths('qh.data_conclusao', 'f.nascimento')))})`;
+    const datePredicates = buildVencimentoStatusPredicates(effectiveExpiryExpr);
 
     let stats: {
       total: number;
@@ -1147,7 +1151,7 @@ router.get(
       const statsQuery = `${renewalWindowWithClause}
       SELECT 
             COUNT(*) as total,
-            SUM(CASE WHEN ${renewedQualificationPredicate} THEN 0 WHEN qh.data_conclusao IS NULL THEN 0 WHEN qh.data_vencimento IS NOT NULL AND ${datePredicates.valida} THEN 1 ELSE 0 END) as validas,
+            SUM(CASE WHEN ${renewedQualificationPredicate} THEN 0 WHEN qh.data_conclusao IS NULL THEN 0 WHEN ${effectiveExpiryExpr} IS NOT NULL AND ${datePredicates.valida} THEN 1 ELSE 0 END) as validas,
             SUM(CASE WHEN ${renewedQualificationPredicate} THEN 0 WHEN qh.data_conclusao IS NULL THEN 0 WHEN (${datePredicates.vencendo}) THEN 1 ELSE 0 END) as vencendo,
             SUM(CASE WHEN ${renewedQualificationPredicate} THEN 0 WHEN qh.data_conclusao IS NULL THEN 0 WHEN ${datePredicates.vencida} THEN 1 ELSE 0 END) as vencidas,
             SUM(CASE WHEN ${activeRenewedQualificationPredicate} THEN 1 ELSE 0 END) as renovadas,
@@ -1253,7 +1257,7 @@ router.get(
                   COUNT(*) AS total,
                   SUM(CASE WHEN ${renewedQualificationPredicate} THEN 0 WHEN ${datePredicates.vencida} THEN 1 ELSE 0 END) AS vencidas,
                   SUM(CASE WHEN ${renewedQualificationPredicate} THEN 0 WHEN (${datePredicates.vencendo}) THEN 1 ELSE 0 END) AS vencendo,
-                  SUM(CASE WHEN ${renewedQualificationPredicate} THEN 0 WHEN qh.data_vencimento IS NOT NULL AND ${datePredicates.valida} THEN 1 ELSE 0 END) AS validas
+                  SUM(CASE WHEN ${renewedQualificationPredicate} THEN 0 WHEN ${effectiveExpiryExpr} IS NOT NULL AND ${datePredicates.valida} THEN 1 ELSE 0 END) AS validas
              ${baseFromAndJoins}
              WHERE ${whereClause}
              GROUP BY qt.categoria
