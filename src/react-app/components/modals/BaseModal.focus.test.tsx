@@ -116,3 +116,34 @@ describe('BaseModal focus management', () => {
     expect(document.body.style.overflow).toBe('');
   });
 });
+
+describe('BaseModal focus trap boundaries', () => {
+  it('ignora controles ocultos por CSS e fora da ordem de Tab ao calcular os limites', async () => {
+    const user = userEvent.setup();
+    render(
+      <BaseModal isOpen onClose={vi.fn()} title="Limites">
+        <input aria-label="Primeiro" />
+        <input aria-label="Último real" />
+        <button type="button" tabIndex={-1}>
+          Fora da ordem de Tab
+        </button>
+        <div style={{ display: 'none' }}>
+          <button type="button">Oculto por ancestral</button>
+        </div>
+        <input aria-label="Invisível" style={{ visibility: 'hidden' }} />
+      </BaseModal>,
+    );
+
+    const close = screen.getByRole('button', { name: 'Fechar' });
+    const last = screen.getByLabelText('Último real');
+
+    last.focus();
+    // O "último" tabulável real é "Último real": Tab deve voltar ao início (Fechar), não sair do modal
+    await user.tab();
+    expect(document.activeElement).toBe(close);
+
+    // Shift+Tab no primeiro foco deve ir ao último tabulável real, não a um controle invisível
+    await user.tab({ shift: true });
+    expect(document.activeElement).toBe(last);
+  });
+});

@@ -40,9 +40,30 @@ function unlockScroll() {
   }
 }
 
+/**
+ * Visível e elegível à navegação sequencial: sem `display:none`/`visibility:hidden`
+ * no próprio elemento ou em qualquer ancestral até o contêiner, sem `hidden`/`inert`
+ * e sem `aria-hidden`. Alterações de layout (`getClientRects`) não são usadas porque
+ * não existem em jsdom; o estilo computado cobre CSS e atributos.
+ */
+function isVisibleWithin(el: HTMLElement, container: HTMLElement): boolean {
+  for (let node: HTMLElement | null = el; node; node = node.parentElement) {
+    if (node.hasAttribute('hidden') || node.hasAttribute('inert')) return false;
+    if (node.getAttribute('aria-hidden') === 'true') return false;
+    const style = window.getComputedStyle(node);
+    if (style.display === 'none') return false;
+    if (node === el && (style.visibility === 'hidden' || style.visibility === 'collapse')) {
+      return false;
+    }
+    if (node === container) break;
+  }
+  return true;
+}
+
 export function getFocusableElements(container: HTMLElement): HTMLElement[] {
   return Array.from(container.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR)).filter(
-    (el) => !el.hasAttribute('hidden') && el.getAttribute('aria-hidden') !== 'true',
+    // `tabIndex < 0` remove controles fora da ordem de Tab (ex.: tabindex="-1")
+    (el) => el.tabIndex >= 0 && isVisibleWithin(el, container),
   );
 }
 
