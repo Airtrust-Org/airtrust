@@ -1526,7 +1526,7 @@ export default function FichaDetalhe() {
                         </p>
                       )}
                       {!confirmed && evaluator && (
-                        <input
+                        <input aria-label="Observações"
                           type="text"
                           value={checksResultados[check.id]?.observacoes || ''}
                           onChange={(e) =>
@@ -1610,7 +1610,7 @@ export default function FichaDetalhe() {
                 <div>
                   <p className="text-xs text-slate-500 uppercase">Modelo</p>
                   {isEditMode && specialDefinition?.kind === 'instructor' ? (
-                    <input
+                    <input aria-label="Modelo"
                       value={ficha.equipamento_utilizado || ''}
                       onChange={(e) =>
                         setFicha((prev) =>
@@ -1657,7 +1657,7 @@ export default function FichaDetalhe() {
                       <div>
                         <p className="text-xs uppercase text-slate-500">Dispositivo/Matrícula</p>
                         {isEditMode ? (
-                          <input
+                          <input aria-label="Dispositivo/Matrícula"
                             value={ficha.dispositivo_identificacao || ''}
                             onChange={(e) =>
                               setFicha((prev) =>
@@ -1677,7 +1677,7 @@ export default function FichaDetalhe() {
                       <div>
                         <p className="text-xs uppercase text-slate-500">Assento de Instrução</p>
                         {isEditMode ? (
-                          <select
+                          <select aria-label="Assento de Instrução"
                             value={ficha.assento_instrucao_utilizado || ''}
                             onChange={(e) =>
                               setFicha((prev) =>
@@ -1789,7 +1789,7 @@ export default function FichaDetalhe() {
                               </span>
                             ) : null}
                             {isEditMode ? (
-                              <select
+                              <select aria-label={`Nota da manobra ${manobra.ordem}`}
                                 value={getNotaSelectValue(manobra.nota)}
                                 onChange={(e) => handleNotaChange(manobra.ordem, e.target.value)}
                                 className={`w-24 rounded-md border px-2 py-1 text-sm ${
@@ -1858,7 +1858,7 @@ export default function FichaDetalhe() {
                           {manobra.tripulante || 'AB'}
                         </span>
                         {isEditMode ? (
-                          <select
+                          <select aria-label={`Nota da manobra ${manobra.ordem}`}
                             value={getNotaSelectValue(manobra.nota)}
                             onChange={(e) => handleNotaChange(manobra.ordem, e.target.value)}
                             className={`w-24 rounded border px-2 py-1 text-sm text-center focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary ${
@@ -1926,7 +1926,7 @@ export default function FichaDetalhe() {
                           {manobra.tripulante || 'AB'}
                         </span>
                         {isEditMode ? (
-                          <select
+                          <select aria-label={`Nota da manobra ${manobra.ordem}`}
                             value={getNotaSelectValue(manobra.nota)}
                             onChange={(e) => handleNotaChange(manobra.ordem, e.target.value)}
                             className={`w-24 rounded border px-2 py-1 text-sm text-center focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary ${
@@ -2058,7 +2058,7 @@ export default function FichaDetalhe() {
                         </p>
                       </div>
                       {isEditMode ? (
-                        <select
+                        <select aria-label={`Nota da manobra ${manobra.ordem}`}
                           value={getNotaSelectValue(manobra.nota)}
                           onChange={(e) => handleNotaChange(manobra.ordem, e.target.value)}
                           className={`w-24 shrink-0 rounded border px-2 py-1 text-sm text-center focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary ${

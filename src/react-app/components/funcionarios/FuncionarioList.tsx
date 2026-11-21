@@ -219,7 +219,7 @@ export default function FuncionarioList({
                     >
                       <FolderOpen className="w-4 h-4" />
                     </Button>
-                    <Button
+                    <Button aria-label="Editar"
                       variant="ghost"
                       size="sm"
                       onClick={() => onEdit(funcionario)}
@@ -227,7 +227,7 @@ export default function FuncionarioList({
                     >
                       <Edit className="w-4 h-4" />
                     </Button>
-                    <Button
+                    <Button aria-label="Excluir"
                       variant="ghost"
                       size="sm"
                       onClick={() => handleDeleteClick(funcionario)}

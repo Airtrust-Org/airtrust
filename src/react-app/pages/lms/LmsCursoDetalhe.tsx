@@ -402,7 +402,7 @@ export default function LmsCursoDetalhe() {
                 </p>
                 {curso.carga_horaria_inicial_horas != null ||
                 curso.carga_horaria_recorrente_horas != null ? (
-                  <p className="mt-2 text-xs text-slate-400 dark:text-slate-500">
+                  <p className="mt-2 text-xs text-slate-500 dark:text-slate-500">
                     {curso.carga_horaria_inicial_horas != null
                       ? `Inicial ${curso.carga_horaria_inicial_horas}h`
                       : null}

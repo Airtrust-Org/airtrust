@@ -108,7 +108,7 @@ export default function MroOrdemServicoDetalhe() {
 }
 
 function SectionCard({ title, footer, children }: { title: string; footer?: string; children: React.ReactNode }) {
-  return <div className="rounded-xl border border-slate-200 bg-white p-6 dark:border-slate-700 dark:bg-slate-900"><h3 className="mb-4 text-base font-semibold text-slate-800 dark:text-slate-100">{title}</h3>{children}{footer && <p className="mt-4 text-xs text-slate-400 dark:text-slate-500">{footer}</p>}</div>;
+  return <div className="rounded-xl border border-slate-200 bg-white p-6 dark:border-slate-700 dark:bg-slate-900"><h3 className="mb-4 text-base font-semibold text-slate-800 dark:text-slate-100">{title}</h3>{children}{footer && <p className="mt-4 text-xs text-slate-500 dark:text-slate-500">{footer}</p>}</div>;
 }
 function TaskItem({ done, title, detail }: { done?: boolean; title: string; detail?: string }) {
   return <div className="flex items-start gap-3 rounded-lg border border-slate-100 bg-slate-50 p-3 dark:border-slate-700 dark:bg-slate-800"><CheckCircle className={`mt-0.5 h-4 w-4 ${done ? 'text-emerald-500' : 'text-slate-300 dark:text-slate-600'}`} /><div><p className="text-sm font-medium text-slate-700 dark:text-slate-300">{title}</p>{detail && <p className="text-xs text-slate-500 dark:text-slate-400">{detail}</p>}</div></div>;

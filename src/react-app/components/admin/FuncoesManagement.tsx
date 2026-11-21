@@ -300,7 +300,7 @@ export default function FuncoesManagement() {
                       </td>
                       <td className="py-4 px-6">
                         <div className="flex justify-center space-x-2">
-                          <Button
+                          <Button aria-label="Editar"
                             variant="ghost"
                             size="sm"
                             className="p-1"
@@ -308,7 +308,7 @@ export default function FuncoesManagement() {
                           >
                             <Edit className="w-4 h-4" />
                           </Button>
-                          <Button
+                          <Button aria-label="Excluir"
                             variant="ghost"
                             size="sm"
                             className="p-1 text-red-600 hover:text-red-800"

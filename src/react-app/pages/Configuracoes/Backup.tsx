@@ -289,10 +289,10 @@ function CreateBackupModal({ onClose, onSuccess }: CreateModalProps) {
         <div className="p-6 space-y-5">
           {/* Tipo */}
           <div>
-            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+            <span id="backup-tipo-de-backup" className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
               Tipo de Backup
-            </label>
-            <div className="grid grid-cols-3 gap-3">
+            </span>
+            <div role="group" aria-labelledby="backup-tipo-de-backup" className="grid grid-cols-3 gap-3">
               {(['COMPLETO', 'MODULAR', 'INCREMENTAL'] as const).map((t) => (
                 <button
                   key={t}
@@ -322,10 +322,10 @@ function CreateBackupModal({ onClose, onSuccess }: CreateModalProps) {
           {/* Módulos (only for MODULAR) */}
           {tipo === 'MODULAR' && (
             <div>
-              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+              <span id="backup-modulos-para-backup" className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
                 Módulos para Backup
-              </label>
-              <div className="grid grid-cols-2 gap-2">
+              </span>
+              <div role="group" aria-labelledby="backup-modulos-para-backup" className="grid grid-cols-2 gap-2">
                 {MODULOS.map((modulo) => (
                   <label
                     key={modulo.id}
@@ -353,10 +353,10 @@ function CreateBackupModal({ onClose, onSuccess }: CreateModalProps) {
 
           {/* Retenção */}
           <div>
-            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+            <span id="backup-politica-de-retencao" className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
               Política de Retenção
-            </label>
-            <div className="space-y-2">
+            </span>
+            <div role="group" aria-labelledby="backup-politica-de-retencao" className="space-y-2">
               {(['30_DIAS', '1_ANO', '7_ANOS'] as const).map((r) => (
                 <label key={r} className="flex items-center gap-3 cursor-pointer">
                   <input
@@ -672,10 +672,10 @@ function RestoreModal({ backup, onClose, onSuccess }: RestoreModalProps) {
 
           {/* Scope */}
           <div>
-            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+            <span id="backup-escopo-da-restauracao" className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
               Escopo da Restauração
-            </label>
-            <div className="space-y-2">
+            </span>
+            <div role="group" aria-labelledby="backup-escopo-da-restauracao" className="space-y-2">
               <label className="flex items-center gap-3 cursor-pointer">
                 <input
                   type="radio"
@@ -976,7 +976,7 @@ export default function BackupPage() {
               className="w-full pl-9 pr-4 py-2 text-sm border border-slate-200 dark:border-slate-700 rounded-xl bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-transparent"
             />
           </div>
-          <select
+          <select aria-label="Todos os status"
             value={filterStatus}
             onChange={(e) => setFilterStatus(e.target.value)}
             className="px-3 py-2 text-sm border border-slate-200 dark:border-slate-700 rounded-xl bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-primary/30"
@@ -986,7 +986,7 @@ export default function BackupPage() {
             <option value="EM_PROGRESSO">Em Progresso</option>
             <option value="FALHOU">Falhou</option>
           </select>
-          <select
+          <select aria-label="Todos os tipos"
             value={filterTipo}
             onChange={(e) => setFilterTipo(e.target.value)}
             className="px-3 py-2 text-sm border border-slate-200 dark:border-slate-700 rounded-xl bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-primary/30"

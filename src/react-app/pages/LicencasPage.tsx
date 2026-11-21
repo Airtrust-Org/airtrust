@@ -197,7 +197,7 @@ export default function LicencasPage() {
 
         {/* Filtros + Botão Nova Licença */}
         <div className="flex flex-wrap items-center gap-3 rounded-lg bg-white p-4 shadow">
-          <select
+          <select aria-label="Todos os tipos"
             value={filtroTipo}
             onChange={(e) => setFiltroTipo(e.target.value)}
             className="rounded-lg border border-gray-300 px-3 py-2 text-sm"
@@ -210,7 +210,7 @@ export default function LicencasPage() {
             ))}
           </select>
 
-          <select
+          <select aria-label="Todos os status"
             value={filtroStatus}
             onChange={(e) => setFiltroStatus(e.target.value)}
             className="rounded-lg border border-gray-300 px-3 py-2 text-sm"

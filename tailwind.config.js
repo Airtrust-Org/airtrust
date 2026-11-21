@@ -11,11 +11,11 @@ export default {
         primary: {
           50: '#e6f9f1',
           100: '#ccf2e4',
-          500: '#10b77f',
-          600: '#10b77f', // Verde principal AirTrust
-          700: '#0d9e6e',
+          500: '#0a7a53', // AA: 5,35:1 com texto branco, 4,89:1 sobre slate-100/primary-50
+          600: '#0a7a53', // Verde principal AirTrust (ajustado para contraste AA)
+          700: '#086646',
           800: '#076245', // Contraste AA em texto branco para controles primários
-          DEFAULT: '#10b77f', // AirTrust green
+          DEFAULT: '#0a7a53', // AirTrust green (AA)
         },
         'background-light': '#f6f8f7',
         'background-dark': '#10221c',

@@ -154,7 +154,7 @@ export function ModalImportacao({ entidade, onClose, onSucesso }: ModalImportaca
       className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
       onClick={onClose}
     >
-      <div
+      <div role="presentation"
         className="bg-white rounded-lg w-full max-w-5xl max-h-[90vh] overflow-y-auto shadow-2xl"
         onClick={(e) => e.stopPropagation()}
       >
@@ -186,7 +186,7 @@ export function ModalImportacao({ entidade, onClose, onSucesso }: ModalImportaca
                 <p className="text-gray-600 mb-4">
                   Clique ou arraste um arquivo .csv, .xlsx ou .xls
                 </p>
-                <input
+                <input aria-label="Selecionar arquivo"
                   ref={fileInputRef}
                   type="file"
                   accept=".csv,.xlsx,.xls"

@@ -434,9 +434,9 @@ const AvaliacaoManobras: React.FC<AvaliacaoManobrasProps> = ({ fichaUuid, onClos
               <div className="lg:col-span-1">
                 <div className="space-y-4">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                    <span className="block text-sm font-medium text-gray-700 mb-2">
                       Nova Nota:
-                    </label>
+                    </span>
                     <select aria-label="Nova Nota"
                       value={notas[manobra.manobra_id] || ''}
                       onChange={(e) => handleNotaChange(manobra.manobra_id, e.target.value)}
@@ -455,9 +455,9 @@ const AvaliacaoManobras: React.FC<AvaliacaoManobrasProps> = ({ fichaUuid, onClos
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                    <span className="block text-sm font-medium text-gray-700 mb-2">
                       Observações:
-                    </label>
+                    </span>
                     <textarea aria-label="Observações"
                       value={observacoes[manobra.manobra_id] || ''}
                       onChange={(e) => handleObservacaoChange(manobra.manobra_id, e.target.value)}

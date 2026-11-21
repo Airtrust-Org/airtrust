@@ -152,7 +152,7 @@ const DateInputFixed: React.FC<DateInputFixedProps> = ({
       )}
       
       <div className="relative">
-        <input
+        <input aria-label={placeholder}
           type="text"
           value={displayValue}
           onChange={handleInputChange}

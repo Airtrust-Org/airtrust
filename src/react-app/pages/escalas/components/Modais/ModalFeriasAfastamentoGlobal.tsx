@@ -237,10 +237,10 @@ export default function ModalFeriasAfastamentoGlobal({ onClose, onSaved }: Props
 
           <div className="space-y-4">
             <div className="rounded-2xl border border-slate-200 bg-white p-4">
-              <label className="mb-2 block text-xs font-semibold uppercase tracking-wide text-slate-500">
+              <span id="modalferiasafastamentoglobal-tipo" className="mb-2 block text-xs font-semibold uppercase tracking-wide text-slate-500">
                 Tipo
-              </label>
-              <div className="grid grid-cols-2 gap-2">
+              </span>
+              <div role="group" aria-labelledby="modalferiasafastamentoglobal-tipo" className="grid grid-cols-2 gap-2">
                 {[
                   { codigo: 'FERIAS' as const, label: 'Férias' },
                   { codigo: 'AFT' as const, label: 'Afastamento' },
@@ -300,7 +300,7 @@ export default function ModalFeriasAfastamentoGlobal({ onClose, onSaved }: Props
                   )}
                 </div>
                 <div>
-                  <input
+                  <input aria-label="Data"
                     type="date"
                     value={dataFim}
                     onChange={(event) => {

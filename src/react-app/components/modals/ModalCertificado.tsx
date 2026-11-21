@@ -707,7 +707,7 @@ export function ModalCertificado({
 
   return (
     <ModalOverlay className="fixed inset-0 z-modal flex items-center justify-center bg-black/50">
-      <div
+      <div role="presentation"
         className="bg-white rounded-lg shadow-xl w-full max-w-4xl max-h-[90vh] overflow-y-auto"
         onClick={(e) => e.stopPropagation()}
       >
@@ -938,10 +938,10 @@ export function ModalCertificado({
                   {evidenceProfileContext &&
                     evidenceProfileContext.perfis_permitidos.length > 0 && (
                       <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
-                        <label className="mb-2 block text-sm font-medium text-gray-700">
+                        <span id="modalcertificado-perfil-competencia-comprovado-pelo-certi" className="mb-2 block text-sm font-medium text-gray-700">
                           Perfil/competência comprovado pelo certificado
-                        </label>
-                        <div className="space-y-2">
+                        </span>
+                        <div role="group" aria-labelledby="modalcertificado-perfil-competencia-comprovado-pelo-certi" className="space-y-2">
                           {evidenceProfileContext.perfis_permitidos.map((profile) => {
                             const checked = selectedEvidenceProfiles.includes(profile);
                             const multi = Boolean(evidenceProfileContext.multiprofile_supported);
@@ -1119,7 +1119,7 @@ export function ModalCertificado({
           className="fixed inset-0 bg-black/50 flex items-center justify-center z-modal p-4"
           onClick={(e) => e.stopPropagation()}
         >
-          <div
+          <div role="presentation"
             className="bg-white rounded-lg shadow-lg max-w-sm w-full p-6"
             onClick={(e) => e.stopPropagation()}
           >

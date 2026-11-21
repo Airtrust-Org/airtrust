@@ -1175,9 +1175,9 @@ export default function ModalFuncionario({
 
                 {/* Equipamentos (Multi-select) */}
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+                  <span className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
                     Equipamentos
-                  </label>
+                  </span>
                   {modelosAeronave.length === 0 ? (
                     <p className="text-xs text-orange-600"><span aria-hidden="true">⚠️</span> Carregando equipamentos...</p>
                   ) : (
@@ -1392,7 +1392,7 @@ export default function ModalFuncionario({
                     <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
                       Vencimento ICAO {formData.nivel_icao === '6' && '(Ilimitada)'}
                     </label>
-                    <input
+                    <input aria-label="Data"
                       type="date"
                       name="validade_icao"
                       value={formData.validade_icao}
@@ -1433,7 +1433,7 @@ export default function ModalFuncionario({
                     <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
                       Vencimento CMA ({cmaRegraVencimentoLabel})
                     </label>
-                    <input
+                    <input aria-label="Data"
                       type="date"
                       name="validade_cma"
                       value={formData.validade_cma}
@@ -1720,10 +1720,10 @@ export default function ModalFuncionario({
                   Configuração de escala
                 </h3>
                 <div className="mt-4">
-                  <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+                  <span id="modalfuncionario-escala-de-trabalho" className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
                     Escala de trabalho
-                  </label>
-                  <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
+                  </span>
+                  <div role="group" aria-labelledby="modalfuncionario-escala-de-trabalho" className="grid grid-cols-2 gap-2 md:grid-cols-4">
                     {QUINZENA_OPTIONS.map((opcao) => {
                       const checked = formData.quinzena === opcao.value;
                       return (

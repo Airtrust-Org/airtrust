@@ -1,4 +1,5 @@
 import { Suspense, useEffect } from 'react';
+import AppLayout from '@/react-app/components/AppLayout';
 import { BrowserRouter, Routes, Route, Navigate, useParams, useLocation } from 'react-router-dom';
 import { useAuth } from './hooks/useAuth';
 import { usePermissions } from './hooks/usePermissions';
@@ -112,6 +113,10 @@ function LegacyFrmsOperationalRedirect() {
   return <Navigate to={'/frms' + (query ? '?' + query : '')} replace />;
 }
 
+const NotFoundPage = lazyWithRetry(
+  () => import('./pages/NotFoundPage'),
+  'NotFoundPage',
+);
 const CrudModelos = lazyWithRetry(
   () => import('./pages/simuladores/cadastros/modelos'),
   'CrudModelos',
@@ -385,6 +390,20 @@ function TreinamentosEntryRouter() {
   return <Navigate to={destination} replace />;
 }
 
+/**
+ * Rotas diretas de telas que não montam o shell do app sozinhas (cadastros de Simuladores,
+ * Certificações, Sistema): acessadas pela URL ficavam sem cabeçalho/navegação, sem landmark
+ * `main` e sem título de página. O shell e um h1 (visualmente oculto) resolvem os três casos.
+ */
+function RouteShell({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <AppLayout>
+      <h1 className="sr-only">{title}</h1>
+      {children}
+    </AppLayout>
+  );
+}
+
 export default function App() {
   useEffect(() => {
     applySystemSettingsToDocument(getSystemSettings());
@@ -522,7 +541,7 @@ export default function App() {
                         path="/certificacoes"
                         element={
                           <ProtectedRoute>
-                            <Certificacoes />
+                            <RouteShell title="Gestão de Qualificações"><Certificacoes /></RouteShell>
                           </ProtectedRoute>
                         }
                       />
@@ -670,7 +689,7 @@ export default function App() {
                       path="/simuladores/cadastros/simuladores"
                       element={
                         <ProtectedRoute>
-                          <CrudSimuladores />
+                          <RouteShell title="Cadastro de simuladores"><CrudSimuladores /></RouteShell>
                         </ProtectedRoute>
                       }
                     />
@@ -678,7 +697,7 @@ export default function App() {
                       path="/simuladores/cadastros/manobras"
                       element={
                         <ProtectedRoute>
-                          <CrudManobras />
+                          <RouteShell title="Cadastro de manobras"><CrudManobras /></RouteShell>
                         </ProtectedRoute>
                       }
                     />
@@ -686,7 +705,7 @@ export default function App() {
                       path="/simuladores/cadastros/modelos"
                       element={
                         <ProtectedRoute>
-                          <CrudModelos />
+                          <RouteShell title="Cadastro de modelos de aeronave"><CrudModelos /></RouteShell>
                         </ProtectedRoute>
                       }
                     />
@@ -694,7 +713,7 @@ export default function App() {
                       path="/simuladores/cadastros/categorias"
                       element={
                         <ProtectedRoute>
-                          <CrudCategorias />
+                          <RouteShell title="Categorias de manobras"><CrudCategorias /></RouteShell>
                         </ProtectedRoute>
                       }
                     />
@@ -702,7 +721,7 @@ export default function App() {
                       path="/simuladores/cadastros/tipos"
                       element={
                         <ProtectedRoute>
-                          <CrudTiposSessao />
+                          <RouteShell title="Tipos de sessão"><CrudTiposSessao /></RouteShell>
                         </ProtectedRoute>
                       }
                     />
@@ -710,7 +729,7 @@ export default function App() {
                       path="/simuladores/cadastros/instrutores"
                       element={
                         <ProtectedRoute>
-                          <CrudInstrutores />
+                          <RouteShell title="Cadastro de instrutores"><CrudInstrutores /></RouteShell>
                         </ProtectedRoute>
                       }
                     />
@@ -718,7 +737,7 @@ export default function App() {
                       path="/simuladores/cadastros/modelos-sessao"
                       element={
                         <ProtectedRoute>
-                          <CrudModelosSessao />
+                          <RouteShell title="Modelos de sessão"><CrudModelosSessao /></RouteShell>
                         </ProtectedRoute>
                       }
                     />
@@ -758,7 +777,7 @@ export default function App() {
                       path="/sistema"
                       element={
                         <ProtectedRoute>
-                          <SistemaPage />
+                          <RouteShell title="Sistema"><SistemaPage /></RouteShell>
                         </ProtectedRoute>
                       }
                     />
@@ -1278,6 +1297,9 @@ export default function App() {
                     <Route path="/verificar-certificado/:hash" element={<VerificarCertificado />} />
                     <Route path="/c/:hash" element={<ValidarCertificado />} />
                     <Route path="/validar/:hash" element={<ValidarCertificado />} />
+
+                    {/* Qualquer outra URL: página 404 (antes: tela em branco) */}
+                    <Route path="*" element={<NotFoundPage />} />
                     </Routes>
                   </Suspense>
                 </ErrorBoundary>

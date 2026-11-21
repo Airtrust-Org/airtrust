@@ -341,7 +341,7 @@ export default function LmsRelatorios() {
                 <div className="flex items-center justify-between gap-4 border-b border-slate-100 px-6 py-4 dark:border-slate-800">
                   <div className="flex items-center gap-3">
                     <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100">Prazos Vencendo</h2>
-                    <select
+                    <select aria-label="Prazos Vencendo"
                       value={dias}
                       onChange={(e) => setDias(Number(e.target.value))}
                       className="h-8 rounded-lg border border-slate-200 bg-white px-2 text-xs text-slate-700 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-300"

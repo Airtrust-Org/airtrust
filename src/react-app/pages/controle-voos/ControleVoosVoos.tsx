@@ -158,7 +158,7 @@ export default function ControleVoosVoos() {
                   </table>
                 </div>
               </div>
-              <p className="mt-2 text-xs text-slate-400 dark:text-slate-500">
+              <p className="mt-2 text-xs text-slate-500 dark:text-slate-500">
                 {voos.length} voo(s) em {formatDate(selectedDate)} — dados reais N1 · uso operacional interno
               </p>
             </>

@@ -228,10 +228,10 @@ export default function FormSessao({ isOpen, onClose, onSuccess }: Props) {
 
           {/* Manobras Planejadas */}
           <div className="mt-6">
-            <label className="block text-sm font-medium text-gray-700 mb-2">
+            <span id="formulariosessao-manobras-planejadas" className="block text-sm font-medium text-gray-700 mb-2">
               Manobras Planejadas
-            </label>
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-3 max-h-48 overflow-y-auto p-4 border border-gray-300 rounded-lg">
+            </span>
+            <div role="group" aria-labelledby="formulariosessao-manobras-planejadas" className="grid grid-cols-2 md:grid-cols-3 gap-3 max-h-48 overflow-y-auto p-4 border border-gray-300 rounded-lg">
               {manobras.map((man: any) => (
                 <label key={man.id} className="flex items-center gap-2 cursor-pointer">
                   <input

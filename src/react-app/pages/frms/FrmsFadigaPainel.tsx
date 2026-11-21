@@ -64,7 +64,7 @@ export default function FrmsFadigaPainel() {
               <Calendar className="h-4 w-4" />
               Data de referência
             </div>
-            <input
+            <input aria-label="Data de referência"
               type="date"
               value={data}
               onChange={(e) => setData(e.target.value)}

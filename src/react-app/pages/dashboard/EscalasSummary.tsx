@@ -35,7 +35,7 @@ export const EscalasSummary = React.memo(function EscalasSummary({ escalas }: Es
         </Link>
       </div>
       {escalasRelevantes.length === 0 ? (
-        <p className="px-5 py-4 text-xs text-slate-400 dark:text-slate-500">Nenhuma escala encontrada.</p>
+        <p className="px-5 py-4 text-xs text-slate-500 dark:text-slate-500">Nenhuma escala encontrada.</p>
       ) : (
         <div className="divide-y divide-slate-50 dark:divide-slate-700">
           {escalasRelevantes.map((e) => {

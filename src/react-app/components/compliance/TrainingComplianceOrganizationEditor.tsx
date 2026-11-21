@@ -345,7 +345,7 @@ export function TrainingComplianceOrganizationEditor() {
                   </td>
                   <td className="px-3 py-3">
                     <div className="flex items-center gap-2">
-                      <select
+                      <select aria-label="Herdar regra vigente"
                         value={row.direta?.obrigatoriedade || 'HERDAR'}
                         disabled={save.isPending}
                         onChange={(e) => save.mutate({ row, value: e.target.value })}

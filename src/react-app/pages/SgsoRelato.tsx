@@ -575,7 +575,7 @@ export default function SgsoRelato() {
         </div>
 
         <div className="mt-3 flex flex-wrap items-center gap-2">
-          <select
+          <select aria-label="Alterar status..."
             value={novoStatus}
             onChange={(e) => setNovoStatus(e.target.value)}
             className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"

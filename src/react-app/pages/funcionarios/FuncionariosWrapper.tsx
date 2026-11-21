@@ -93,7 +93,7 @@ export function FuncionariosWrapper() {
       </div>
 
       {/* Main Content */}
-      <main className="container mx-auto px-4 md:px-8 py-5">
+      <div className="container mx-auto px-4 md:px-8 py-5">
         {/* Tabs Navigation */}
         <Tabs defaultValue="lista" value={activeTab} onValueChange={setActiveTab}>
           <TabsList className="mb-4 border-b border-slate-200 -mx-4 px-4 md:-mx-8 md:px-8">
@@ -136,7 +136,7 @@ export function FuncionariosWrapper() {
             </div>
           </TabsContent>
         </Tabs>
-      </main>
+      </div>
 
       {/* Modal de Criar/Editar Funcionário */}
       {modalAberto && (

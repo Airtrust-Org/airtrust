@@ -1156,7 +1156,7 @@ export function FichasAvaliacaoContent({ mode = 'all' }: FichasAvaliacaoContentP
                 />
               </div>
 
-              <select
+              <select aria-label="Todos os Instrutores"
                 value={filtroInstrutor}
                 onChange={(e) => setFiltroInstrutor(e.target.value)}
                 className="shrink-0 px-2.5 py-1.5 bg-gray-50 border border-gray-200 rounded-lg text-xs font-medium text-gray-700 focus:outline-none focus:ring-2 focus:ring-primary/30 cursor-pointer transition-all"
@@ -1169,7 +1169,7 @@ export function FichasAvaliacaoContent({ mode = 'all' }: FichasAvaliacaoContentP
                 ))}
               </select>
 
-              <select
+              <select aria-label="Todos os Simuladores"
                 value={filtroSimulador}
                 onChange={(e) => setFiltroSimulador(e.target.value)}
                 className="shrink-0 px-2.5 py-1.5 bg-gray-50 border border-gray-200 rounded-lg text-xs font-medium text-gray-700 focus:outline-none focus:ring-2 focus:ring-primary/30 cursor-pointer transition-all"

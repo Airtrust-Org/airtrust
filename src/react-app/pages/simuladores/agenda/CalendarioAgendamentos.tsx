@@ -836,7 +836,7 @@ export default function CalendarioAgendamentos() {
           <div className={`font-semibold ${cores.text} truncate flex items-center gap-1`}>
             {agendamento.hora_inicio.substring(0, 5)}
             {Boolean(agendamento.modo_compartilhado) && (
-              <span className="rounded bg-indigo-100 px-1 text-[8px] font-semibold uppercase text-indigo-700">
+              <span className="rounded bg-indigo-100 px-1 text-xs font-semibold uppercase text-indigo-700">
                 Compartilhada
               </span>
             )}
@@ -946,7 +946,7 @@ export default function CalendarioAgendamentos() {
                         ? 'bg-primary text-white'
                         : isCurrentMonth
                           ? 'text-slate-900 dark:text-slate-100'
-                          : 'text-slate-400 dark:text-slate-500'
+                          : 'text-slate-500 dark:text-slate-500'
                     }`}
                   >
                     {day.getDate()}
@@ -1118,8 +1118,8 @@ export default function CalendarioAgendamentos() {
         <div className="flex flex-wrap items-center gap-2 sm:gap-3">
           {/* Busca compacta */}
           <div className="relative w-48 sm:w-56">
-            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400 dark:text-slate-500" />
-            <input
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-500 dark:text-slate-500" />
+            <input aria-label={t('sim.calendar.searchPlaceholder')}
               type="text"
               placeholder={t('sim.calendar.searchPlaceholder')}
               value={filtroBusca}
@@ -1129,7 +1129,7 @@ export default function CalendarioAgendamentos() {
           </div>
 
           {/* Filtro status */}
-          <select
+          <select aria-label="Filtrar por status"
             value={filtroStatus}
             onChange={(e) => setFiltroStatus(e.target.value)}
             className="cursor-pointer rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm font-medium text-gray-700 transition-all focus:border-transparent focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
@@ -1143,7 +1143,7 @@ export default function CalendarioAgendamentos() {
 
           {/* Filtro instrutor — oculto para readOnly (só veem as próprias sessões) */}
           {!readOnly && (
-            <select
+            <select aria-label="Filtrar por instrutor"
               value={filtroInstrutor}
               onChange={(e) => setFiltroInstrutor(e.target.value)}
               className="cursor-pointer rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm font-medium text-gray-700 transition-all focus:border-transparent focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"

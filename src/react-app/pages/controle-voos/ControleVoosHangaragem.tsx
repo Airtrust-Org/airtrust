@@ -38,10 +38,10 @@ export default function ControleVoosHangaragem() {
                     </div>
                   </div>
                   <dl className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4 text-sm">
-                    <div><dt className="text-xs font-medium text-slate-400 dark:text-slate-500">Data entrada</dt><dd className="text-slate-700 dark:text-slate-300 font-mono">{formatDateTime(hang.dataEntrada)}</dd></div>
-                    <div><dt className="text-xs font-medium text-slate-400 dark:text-slate-500">Data saída</dt><dd className="text-slate-700 dark:text-slate-300 font-mono">{formatDateTime(hang.dataSaida)}</dd></div>
-                    <div><dt className="text-xs font-medium text-slate-400 dark:text-slate-500">Motivo</dt><dd className="text-slate-700 dark:text-slate-300">{hang.motivo}</dd></div>
-                    <div><dt className="text-xs font-medium text-slate-400 dark:text-slate-500">Status</dt><dd><ControleVoosStatusBadge status={hang.status} /></dd></div>
+                    <div><dt className="text-xs font-medium text-slate-500 dark:text-slate-500">Data entrada</dt><dd className="text-slate-700 dark:text-slate-300 font-mono">{formatDateTime(hang.dataEntrada)}</dd></div>
+                    <div><dt className="text-xs font-medium text-slate-500 dark:text-slate-500">Data saída</dt><dd className="text-slate-700 dark:text-slate-300 font-mono">{formatDateTime(hang.dataSaida)}</dd></div>
+                    <div><dt className="text-xs font-medium text-slate-500 dark:text-slate-500">Motivo</dt><dd className="text-slate-700 dark:text-slate-300">{hang.motivo}</dd></div>
+                    <div><dt className="text-xs font-medium text-slate-500 dark:text-slate-500">Status</dt><dd><ControleVoosStatusBadge status={hang.status} /></dd></div>
                   </dl>
                 </div>
               );
@@ -55,7 +55,7 @@ export default function ControleVoosHangaragem() {
             </div>
           )}
 
-          <p className="mt-2 text-xs text-slate-400 dark:text-slate-500">{MOCK_HANGARAGENS.length} registros ilustrativos — manter fora do fluxo operacional ate schema real</p>
+          <p className="mt-2 text-xs text-slate-500 dark:text-slate-500">{MOCK_HANGARAGENS.length} registros ilustrativos — manter fora do fluxo operacional ate schema real</p>
         </ControleVoosPageShell>
       </div>
     </AppLayout>

@@ -99,7 +99,7 @@ export default function ControleVoosRdv() {
                   </table>
                 </div>
               </div>
-              <p className="mt-2 text-xs text-slate-400 dark:text-slate-500">
+              <p className="mt-2 text-xs text-slate-500 dark:text-slate-500">
                 {voos.length} voo(s) em {formatDate(selectedDate)} — clique em "Abrir RDV" para ver ou preencher o relatório operacional
               </p>
             </>

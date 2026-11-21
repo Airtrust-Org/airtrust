@@ -6,8 +6,8 @@
 
 :root {
   /* ========== 🎯 CORES PRIMÁRIAS ========== */
-  --color-primary: #10b77f;
-  --color-primary-dark: #0d9e6e;
+  --color-primary: #0a7a53;
+  --color-primary-dark: #086646;
   --color-primary-light: #e6f9f1;
 
   /* ========== ✅ CORES SEMÂNTICAS ========== */
@@ -94,11 +94,11 @@
 
   /* ========== 🎨 GRADIENTS ========== */
   --gradient-page-bg: linear-gradient(to bottom right, #f8fafc, #eff6ff);
-  --gradient-primary: linear-gradient(135deg, #10b77f 0%, #0d9e6e 100%);
+  --gradient-primary: linear-gradient(135deg, #0a7a53 0%, #086646 100%);
   --gradient-success: linear-gradient(135deg, #22c55e 0%, #16a34a 100%);
 
   /* ========== 🎨 CARD BORDERS ========== */
-  --card-border-primary: 2px solid #10b77f;
+  --card-border-primary: 2px solid #0a7a53;
   --card-border-success: 2px solid #22c55e;
   --card-border-warning: 2px solid #f59e0b;
   --card-border-error: 2px solid #ef4444;

@@ -548,10 +548,10 @@ export default function ModalNovaSituacao({
             </div>
 
             <div className="rounded-2xl border border-slate-200 bg-white p-4">
-              <label className="mb-2 block text-xs font-semibold uppercase tracking-wide text-slate-500">
+              <span id="modalnovasituacao-periodo" className="mb-2 block text-xs font-semibold uppercase tracking-wide text-slate-500">
                 Período
-              </label>
-              <div className="mb-3 space-y-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
+              </span>
+              <div role="group" aria-labelledby="modalnovasituacao-periodo" className="mb-3 space-y-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
                 {quinzenaFixaTripulante && (
                   <div className="flex flex-wrap items-center gap-2">
                     <span
@@ -566,7 +566,7 @@ export default function ModalNovaSituacao({
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <input
+                  <input aria-label="Data"
                     type="date"
                     value={dataInicio}
                     onChange={(event) => {
@@ -598,7 +598,7 @@ export default function ModalNovaSituacao({
                   )}
                 </div>
                 <div>
-                  <input
+                  <input aria-label="Data"
                     type="date"
                     value={dataFim}
                     onChange={(event) => {

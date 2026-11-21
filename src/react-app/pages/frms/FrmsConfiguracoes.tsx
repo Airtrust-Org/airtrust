@@ -955,7 +955,7 @@ function NotificacoesTab() {
                 </p>
               </div>
               <div className="relative">
-                <select
+                <select aria-label="Recebe alertas a partir de"
                   value={cfg.nivel_minimo}
                   onChange={(e) => handleChange(idx, 'nivel_minimo', e.target.value)}
                   className="appearance-none rounded-lg border border-gray-200 bg-white py-1.5 pl-3 pr-8 text-sm cursor-pointer"

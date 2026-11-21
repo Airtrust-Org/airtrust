@@ -182,7 +182,7 @@ export function VirtualTable<T extends { id?: string | number }>({
           const isSorted = sortColumn === col.key;
 
           return (
-            <div
+            <div tabIndex={0} onKeyDown={(e) => { if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); e.currentTarget.click(); } }}
               key={col.key}
               role="columnheader"
               style={{ width: col.width || 'auto' }}

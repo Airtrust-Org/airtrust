@@ -102,7 +102,7 @@ export default function AeronaveMultiSelect({
       )}
 
       {/* Click outside to close */}
-      {isOpen && <div className="fixed inset-0 z-0" onClick={() => setIsOpen(false)} />}
+      {isOpen && <div role="presentation" className="fixed inset-0 z-0" onClick={() => setIsOpen(false)} />}
     </div>
   );
 }

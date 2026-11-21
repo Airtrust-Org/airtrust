@@ -346,7 +346,7 @@ export function ModalCertificados({
           <div className="mt-2 flex flex-col gap-2 rounded-md bg-slate-50 p-3">
             <p className="text-xs font-medium text-slate-700">Upload de certificado existente</p>
             <div className="flex flex-col gap-2">
-              <input
+              <input aria-label="Selecionar arquivo"
                 type="file"
                 accept=".pdf,.jpg,.jpeg,image/jpeg,application/pdf"
                 onChange={(e) => {

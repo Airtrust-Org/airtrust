@@ -102,13 +102,13 @@ export const Calendar: React.FC<CalendarProps> = ({ events, onEventClick, onDate
 
           {/* Filtros */}
           <div className="flex items-center gap-3">
-            <select className="px-3 py-2 border border-slate-300 rounded-md text-sm focus-visible:outline-none focus:ring-2 focus:ring-primary/50 bg-white">
+            <select aria-label="Todos Simuladores" className="px-3 py-2 border border-slate-300 rounded-md text-sm focus-visible:outline-none focus:ring-2 focus:ring-primary/50 bg-white">
               <option value="">Todos Simuladores</option>
               <option value="A320">A320 FFS</option>
               <option value="B737">B737 MAX FFS</option>
               <option value="E190">E190-E2 FTD</option>
             </select>
-            <select className="px-3 py-2 border border-slate-300 rounded-md text-sm focus-visible:outline-none focus:ring-2 focus:ring-primary/50 bg-white">
+            <select aria-label="Todos Instrutores" className="px-3 py-2 border border-slate-300 rounded-md text-sm focus-visible:outline-none focus:ring-2 focus:ring-primary/50 bg-white">
               <option value="">Todos Instrutores</option>
             </select>
           </div>
@@ -137,7 +137,7 @@ export const Calendar: React.FC<CalendarProps> = ({ events, onEventClick, onDate
           const isTodayDate = isToday(day);
 
           return (
-            <div
+            <div role="button" tabIndex={0} onKeyDown={(e) => { if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); e.currentTarget.click(); } }}
               key={i}
               onClick={() => onDateClick?.(day)}
               className={`
@@ -171,7 +171,7 @@ export const Calendar: React.FC<CalendarProps> = ({ events, onEventClick, onDate
               {/* Eventos do Dia */}
               <div className="space-y-1">
                 {dayEvents.slice(0, 3).map((event) => (
-                  <div
+                  <div role="button" tabIndex={0} onKeyDown={(e) => { if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); e.currentTarget.click(); } }}
                     key={event.id}
                     onClick={(e) => {
                       e.stopPropagation();

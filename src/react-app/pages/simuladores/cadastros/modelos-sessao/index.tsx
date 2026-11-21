@@ -886,7 +886,7 @@ export default function ModelosSessaoPage({ embedded = false, onBack }: ModelosS
       {modelosFiltrados.length === 0 && (
         <div className="flex flex-col items-center justify-center py-16 text-center">
           <div className="flex items-center justify-center w-16 h-16 rounded-full bg-gray-100 dark:bg-slate-800 mb-4">
-            <Inbox className="w-8 h-8 text-gray-400 dark:text-slate-500" />
+            <Inbox className="w-8 h-8 text-gray-500 dark:text-slate-500" />
           </div>
           <h3 className="text-lg font-semibold text-gray-900 dark:text-slate-100 mb-1">
             {modelos.length === 0
@@ -904,7 +904,7 @@ export default function ModelosSessaoPage({ embedded = false, onBack }: ModelosS
       {/* Modal Principal */}
       {modalAberto && (
         <ModalOverlay className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 animate-fade-in" onClick={() => setModalAberto(false)}>
-          <div className="bg-white dark:bg-slate-900 rounded-lg max-w-3xl w-full max-h-[90vh] overflow-y-auto animate-scale-in" onClick={(e) => e.stopPropagation()}>
+          <div role="presentation" className="bg-white dark:bg-slate-900 rounded-lg max-w-3xl w-full max-h-[90vh] overflow-y-auto animate-scale-in" onClick={(e) => e.stopPropagation()}>
             <div className="p-6 border-b border-gray-200 dark:border-slate-700 sticky top-0 bg-white dark:bg-slate-900">
               <h3 className="text-lg font-semibold text-gray-900 dark:text-slate-100">{modoEdicao ? 'Editar' : 'Novo'} Modelo</h3>
             </div>
@@ -949,10 +949,10 @@ export default function ModelosSessaoPage({ embedded = false, onBack }: ModelosS
 
               {/* Tipo de dispositivo: Simulador ou Aeronave */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">
+                <span id="index-dispositivo-2" className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">
                   Dispositivo <span className="text-red-500">*</span>
-                </label>
-                <div className="flex gap-3">
+                </span>
+                <div role="group" aria-labelledby="index-dispositivo-2" className="flex gap-3">
                   {(['SIMULADOR', 'AERONAVE'] as TipoDispositivo[]).map((opt) => (
                     <button
                       key={opt}
@@ -1069,12 +1069,12 @@ export default function ModelosSessaoPage({ embedded = false, onBack }: ModelosS
 
                   {checksCompativeis.length > 0 && (
                     <div>
-                      <label className="block text-sm font-semibold text-green-900 dark:text-green-300 mb-2">
+                      <span className="block text-sm font-semibold text-green-900 dark:text-green-300 mb-2">
                         Checks FAP Padrão desta Sessão{' '}
                         <span className="font-normal text-green-700 dark:text-green-400">
                           ({checksCompativeis.length})
                         </span>
-                      </label>
+                      </span>
                       <p className="text-xs text-green-700 dark:text-green-400 mb-2">
                         Estes checks FAP serão pré-selecionados ao criar uma sessão com este modelo.
                         As FAPs aprovadas também geram qualificações automáticas.
@@ -1117,9 +1117,9 @@ export default function ModelosSessaoPage({ embedded = false, onBack }: ModelosS
                     <div className="mt-4 p-4 bg-red-50 dark:bg-red-500/10 border border-red-200 dark:border-red-500/30 rounded-lg">
                       <div className="flex justify-between items-start">
                         <div>
-                          <label className="block text-sm font-semibold text-red-900 dark:text-red-300 mb-1">
+                          <span className="block text-sm font-semibold text-red-900 dark:text-red-300 mb-1">
                             Atenção: Checks Incompatíveis Detectados
-                          </label>
+                          </span>
                           <p className="text-xs text-red-700 dark:text-red-400 mb-2">
                             O modelo de aeronave selecionado ({tipoAeronave}) não é compatível com os seguintes checks já vinculados:
                           </p>
@@ -1243,7 +1243,7 @@ export default function ModelosSessaoPage({ embedded = false, onBack }: ModelosS
       {/* Modal Manobras */}
       {modalManobras && (
         <ModalOverlay className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60] p-4 animate-fade-in" onClick={() => setModalManobras(false)}>
-          <div className="bg-white dark:bg-slate-900 rounded-lg max-w-2xl w-full max-h-[80vh] overflow-hidden flex flex-col animate-scale-in" onClick={(e) => e.stopPropagation()}>
+          <div role="presentation" className="bg-white dark:bg-slate-900 rounded-lg max-w-2xl w-full max-h-[80vh] overflow-hidden flex flex-col animate-scale-in" onClick={(e) => e.stopPropagation()}>
             <div className="p-6 border-b border-gray-200 dark:border-slate-700">
               <h3 className="text-lg font-semibold text-gray-900 dark:text-slate-100">Adicionar Manobras</h3>
             </div>

@@ -272,7 +272,7 @@ function AbaQuinzenas({ ano, setAno }: { ano: number; setAno: (a: number) => voi
                     <td className="px-4 py-3">
                       {edit1 ? (
                         <div className="flex items-center gap-1.5 flex-wrap">
-                          <input
+                          <input aria-label="Data"
                             type="date"
                             value={editando[key1].inicio}
                             onChange={(e) =>
@@ -284,7 +284,7 @@ function AbaQuinzenas({ ano, setAno }: { ano: number; setAno: (a: number) => voi
                             className="border border-fuchsia-300 rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-fuchsia-300 bg-white"
                           />
                           <span className="text-slate-400 text-xs">→</span>
-                          <input
+                          <input aria-label="Data"
                             type="date"
                             value={editando[key1].fim}
                             onChange={(e) =>
@@ -339,7 +339,7 @@ function AbaQuinzenas({ ano, setAno }: { ano: number; setAno: (a: number) => voi
                     <td className="px-4 py-3">
                       {edit2 ? (
                         <div className="flex items-center gap-1.5 flex-wrap">
-                          <input
+                          <input aria-label="Data"
                             type="date"
                             value={editando[key2].inicio}
                             onChange={(e) =>
@@ -351,7 +351,7 @@ function AbaQuinzenas({ ano, setAno }: { ano: number; setAno: (a: number) => voi
                             className="border border-amber-300 rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-amber-300 bg-white"
                           />
                           <span className="text-slate-400 text-xs">→</span>
-                          <input
+                          <input aria-label="Data"
                             type="date"
                             value={editando[key2].fim}
                             onChange={(e) =>

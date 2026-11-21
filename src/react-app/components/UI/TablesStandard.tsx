@@ -276,7 +276,7 @@ export const GlobalTable: React.FC<GlobalTableProps> = ({
               <div className="flex-1 min-w-64">
                 <div className="relative">
                   <Search className="absolute left-3 top-3 w-4 h-4 text-neutral-400" />
-                  <input
+                  <input aria-label={searchPlaceholder}
                     type="text"
                     placeholder={searchPlaceholder}
                     value={searchQuery}

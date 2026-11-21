@@ -127,7 +127,7 @@ export default function SeletorFuncionario({ value, onChange, required = false, 
 
           {showDropdown && (
             <>
-              <div
+              <div role="presentation"
                 className="fixed inset-0 z-10"
                 onClick={() => setShowDropdown(false)}
               />

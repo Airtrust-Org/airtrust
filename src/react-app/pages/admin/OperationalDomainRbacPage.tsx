@@ -371,6 +371,7 @@ function ClassificationTable(props: {
                 <td className="py-2 pr-4">{itemLabel(item)}</td>
                 <td className="py-2 pr-4">
                   <select
+                    aria-label={`Domínio operacional de ${itemLabel(item)}`}
                     value={value}
                     disabled={disabled}
                     onChange={(e) =>

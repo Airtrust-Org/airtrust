@@ -112,14 +112,14 @@ export default function DetalhesSessao() {
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
               <div>
-                <label className="block text-sm font-medium text-gray-600 mb-1">Simulador</label>
+                <span className="block text-sm font-medium text-gray-600 mb-1">Simulador</span>
                 <p className="text-lg font-semibold text-gray-900">{sessao.simulador_nome}</p>
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-600 mb-1">
+                <span className="block text-sm font-medium text-gray-600 mb-1">
                   Data e Horário
-                </label>
+                </span>
                 <p className="text-lg font-semibold text-gray-900">
                   {new Date(sessao.data).toLocaleDateString('pt-BR')} • {sessao.hora_inicio} -{' '}
                   {sessao.hora_fim}
@@ -127,7 +127,7 @@ export default function DetalhesSessao() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-600 mb-1">Instrutor</label>
+                <span className="block text-sm font-medium text-gray-600 mb-1">Instrutor</span>
                 <p className="text-lg font-semibold text-gray-900">
                   {sessao.instrutor.nome}
                   <span className="text-sm text-gray-500 ml-2">({sessao.instrutor.matricula})</span>
@@ -135,9 +135,9 @@ export default function DetalhesSessao() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-600 mb-1">
+                <span className="block text-sm font-medium text-gray-600 mb-1">
                   Equipamento Simulado
-                </label>
+                </span>
                 <p className="text-lg font-semibold text-gray-900">
                   {sessao.aeronave_simulada || '-'}
                 </p>
@@ -146,7 +146,7 @@ export default function DetalhesSessao() {
 
             {sessao.objetivos && (
               <div className="mt-6">
-                <label className="block text-sm font-medium text-gray-600 mb-1">Objetivos</label>
+                <span className="block text-sm font-medium text-gray-600 mb-1">Objetivos</span>
                 <p className="text-gray-900">{sessao.objetivos}</p>
               </div>
             )}

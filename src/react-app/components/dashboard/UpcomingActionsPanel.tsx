@@ -127,7 +127,7 @@ function ActionItem({
     >
       {/* Checkbox */}
       {onMarkComplete && (
-        <input
+        <input aria-label="Marcar ação como concluída"
           type="checkbox"
           checked={action.completed || false}
           onChange={() => onMarkComplete(action.id)}

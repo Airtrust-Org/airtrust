@@ -1317,7 +1317,7 @@ export default function PlanejamentoSimuladoresV3() {
             Aeronave
             <div className="relative mt-1">
               <Plane className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-              <select
+              <select aria-label="Todas as aeronaves"
                 className={`${inputClass} w-full pl-9`}
                 value={equipment}
                 onChange={(event) => setEquipment(event.target.value)}
@@ -1424,7 +1424,7 @@ export default function PlanejamentoSimuladoresV3() {
                 >
                   <div className="flex items-center justify-between gap-3">
                     <strong>{equipmentLabel(code)}</strong>
-                    <select
+                    <select aria-label="Todos os dias"
                       className={inputClass}
                       value={rule.mode}
                       onChange={(e) =>

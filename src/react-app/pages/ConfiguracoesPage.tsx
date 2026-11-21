@@ -219,10 +219,10 @@ export default function ConfiguracoesPage() {
                     </div>
 
                     <div>
-                      <label className="block text-sm font-medium text-slate-700 mb-2">
+                      <span id="configuracoespage-eventos-monitorados" className="block text-sm font-medium text-slate-700 mb-2">
                         Eventos Monitorados
-                      </label>
-                      <div className="flex flex-wrap gap-2">
+                      </span>
+                      <div role="group" aria-labelledby="configuracoespage-eventos-monitorados" className="flex flex-wrap gap-2">
                         {[
                           'user.created',
                           'user.updated',

@@ -259,7 +259,7 @@ export default function CrudTiposSessao({ embedded = false, onBack }: Props = {}
       {tipos.length === 0 && (
         <div className="flex flex-col items-center justify-center py-16 text-center">
           <div className="flex items-center justify-center w-16 h-16 rounded-full bg-gray-100 dark:bg-slate-800 mb-4">
-            <Inbox className="w-8 h-8 text-gray-400 dark:text-slate-500" />
+            <Inbox className="w-8 h-8 text-gray-500 dark:text-slate-500" />
           </div>
           <h3 className="text-lg font-semibold text-gray-900 dark:text-slate-100 mb-1">Nenhum tipo de sessão cadastrado</h3>
           <p className="text-sm text-gray-500 dark:text-slate-400 max-w-md">Cadastre tipos de sessão para classificar os modelos de treinamento.</p>
@@ -269,7 +269,7 @@ export default function CrudTiposSessao({ embedded = false, onBack }: Props = {}
       {/* Modal */}
       {showModal && (
         <ModalOverlay className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 animate-fade-in" onClick={fecharModal}>
-          <div className="bg-white dark:bg-slate-900 rounded-lg max-w-md w-full animate-scale-in" onClick={(e) => e.stopPropagation()}>
+          <div role="presentation" className="bg-white dark:bg-slate-900 rounded-lg max-w-md w-full animate-scale-in" onClick={(e) => e.stopPropagation()}>
             <div className="p-6 border-b border-gray-200 dark:border-slate-700">
               <h3 className="text-lg font-semibold text-gray-900 dark:text-slate-100">
                 {editando ? 'Editar' : 'Novo'} Tipo de Sessão

@@ -1296,7 +1296,7 @@ function PendingFilters({
 }) {
   return (
     <div className="grid gap-2 rounded-xl border border-slate-200 bg-slate-50/60 p-3 sm:grid-cols-[180px_150px_auto]">
-      <select
+      <select aria-label="Todas as situações"
         value={status}
         onChange={(event) => setStatus(event.target.value)}
         className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
@@ -1307,7 +1307,7 @@ function PendingFilters({
         <option value="VENCENDO">Vencendo</option>
         <option value="EM_ANDAMENTO">Em andamento</option>
       </select>
-      <select
+      <select aria-label="Todos os prazos"
         value={windowDays}
         onChange={(event) => setWindowDays(event.target.value)}
         className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"

@@ -177,42 +177,42 @@ const VisualizarFicha: React.FC = () => {
         
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           <div>
-            <label className="text-sm font-medium text-gray-500">Tripulante</label>
+            <span className="text-sm font-medium text-gray-500">Tripulante</span>
             <p className="text-gray-900">{ficha.aluno_nome}</p>
           </div>
           <div>
-            <label className="text-sm font-medium text-gray-500">Matrícula</label>
+            <span className="text-sm font-medium text-gray-500">Matrícula</span>
             <p className="text-gray-900">{ficha.aluno_matricula}</p>
           </div>
           <div>
-            <label className="text-sm font-medium text-gray-500">Simulador</label>
+            <span className="text-sm font-medium text-gray-500">Simulador</span>
             <p className="text-gray-900">{ficha.simulador_nome}</p>
           </div>
           <div>
-            <label className="text-sm font-medium text-gray-500">Função na Sessão</label>
+            <span className="text-sm font-medium text-gray-500">Função na Sessão</span>
             <p className="text-gray-900">{ficha.funcao_na_sessao}</p>
           </div>
           <div>
-            <label className="text-sm font-medium text-gray-500">Modelo</label>
+            <span className="text-sm font-medium text-gray-500">Modelo</span>
             <p className="text-gray-900">{ficha.template_nome}</p>
           </div>
           <div>
-            <label className="text-sm font-medium text-gray-500">Ciclo</label>
+            <span className="text-sm font-medium text-gray-500">Ciclo</span>
             <p className="text-gray-900">Ciclo {ficha.ciclo_executado}</p>
           </div>
           <div>
-            <label className="text-sm font-medium text-gray-500">Data/Hora</label>
+            <span className="text-sm font-medium text-gray-500">Data/Hora</span>
             <p className="text-gray-900">
               {new Date(ficha.data_inicio).toLocaleString('pt-BR')}
             </p>
           </div>
           <div>
-            <label className="text-sm font-medium text-gray-500">Instrutor</label>
+            <span className="text-sm font-medium text-gray-500">Instrutor</span>
             <p className="text-gray-900">{ficha.instrutor_nome}</p>
           </div>
           {ficha.checador_nome && (
             <div>
-              <label className="text-sm font-medium text-gray-500">Checador</label>
+              <span className="text-sm font-medium text-gray-500">Checador</span>
               <p className="text-gray-900">{ficha.checador_nome}</p>
             </div>
           )}

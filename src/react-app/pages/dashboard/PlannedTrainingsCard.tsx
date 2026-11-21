@@ -79,7 +79,7 @@ export const PlannedTrainingsCard = React.memo(function PlannedTrainingsCard({ t
       </div>
 
       {sorted.length === 0 ? (
-        <p className="px-5 py-8 text-xs text-slate-400 dark:text-slate-500">Nenhum treinamento planejado ativo.</p>
+        <p className="px-5 py-8 text-xs text-slate-500 dark:text-slate-500">Nenhum treinamento planejado ativo.</p>
       ) : (
         <div className="divide-y divide-slate-50 dark:divide-slate-700">
           {sorted.map((item) => {

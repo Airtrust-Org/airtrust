@@ -338,7 +338,7 @@ function ControleVoosDashboardContent({ edbShadowEnabled }: { edbShadowEnabled: 
             </>
           )}
 
-          <p className="mt-5 text-xs text-slate-400 dark:text-slate-500">
+          <p className="mt-5 text-xs text-slate-500 dark:text-slate-500">
             Uso operacional interno — não regulado. Não substitui Diário de Bordo, eDB, SDRMe ou registro ANAC.
           </p>
         </ControleVoosPageShell>

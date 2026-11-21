@@ -142,7 +142,7 @@ export default function UploadCertificado({ qualificacaoId, onSuccess, onClose }
         {/* Body */}
         <div className="p-6">
           {/* Drag & Drop Area */}
-          <div
+          <div role="button" tabIndex={0} aria-label="Selecionar arquivo do certificado" onKeyDown={(e) => { if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); e.currentTarget.click(); } }}
             className={`
               border-2 border-dashed rounded-lg p-8
               ${dragActive ? 'border-primary bg-primary/10' : 'border-gray-300'}

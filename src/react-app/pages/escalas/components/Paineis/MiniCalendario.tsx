@@ -137,15 +137,15 @@ export default function MiniCalendario({
       <div className="flex items-center gap-2 mt-2 pt-2 border-t border-gray-50">
         <div className="flex items-center gap-1">
           <div className="w-2 h-2 rounded-sm bg-blue-50" />
-          <span className="text-[8px] text-gray-400">1-2</span>
+          <span className="text-xs text-gray-400">1-2</span>
         </div>
         <div className="flex items-center gap-1">
           <div className="w-2 h-2 rounded-sm bg-blue-200" />
-          <span className="text-[8px] text-gray-400">3-4</span>
+          <span className="text-xs text-gray-400">3-4</span>
         </div>
         <div className="flex items-center gap-1">
           <div className="w-2 h-2 rounded-sm bg-blue-500" />
-          <span className="text-[8px] text-gray-400">5+</span>
+          <span className="text-xs text-gray-400">5+</span>
         </div>
       </div>
     </div>

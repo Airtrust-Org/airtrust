@@ -32,9 +32,30 @@ export default tseslint.config(
     ignores: ['**/*.test.tsx', '**/__tests__/**'],
     plugins: { 'jsx-a11y': jsxA11y },
     rules: {
+      // Mantém as opções das regras recomendadas (ex.: onLoad permitido em img/iframe), só rebaixa para warn.
       ...Object.fromEntries(
-        Object.keys(jsxA11y.flatConfigs.recommended.rules).map((rule) => [rule, 'warn']),
+        Object.entries(jsxA11y.flatConfigs.recommended.rules).map(([rule, config]) => [
+          rule,
+          Array.isArray(config) ? ['warn', ...config.slice(1)] : 'warn',
+        ]),
       ),
+      'jsx-a11y/label-has-associated-control': [
+        'warn',
+        {
+          assert: 'either',
+          depth: 4,
+          controlComponents: [
+            'Input',
+            'Select',
+            'TextArea',
+            'TimeInput',
+            'FuncionarioCombobox',
+            'SeletorFuncionario',
+            'AeronaveSelect',
+            'AeronaveMultiSelect',
+          ],
+        },
+      ],
       'jsx-a11y/label-has-for': 'off',
       'jsx-a11y/control-has-associated-label': 'off',
       'jsx-a11y/no-autofocus': 'off',

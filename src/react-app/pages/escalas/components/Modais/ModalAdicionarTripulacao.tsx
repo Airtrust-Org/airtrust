@@ -1093,7 +1093,7 @@ export default function ModalAdicionarTripulacao({
                   <Plane className="h-4 w-4" />
                   <span className="text-xs font-semibold uppercase tracking-wide">Equipamento</span>
                 </div>
-                <select
+                <select aria-label="Selecione o equipamento"
                   value={aeronaveId}
                   onChange={(event) => setAeronaveId(event.target.value)}
                   disabled={modoEdicao}
@@ -1251,7 +1251,7 @@ export default function ModalAdicionarTripulacao({
                     </div>
                     <div className="grid gap-3 grid-cols-2">
                       <div>
-                        <input
+                        <input aria-label="Data"
                           type="date"
                           value={dataInicio}
                           onChange={(event) => {
@@ -1267,7 +1267,7 @@ export default function ModalAdicionarTripulacao({
                         )}
                       </div>
                       <div>
-                        <input
+                        <input aria-label="Data"
                           type="date"
                           value={dataFim}
                           onChange={(event) => {

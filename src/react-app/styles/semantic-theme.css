@@ -29,8 +29,8 @@
   --at-focus: #0d9e6e;
 
   /* Brand action color is stable across themes. */
-  --at-accent: #0d9e6e;
-  --at-accent-hover: #0b855e;
+  --at-accent: #0a7a53;
+  --at-accent-hover: #086646;
   --at-accent-soft: #e7f7f1;
 
   /* Operational semantics. Green is never an attention state. */
@@ -211,6 +211,23 @@ body {
 .at-status-info {
   background: var(--at-info-soft);
   color: var(--at-info);
+}
+
+/*
+ * O verde primário foi escurecido para atingir contraste AA com texto branco
+ * (botões) e sobre fundos claros. Sobre superfícies escuras, texto/ícone/borda
+ * em `primary` voltam ao verde claro do tema (`--at-accent`), salvo variante
+ * `dark:` explícita.
+ */
+.dark .text-primary:not([class*='dark:text-']),
+.dark .text-primary-500:not([class*='dark:text-']),
+.dark .text-primary-600:not([class*='dark:text-']),
+.dark .text-primary-700:not([class*='dark:text-']) {
+  color: var(--at-accent);
+}
+
+.dark .hover\:text-primary:hover:not([class*='dark:hover:text-']) {
+  color: var(--at-accent-hover);
 }
 
 /*

@@ -465,7 +465,7 @@ export function LmsMetricCard({
     <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-900">
       <div className="flex items-start justify-between gap-4">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-400 dark:text-slate-500">
+          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500 dark:text-slate-500">
             {title}
           </p>
           <p className="mt-2 text-2xl font-semibold tracking-tight text-slate-950 dark:text-slate-100">{value}</p>
@@ -533,7 +533,7 @@ export function LmsEmptyState({
 }) {
   return (
     <div className="flex min-h-[220px] flex-col items-center justify-center rounded-xl border border-dashed border-slate-300 bg-white px-6 py-10 text-center shadow-sm dark:border-slate-700 dark:bg-slate-900">
-      <div className="mb-4 rounded-2xl bg-slate-100 p-4 text-slate-400 dark:bg-slate-800 dark:text-slate-500">{icon}</div>
+      <div className="mb-4 rounded-2xl bg-slate-100 p-4 text-slate-500 dark:bg-slate-800 dark:text-slate-500">{icon}</div>
       <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100">{title}</h3>
       <p className="mt-2 max-w-md text-sm leading-6 text-slate-500 dark:text-slate-400">{description}</p>
       {action ? <div className="mt-5">{action}</div> : null}

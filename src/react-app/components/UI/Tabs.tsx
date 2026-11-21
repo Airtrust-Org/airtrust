@@ -88,7 +88,7 @@ export function TabsList({ children, className }: { children: ReactNode; classNa
   };
 
   return (
-    <div
+    <div tabIndex={-1}
       role="tablist"
       aria-orientation="horizontal"
       onKeyDown={handleKeyDown}

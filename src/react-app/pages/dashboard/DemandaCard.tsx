@@ -33,7 +33,7 @@ export const DemandaCard = React.memo(function DemandaCard({ metrics }: DemandaC
         </Link>
       </div>
       {totalDemanda === 0 ? (
-        <p className="px-5 py-6 text-xs text-slate-400 dark:text-slate-500">
+        <p className="px-5 py-6 text-xs text-slate-500 dark:text-slate-500">
           Nenhuma demanda de treinamento programada nos próximos 90 dias.
         </p>
       ) : (
@@ -49,7 +49,7 @@ export const DemandaCard = React.memo(function DemandaCard({ metrics }: DemandaC
               </div>
             </Link>
           ))}
-          <p className="pt-1 text-xs italic text-slate-400 dark:text-slate-500">
+          <p className="pt-1 text-xs italic text-slate-500 dark:text-slate-500">
             Baseado no volume operacional capturado pelo AirTrust.
           </p>
         </div>

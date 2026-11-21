@@ -125,10 +125,10 @@ export default function ModalAdicionarEvento({
       <form onSubmit={handleSubmit} className="space-y-4">
         {/* Tipo de Evento */}
         <div>
-          <label className="block text-xs font-semibold text-slate-700 mb-2">
+          <span id="modaladicionarevento-tipo-de-evento" className="block text-xs font-semibold text-slate-700 mb-2">
             Tipo de Evento *
-          </label>
-          <div className="grid grid-cols-4 gap-2">
+          </span>
+          <div role="group" aria-labelledby="modaladicionarevento-tipo-de-evento" className="grid grid-cols-4 gap-2">
             {tiposAtivos.map((tipo) => {
               const conf = configMap[tipo];
               const ativo = tipoEvento === tipo;
@@ -182,8 +182,8 @@ export default function ModalAdicionarEvento({
 
         {/* Turno */}
         <div>
-          <label className="block text-xs font-semibold text-slate-700 mb-1.5">Turno</label>
-          <div className="flex gap-2">
+          <span id="modaladicionarevento-turno" className="block text-xs font-semibold text-slate-700 mb-1.5">Turno</span>
+          <div role="group" aria-labelledby="modaladicionarevento-turno" className="flex gap-2">
             {TURNOS.map((t) => (
               <button
                 key={t.value}

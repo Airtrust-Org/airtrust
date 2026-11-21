@@ -504,7 +504,7 @@ export default function CurriculosVooPage({ embedded = false, onBack }: Curricul
 
               <div className="rounded-md border border-gray-200 bg-gray-50 p-3 dark:border-slate-700 dark:bg-slate-800/50">
                 <div className="flex flex-col gap-2 sm:flex-row">
-                  <select
+                  <select aria-label="Adicionar modelo de sessão..."
                     value={modeloParaAdicionar}
                     onChange={(event) => setModeloParaAdicionar(event.target.value)}
                     className="min-w-0 flex-1 rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"

@@ -18,15 +18,15 @@ export default function Button({
   ...props
 }: ButtonProps) {
   const baseClasses =
-    'inline-flex items-center justify-center font-medium rounded-lg transition-all duration-200 focus-visible:outline-none focus:ring-2 focus:ring-offset-2';
+    'inline-flex items-center justify-center font-medium rounded-lg transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2';
 
   const variants = {
-    primary: 'bg-primary text-white hover:bg-primary/90 focus:ring-primary/30 shadow-sm',
+    primary: 'bg-primary text-white hover:bg-primary/90 focus-visible:ring-primary/30 shadow-sm',
     secondary:
-      'bg-white text-slate-700 border border-slate-300 hover:bg-slate-50 focus:ring-slate-500 shadow-sm',
+      'bg-white text-slate-700 border border-slate-300 hover:bg-slate-50 focus-visible:ring-slate-500 shadow-sm',
     danger:
-      'bg-gradient-to-r from-red-500 to-red-600 text-white hover:from-red-600 hover:to-red-700 focus:ring-red-500 shadow-lg shadow-red-500/25',
-    ghost: 'text-slate-700 hover:bg-slate-100 focus:ring-slate-500',
+      'bg-gradient-to-r from-red-500 to-red-600 text-white hover:from-red-600 hover:to-red-700 focus-visible:ring-red-500 shadow-lg shadow-red-500/25',
+    ghost: 'text-slate-700 hover:bg-slate-100 focus-visible:ring-slate-500',
   };
 
   const sizes = {
@@ -39,9 +39,10 @@ export default function Button({
     <button
       className={`${baseClasses} ${variants[variant]} ${sizes[size]} ${loading || disabled ? 'opacity-60 cursor-not-allowed' : ''} ${className}`}
       disabled={loading || disabled}
+      aria-busy={loading || undefined}
       {...props}
     >
-      {loading && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+      {loading && <Loader2 className="w-4 h-4 mr-2 animate-spin motion-reduce:animate-none" aria-hidden="true" />}
       {children}
     </button>
   );

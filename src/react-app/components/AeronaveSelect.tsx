@@ -12,6 +12,7 @@ export default function AeronaveSelect({ value, onChange, className, placeholder
 
   return (
     <select
+      aria-label={placeholder}
       value={value}
       onChange={(e) => onChange(e.target.value)}
       className={className}

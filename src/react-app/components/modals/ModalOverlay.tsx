@@ -48,7 +48,10 @@ export function ModalOverlay({ children, ...rest }: HTMLAttributes<HTMLDivElemen
     const dialog = findDialogElement(overlayRef.current);
     dialogRef.current = dialog;
     if (!dialog) return;
-    if (!dialog.hasAttribute('role')) dialog.setAttribute('role', 'dialog');
+    // `role="presentation"` estático (usado só para satisfazer o lint de painéis que
+    // interrompem a propagação do clique) não é um papel real: vira diálogo.
+    const currentRole = dialog.getAttribute('role');
+    if (!currentRole || currentRole === 'presentation') dialog.setAttribute('role', 'dialog');
     if (!dialog.hasAttribute('aria-modal')) dialog.setAttribute('aria-modal', 'true');
     if (!dialog.hasAttribute('aria-labelledby') && !dialog.hasAttribute('aria-label')) {
       const heading = dialog.querySelector<HTMLElement>('h1,h2,h3,h4');

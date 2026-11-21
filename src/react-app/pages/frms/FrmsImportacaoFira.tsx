@@ -924,7 +924,7 @@ export default function FrmsImportacaoFira() {
           {/* ── STEP 1: Upload ── */}
           {step === 1 && (
             <div className="space-y-4">
-              <div
+              <div role="button" tabIndex={0} aria-label="Selecionar arquivo FIRA" onKeyDown={(e) => { if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); e.currentTarget.click(); } }}
                 onDragOver={handleDragOver}
                 onDragLeave={handleDragLeave}
                 onDrop={handleDrop}
@@ -937,7 +937,7 @@ export default function FrmsImportacaoFira() {
                       : 'border-gray-300 bg-gray-50 hover:border-blue-400 hover:bg-blue-50/40'
                 }`}
               >
-                <input
+                <input aria-label="Selecionar arquivo"
                   ref={fileInputRef}
                   type="file"
                   multiple
@@ -1182,7 +1182,7 @@ export default function FrmsImportacaoFira() {
                   <thead>
                     <tr className="border-b border-gray-100 bg-gray-50 text-xs text-gray-500 uppercase tracking-wider">
                       <th scope="col" className="w-8 py-3 pl-4 text-left">
-                        <input
+                        <input aria-label="Selecionar todas as linhas"
                           type="checkbox"
                           checked={preview.linhas
                             .filter((l) => l.situacao !== 'DIA_VAZIO')
@@ -1220,7 +1220,7 @@ export default function FrmsImportacaoFira() {
                           className={`transition-colors ${disabled ? 'opacity-40' : checked ? 'bg-blue-50/30' : 'hover:bg-gray-50'}`}
                         >
                           <td className="py-2.5 pl-4">
-                            <input
+                            <input aria-label="Selecionar linha"
                               type="checkbox"
                               disabled={disabled}
                               checked={checked}

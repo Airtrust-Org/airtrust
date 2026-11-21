@@ -323,7 +323,7 @@ export default function UploadDocumentoModal({
                 {subtipoLabel(tipoDocumento)} <span className="text-red-500">*</span>
               </label>
               {usaSubtipoLivre ? (
-                <input
+                <input aria-label={subtipoLabel(tipoDocumento)}
                   type="text"
                   value={subTipo}
                   onChange={(e) => setSubTipo(e.target.value)}
@@ -338,7 +338,7 @@ export default function UploadDocumentoModal({
                   disabled={uploading}
                 />
               ) : (
-                <select
+                <select aria-label={subtipoLabel(tipoDocumento)}
                   value={subTipo}
                   onChange={(e) => setSubTipo(e.target.value)}
                   className="w-full rounded-lg border border-slate-300 px-4 py-2 focus:border-primary focus:ring-2 focus:ring-primary dark:border-slate-700 dark:bg-slate-950"
@@ -364,7 +364,7 @@ export default function UploadDocumentoModal({
                 <span className="font-normal text-slate-400">(opcional)</span>
               )}
             </label>
-            <input
+            <input aria-label="Data do documento / realização"
               type="date"
               value={dataRealizacao}
               onChange={(e) => setDataRealizacao(e.target.value)}
@@ -380,7 +380,7 @@ export default function UploadDocumentoModal({
             <label htmlFor="uploaddocumentomodal-arquivo-pdf" className="mb-2 block text-sm font-medium text-slate-700 dark:text-slate-200">
               Arquivo PDF <span className="text-red-500">*</span>
             </label>
-            <div
+            <div role="button" tabIndex={0} aria-label="Selecionar arquivo PDF" onKeyDown={(e) => { if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); e.currentTarget.click(); } }}
               onClick={() => fileInputRef.current?.click()}
               className={`cursor-pointer rounded-lg border-2 border-dashed p-5 text-center transition ${file ? 'border-green-500 bg-green-50 dark:bg-green-950/20' : 'border-slate-300 hover:border-primary hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800'}`}
             >

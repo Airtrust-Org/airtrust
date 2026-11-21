@@ -213,7 +213,7 @@ export default function Empresas() {
               </div>
             )}
             <div className="flex gap-2">
-              <input
+              <input aria-label="Selecionar arquivo"
                 type="file"
                 accept="image/*"
                 onChange={(e) => setLogoFile(e.target.files?.[0] || null)}

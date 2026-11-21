@@ -2063,7 +2063,9 @@ export default function Qualificacoes() {
                   className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400"
                   size={14}
                 />
-                <input
+                <input aria-label={activeTab === 'tipos'
+                      ? 'Buscar modelos...'
+                      : 'Buscar por nome, código, qualificação...'}
                   type="text"
                   placeholder={
                     activeTab === 'tipos'
@@ -2082,7 +2084,7 @@ export default function Qualificacoes() {
             )}
             {activeTab === 'tipos' && (
               <>
-                <select
+                <select aria-label="Categoria"
                   value={modelosPrefs.categoriaFilter}
                   onChange={(e) =>
                     setModelosPrefs((prev) => ({ ...prev, categoriaFilter: e.target.value }))
@@ -2102,7 +2104,7 @@ export default function Qualificacoes() {
                       </option>
                     ))}
                 </select>
-                <select
+                <select aria-label="Área da Qualificação"
                   value={modelosPrefs.areaFilter}
                   onChange={(e) =>
                     setModelosPrefs((prev) => ({ ...prev, areaFilter: e.target.value }))
@@ -2137,7 +2139,7 @@ export default function Qualificacoes() {
             )}
             {usesHistoricoDataset && (
               <>
-                <select
+                <select aria-label="Equipamento"
                   value={aeronaveFilter}
                   onChange={(e) => {
                     setAeronaveFilter(e.target.value);
@@ -2152,7 +2154,7 @@ export default function Qualificacoes() {
                     </option>
                   ))}
                 </select>
-                <select
+                <select aria-label="Categoria"
                   value={categoriaFilter}
                   onChange={(e) => {
                     setCategoriaFilter(e.target.value);
@@ -2170,7 +2172,7 @@ export default function Qualificacoes() {
                       </option>
                     ))}
                 </select>
-                <select
+                <select aria-label="Área do treinamento"
                   value={historicoAreaId ? String(historicoAreaId) : ''}
                   onChange={(e) => {
                     const nextAreaId = Number(e.target.value);

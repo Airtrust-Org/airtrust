@@ -93,7 +93,7 @@ function fadigaClass(nivel: string): string {
   if (nivel === 'CRITICO') return 'text-red-600 dark:text-red-400 font-semibold';
   if (nivel === 'ATENCAO') return 'text-amber-600 dark:text-amber-400 font-semibold';
   if (nivel === 'NORMAL') return 'text-emerald-600 dark:text-emerald-400';
-  return 'text-slate-400 dark:text-slate-500';
+  return 'text-slate-500 dark:text-slate-500';
 }
 
 function VooStatusIcon({ status }: { status: FrmsDispatchReadinessStatus }) {
@@ -113,14 +113,14 @@ function CrewRow({ voo, membro }: { voo: CvFrmsFlightDispatchItem; membro: CvFrm
         data-testid={`frms-gate-row-${voo.voo_id}-${membro.funcionario_id}`}
       >
         <td className="px-3 py-2">
-          <span className="inline-flex items-center gap-1 text-slate-400 dark:text-slate-500">
+          <span className="inline-flex items-center gap-1 text-slate-500 dark:text-slate-500">
             {expanded ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
           </span>
         </td>
         <td className="px-3 py-2 font-medium text-slate-800 dark:text-slate-200">
           {membro.nome || `#${membro.funcionario_id}`}
           {membro.funcao && (
-            <span className="ml-1.5 text-xs font-normal text-slate-400 dark:text-slate-500">
+            <span className="ml-1.5 text-xs font-normal text-slate-500 dark:text-slate-500">
               {membro.funcao}
             </span>
           )}
@@ -172,7 +172,7 @@ function CrewRow({ voo, membro }: { voo: CvFrmsFlightDispatchItem; membro: CvFrm
         <tr className="bg-slate-50 dark:bg-slate-800/40">
           <td colSpan={8} className="px-6 py-3 text-xs text-slate-600 dark:text-slate-300">
             {membro.reasons.length === 0 ? (
-              <span className="text-slate-400 dark:text-slate-500">
+              <span className="text-slate-500 dark:text-slate-500">
                 Sem pendências — dados normais recebidos.
               </span>
             ) : (
@@ -353,7 +353,7 @@ export default function ControleOperacionalFrmsPanel() {
                       >
                         {voo.prefixo}{voo.modelo_aeronave ? ` · ${voo.modelo_aeronave}` : ''} — {formatDepartureTime(voo.horario_previsto_partida)}
                         {voo.frms_primary_reason && (
-                          <span className="ml-2 font-normal text-slate-400 dark:text-slate-500">
+                          <span className="ml-2 font-normal text-slate-500 dark:text-slate-500">
                             {REASON_LABELS[voo.frms_primary_reason]}
                           </span>
                         )}
@@ -361,7 +361,7 @@ export default function ControleOperacionalFrmsPanel() {
                     </tr>
                     {voo.tripulacao.length === 0 ? (
                       <tr>
-                        <td colSpan={8} className="px-6 py-2 text-xs text-slate-400 dark:text-slate-500">
+                        <td colSpan={8} className="px-6 py-2 text-xs text-slate-500 dark:text-slate-500">
                           Sem tripulação cadastrada para este voo.
                         </td>
                       </tr>

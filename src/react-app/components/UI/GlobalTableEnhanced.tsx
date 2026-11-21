@@ -385,7 +385,7 @@ export const GlobalTableEnhanced: React.FC<GlobalTablePropsEnhanced> = ({
         {enableSearch && (
           <div className="w-full md:w-64 relative">
             <Search className="absolute left-3 top-3 w-4 h-4 text-neutral-400" />
-            <input
+            <input aria-label={searchPlaceholder}
               type="text"
               placeholder={searchPlaceholder}
               value={searchQuery}

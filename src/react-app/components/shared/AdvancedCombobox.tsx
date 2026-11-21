@@ -173,7 +173,7 @@ export default function AdvancedCombobox({
           <div className="p-2 border-b border-gray-200">
             <div className="relative">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
-              <input
+              <input aria-label={searchPlaceholder}
                 ref={inputRef}
                 type="text"
                 value={searchTerm}
@@ -196,7 +196,7 @@ export default function AdvancedCombobox({
               </li>
             ) : (
               filteredOptions.map((option, index) => (
-                <li
+                <li tabIndex={-1} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleSelectOption(option); } }}
                   key={option.id}
                   onClick={() => handleSelectOption(option)}
                   className={`

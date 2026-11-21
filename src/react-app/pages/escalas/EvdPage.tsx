@@ -1206,7 +1206,7 @@ export default function EvdPage() {
                 <p className="text-xs font-medium text-slate-500">
                   {isDPlusOne ? 'Planejamento D+1' : 'Data selecionada manualmente'}
                 </p>
-                <input
+                <input aria-label="Data"
                   type="date"
                   value={data}
                   onChange={(e) => setData(e.target.value)}
@@ -1738,7 +1738,7 @@ export default function EvdPage() {
               ))}
             </div>
           ) : voos.length === 0 ? (
-            <div className="py-16 text-center text-slate-400 dark:text-slate-500">
+            <div className="py-16 text-center text-slate-500 dark:text-slate-500">
               <Plane className="h-12 w-12 mx-auto mb-3 opacity-30 animate-pulse" />
               <p className="text-sm font-medium">Nenhuma aeronave escalada para {formatDateBR(data)}</p>
               <button type="button"
@@ -2281,7 +2281,7 @@ function EvdCreateForm({
             <h4 className="mb-2 text-xs font-bold uppercase tracking-[0.1em] text-slate-500">
               Aeronave
             </h4>
-            <select
+            <select aria-label="Selecione uma aeronave pendente"
               value={form.aeronave_prefixo}
               onChange={(e) => {
                 setForm((prev) => ({
@@ -2343,9 +2343,9 @@ function EvdCreateForm({
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               {/* PIC */}
               <div className="rounded-lg border border-slate-200 bg-slate-50/50 p-3 dark:border-slate-700 dark:bg-slate-800/50">
-                <label className="mb-1.5 block text-xs font-semibold text-slate-700 dark:text-slate-300">
+                <span className="mb-1.5 block text-xs font-semibold text-slate-700 dark:text-slate-300">
                   Comandante <span className="text-slate-400 font-normal">PIC</span>
-                </label>
+                </span>
                 {loadingTripulantes ? (
                   <div className="animate-pulse space-y-2">
                     <div className="h-9 w-full bg-slate-200 rounded-lg dark:bg-slate-700" />
@@ -2353,7 +2353,7 @@ function EvdCreateForm({
                   </div>
                 ) : (
                   <>
-                    <select
+                    <select aria-label="Selecionar comandante"
                       value={form.pic_id}
                       onChange={(e) =>
                         setForm((prev) => ({
@@ -2413,9 +2413,9 @@ function EvdCreateForm({
 
               {/* SIC */}
               <div className="rounded-lg border border-slate-200 bg-slate-50/50 p-3 dark:border-slate-700 dark:bg-slate-800/50">
-                <label className="mb-1.5 block text-xs font-semibold text-slate-700 dark:text-slate-300">
+                <span className="mb-1.5 block text-xs font-semibold text-slate-700 dark:text-slate-300">
                   Copiloto <span className="text-slate-400 font-normal">SIC</span>
-                </label>
+                </span>
                 {loadingTripulantes ? (
                   <div className="animate-pulse space-y-2">
                     <div className="h-9 w-full bg-slate-200 rounded-lg dark:bg-slate-700" />
@@ -2423,7 +2423,7 @@ function EvdCreateForm({
                   </div>
                 ) : (
                   <>
-                    <select
+                    <select aria-label="Selecionar copiloto"
                       value={form.sic_id}
                       onChange={(e) => setForm((prev) => ({ ...prev, sic_id: e.target.value }))}
                       className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm transition-colors focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 disabled:opacity-50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"

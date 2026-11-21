@@ -543,7 +543,7 @@ function ContentDropzone({
         if (!disabled) pick(e.dataTransfer.files?.[0] ?? null);
       }}
     >
-      <input
+      <input aria-label="Selecionar arquivo"
         ref={inputRef}
         type="file"
         accept={accept}
@@ -624,7 +624,7 @@ function ThumbnailDropzone({
         if (!disabled) pick(e.dataTransfer.files?.[0] ?? null);
       }}
     >
-      <input
+      <input aria-label="Selecionar arquivo"
         ref={inputRef}
         type="file"
         accept="image/png,image/jpeg,image/webp,image/gif"
@@ -892,7 +892,7 @@ function CourseDrawer({
       onClick={safeClose}
     >
       <div className="flex min-h-full w-full overflow-y-auto overscroll-y-contain p-3 sm:p-6">
-        <div
+        <div role="presentation"
           className="relative mx-auto flex min-h-0 w-full max-w-6xl flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl sm:my-auto sm:max-h-[calc(100dvh-3rem)] animate-scale-in"
           onClick={(event) => event.stopPropagation()}
         >
@@ -967,7 +967,7 @@ function CourseDrawer({
                       </div>
                       <div className="space-y-2">
                         <FieldLabel label="Tipo de conteúdo" />
-                        <select
+                        <select aria-label="SCORM"
                           value={form.tipo_conteudo ?? 'scorm'}
                           onChange={(e) =>
                             setForm((c) => ({
@@ -1003,7 +1003,7 @@ function CourseDrawer({
                     <div className="grid gap-4 md:grid-cols-3">
                       <div className="space-y-2">
                         <FieldLabel label="Categoria" />
-                        <select
+                        <select aria-label="Categoria"
                           value={form.categoria ?? ''}
                           onChange={(e) =>
                             setForm((c) => ({ ...c, categoria: e.target.value || null }))
@@ -1020,7 +1020,7 @@ function CourseDrawer({
                       </div>
                       <div className="space-y-2">
                         <FieldLabel label="Carga horária (min)" />
-                        <input
+                        <input aria-label="Carga horária (min)"
                           type="number"
                           min={0}
                           value={form.carga_horaria_minutos ?? ''}
@@ -1211,7 +1211,7 @@ function CourseDrawer({
                       </div>
                       <div className="space-y-2">
                         <FieldLabel label="Carga inicial (h)" />
-                        <input
+                        <input aria-label="Carga inicial (h)"
                           type="number"
                           min={0}
                           step="0.1"
@@ -1229,7 +1229,7 @@ function CourseDrawer({
                       </div>
                       <div className="space-y-2">
                         <FieldLabel label="Carga recorrente (h)" />
-                        <input
+                        <input aria-label="Carga recorrente (h)"
                           type="number"
                           min={0}
                           step="0.1"
@@ -1429,7 +1429,7 @@ function CourseDrawer({
                               Vincula a um tipo de qualificação EAD.
                             </p>
                           </div>
-                          <input
+                          <input aria-label="Gerar qualificação ao concluir o curso"
                             type="checkbox"
                             checked={form.gerar_qualificacao_ao_concluir === 1}
                             onChange={(e) =>
@@ -1764,7 +1764,7 @@ function CourseCard({
                   </span>
                 </div>
               ) : null}
-              <div className="mb-1 flex items-center justify-between text-xs text-slate-400 dark:text-slate-500">
+              <div className="mb-1 flex items-center justify-between text-xs text-slate-500 dark:text-slate-500">
                 <span>Progresso</span>
                 <span>{getLmsProgressLabel(matricula.status, enrollmentProgress)}</span>
               </div>
@@ -1834,7 +1834,7 @@ function CourseCard({
                   {getLmsActionLabel(matricula?.status ?? 'NAO_INICIADO')}
                 </button>
               )}
-              <Button variant="secondary" onClick={() => navigate(`/lms/cursos/${curso.id}`)}>
+              <Button aria-label="Visualizar" variant="secondary" onClick={() => navigate(`/lms/cursos/${curso.id}`)}>
                 <Eye className="h-4 w-4" />
               </Button>
             </div>

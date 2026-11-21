@@ -246,7 +246,7 @@ const Equipamentos: React.FC = () => {
             />
           </div>
 
-          <select
+          <select aria-label="Todos os tipos"
             value={filtros.tipo_simulador}
             onChange={(e) => setFiltros((prev) => ({ ...prev, tipo_simulador: e.target.value }))}
             className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-primary"
@@ -259,7 +259,7 @@ const Equipamentos: React.FC = () => {
             ))}
           </select>
 
-          <select
+          <select aria-label="Todos os status"
             value={filtros.status}
             onChange={(e) => setFiltros((prev) => ({ ...prev, status: e.target.value }))}
             className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-primary"
@@ -272,7 +272,7 @@ const Equipamentos: React.FC = () => {
             ))}
           </select>
 
-          <select
+          <select aria-label="Todos os equipamentos"
             value={filtros.aeronave_base}
             onChange={(e) => setFiltros((prev) => ({ ...prev, aeronave_base: e.target.value }))}
             className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-primary"
@@ -421,28 +421,28 @@ const Equipamentos: React.FC = () => {
           <div className="space-y-4">
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-gray-500">Nome</label>
+                <span className="block text-sm font-medium text-gray-500">Nome</span>
                 <p className="mt-1 text-sm text-gray-900">{equipamentoSelecionado.nome}</p>
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-500">Código</label>
+                <span className="block text-sm font-medium text-gray-500">Código</span>
                 <p className="mt-1 text-sm text-gray-900">
                   {equipamentoSelecionado.codigo_identificacao}
                 </p>
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-500">Tipo</label>
+                <span className="block text-sm font-medium text-gray-500">Tipo</span>
                 <p className="mt-1 text-sm text-gray-900">
                   {equipamentoSelecionado.tipo_simulador}
                 </p>
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-500">Equipamento Base</label>
+                <span className="block text-sm font-medium text-gray-500">Equipamento Base</span>
                 <p className="mt-1 text-sm text-gray-900">{equipamentoSelecionado.aeronave_base}</p>
               </div>
               {equipamentoSelecionado.empresa_local && (
                 <div>
-                  <label className="block text-sm font-medium text-gray-500">Empresa/Local</label>
+                  <span className="block text-sm font-medium text-gray-500">Empresa/Local</span>
                   <p className="mt-1 text-sm text-gray-900">
                     {equipamentoSelecionado.empresa_local}
                   </p>
@@ -450,7 +450,7 @@ const Equipamentos: React.FC = () => {
               )}
               {equipamentoSelecionado.fabricante && (
                 <div>
-                  <label className="block text-sm font-medium text-gray-500">Fabricante</label>
+                  <span className="block text-sm font-medium text-gray-500">Fabricante</span>
                   <p className="mt-1 text-sm text-gray-900">{equipamentoSelecionado.fabricante}</p>
                 </div>
               )}

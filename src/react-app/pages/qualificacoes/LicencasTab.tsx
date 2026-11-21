@@ -230,7 +230,7 @@ export function LicencasTab() {
 
           {/* Filtro Tipo */}
           <div className="w-full md:w-48">
-            <select
+            <select aria-label="Todos os Tipos"
               value={filtros.tipo}
               onChange={(e) => setFiltros({ ...filtros, tipo: e.target.value })}
               className="w-full px-4 py-2 border border-border-light rounded-lg focus:ring-2 focus:ring-primary focus:border-primary"
@@ -253,7 +253,7 @@ export function LicencasTab() {
 
           {/* Filtro Status */}
           <div className="w-full md:w-48">
-            <select
+            <select aria-label="Todos os Status"
               value={filtros.status}
               onChange={(e) => setFiltros({ ...filtros, status: e.target.value })}
               className="w-full px-4 py-2 border border-border-light rounded-lg focus:ring-2 focus:ring-primary focus:border-primary"

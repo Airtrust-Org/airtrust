@@ -375,8 +375,8 @@ Por favor, providencie a renovação quando aplicável.`;
 
         {/* Opções de envio */}
         <div>
-          <label className="mb-3 block text-sm font-medium text-slate-700">Canais de Envio</label>
-          <div className="space-y-3">
+          <span id="modalalertaead-canais-de-envio" className="mb-3 block text-sm font-medium text-slate-700">Canais de Envio</span>
+          <div role="group" aria-labelledby="modalalertaead-canais-de-envio" className="space-y-3">
             <label className="flex cursor-pointer items-center gap-3 rounded-lg border border-slate-200 p-3 hover:bg-slate-50">
               <input
                 type="checkbox"

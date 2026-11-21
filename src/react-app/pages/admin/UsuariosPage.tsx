@@ -509,10 +509,16 @@ export function UsuariosAdminContent({ embedded = false }: { embedded?: boolean 
               </button>
             )}
             <div>
-              <h1 className="text-xl font-bold text-slate-900 flex items-center gap-2">
-                <Users className="h-5 w-5 text-primary" />
-                Gestão de Usuários
-              </h1>
+              {/* Embutida em Configurações (que já tem o h1 da página): usa h2 */}
+              {(() => {
+                const Heading = embedded ? 'h2' : 'h1';
+                return (
+                  <Heading className="text-xl font-bold text-slate-900 flex items-center gap-2">
+                    <Users className="h-5 w-5 text-primary" />
+                    Gestão de Usuários
+                  </Heading>
+                );
+              })()}
               <p className="text-sm text-slate-500 mt-0.5">
                 Cadastro, perfis, convites e permissões
               </p>
@@ -844,9 +850,9 @@ function SetoresGerenciadosField({
 
   return (
     <div>
-      <label className="block text-sm font-medium text-slate-700 mb-1">
+      <span className="block text-sm font-medium text-slate-700 mb-1">
         Setores gerenciados <span className="text-red-500">*</span>
-      </label>
+      </span>
       <p className="text-xs text-slate-500 mb-2">
         O gestor verá apenas dados e qualificações dos setores selecionados abaixo.
       </p>
@@ -1055,7 +1061,7 @@ function ModalCriarUsuario({
                 Vincular ao funcionário{' '}
                 <span className="text-slate-400 font-normal">(opcional)</span>
               </label>
-              <select
+              <select aria-label="— Nenhum —"
                 value={funcionarioId ?? ''}
                 onChange={(e) => handleFuncionarioChange(e.target.value)}
                 className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-primary/30 focus:border-primary bg-white"
@@ -2218,7 +2224,7 @@ function ModalLinkConvite({
         </p>
 
         <div className="flex gap-2">
-          <input
+          <input aria-label="Link de convite"
             type="text"
             value={link}
             readOnly

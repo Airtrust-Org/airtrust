@@ -498,7 +498,7 @@ export default function SgsoBowtiePage() {
                       </button>
                     </div>
                     {form.ameacas.map((item, index) => (
-                      <input
+                      <input aria-label={`${item.key} · Ex.: briefing incompleto`}
                         key={item.key}
                         value={item.titulo}
                         onChange={(event) =>
@@ -537,7 +537,7 @@ export default function SgsoBowtiePage() {
                       </button>
                     </div>
                     {form.consequencias.map((item, index) => (
-                      <input
+                      <input aria-label={`${item.key} · Ex.: aproximação instável`}
                         key={item.key}
                         value={item.titulo}
                         onChange={(event) =>
@@ -601,7 +601,7 @@ export default function SgsoBowtiePage() {
                           className="w-full rounded-xl border border-slate-200 px-3 py-2 outline-none transition focus:border-amber-400"
                         />
                         <div className="mt-3 grid gap-3 md:grid-cols-2">
-                          <select
+                          <select aria-label="Preventiva"
                             value={barreira.tipo_barreira}
                             onChange={(event) =>
                               setForm((current) => ({
@@ -826,7 +826,7 @@ export default function SgsoBowtiePage() {
                           <div className="text-xs text-slate-500">
                             Efetividade {barreira.efetividade_percentual ?? '—'}%
                           </div>
-                          <select
+                          <select aria-label="Operante"
                             value={barreira.status_saude}
                             onChange={(event) =>
                               void updateBarrierStatus(barreira.id, event.target.value)

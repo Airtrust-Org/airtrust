@@ -307,7 +307,7 @@ const FormularioQualificacao = ({
         <div className="mt-6">
           <label htmlFor="certificado-upload" className="block text-sm font-medium text-gray-700 mb-2">Anexar Certificado</label>
 
-          <div
+          <div role="button" tabIndex={0} aria-label="Anexar certificado" onKeyDown={(e) => { if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); e.currentTarget.click(); } }}
             className={`border-2 border-dashed rounded-lg p-6 text-center transition-colors ${
               dragActive ? 'border-primary bg-primary/10' : 'border-gray-300 hover:border-gray-400'
             }`}

@@ -411,7 +411,7 @@ export default function SgsoFratPage() {
             <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
               <h2 className="text-lg font-semibold text-slate-900">Nova avaliação</h2>
               <div className="mt-4 space-y-4 text-sm text-slate-700">
-                <select
+                <select aria-label="Selecione um modelo FRAT"
                   value={form.modelo_id}
                   onChange={(event) =>
                     setForm((current) => ({
@@ -430,7 +430,7 @@ export default function SgsoFratPage() {
                   ))}
                 </select>
 
-                <select
+                <select aria-label="Tripulante"
                   value={form.tripulante_id}
                   onChange={(event) =>
                     setForm((current) => ({ ...current, tripulante_id: event.target.value }))
@@ -445,7 +445,7 @@ export default function SgsoFratPage() {
                   ))}
                 </select>
 
-                <input
+                <input aria-label="Data"
                   type="date"
                   value={form.data_operacao}
                   onChange={(event) =>
@@ -494,7 +494,7 @@ export default function SgsoFratPage() {
                         </div>
                         <div className="mt-3">
                           {factor.tipo_resposta === 'BINARIA' ? (
-                            <select
+                            <select aria-label={factor.pergunta}
                               value={form.respostas[factor.id] || ''}
                               onChange={(event) =>
                                 setForm((current) => ({
@@ -512,7 +512,7 @@ export default function SgsoFratPage() {
                               <option value="true">Sim</option>
                             </select>
                           ) : factor.tipo_resposta === 'NUMERICA' ? (
-                            <input
+                            <input aria-label={factor.pergunta}
                               type="number"
                               value={form.respostas[factor.id] || ''}
                               onChange={(event) =>
@@ -527,7 +527,7 @@ export default function SgsoFratPage() {
                               className="w-full rounded-xl border border-slate-200 px-3 py-2 outline-none transition focus:border-rose-400"
                             />
                           ) : (
-                            <select
+                            <select aria-label={factor.pergunta}
                               value={form.respostas[factor.id] || ''}
                               onChange={(event) =>
                                 setForm((current) => ({

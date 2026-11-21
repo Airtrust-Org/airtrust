@@ -335,6 +335,7 @@ export default function Funcionarios() {
               />
             </div>
             <select
+              aria-label="Situação do funcionário"
               value={statusFilter}
               onChange={(e) => updateFilter('statusFilter', e.target.value)}
               className="rounded-md border border-slate-300 px-3 py-2 pr-8 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary appearance-none bg-white text-slate-900 cursor-pointer dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
@@ -344,7 +345,7 @@ export default function Funcionarios() {
               <option value="inativos">Inativos</option>
             </select>
 
-            <select
+            <select aria-label="Todas as Funções/Cargos"
               value={funcaoFilter}
               onChange={(e) => updateFilter('funcaoFilter', e.target.value)}
               className="rounded-md border border-slate-300 px-3 py-2 pr-8 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary appearance-none bg-white text-slate-900 cursor-pointer dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
@@ -357,7 +358,7 @@ export default function Funcionarios() {
               ))}
             </select>
 
-            <select
+            <select aria-label="Todos os Equipamentos"
               value={aeronaveFilter}
               onChange={(e) => updateFilter('aeronaveFilter', e.target.value)}
               className="rounded-md border border-slate-300 px-3 py-2 pr-8 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary appearance-none bg-white text-slate-900 cursor-pointer w-max dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
@@ -370,7 +371,7 @@ export default function Funcionarios() {
               ))}
             </select>
 
-            <select
+            <select aria-label="Todas as Quinzenas"
               value={quinzenaFilter}
               onChange={(e) => updateFilter('quinzenaFilter', e.target.value)}
               className="rounded-md border border-slate-300 px-3 py-2 pr-8 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary appearance-none bg-white text-slate-900 cursor-pointer w-max dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"

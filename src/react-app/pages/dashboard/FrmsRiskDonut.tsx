@@ -69,7 +69,7 @@ export const FrmsRiskDonut = React.memo(function FrmsRiskDonut({ frmsAlertas }: 
     <section className="h-full rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm dark:border-slate-700 dark:bg-slate-900" aria-label={`Distribuição de alertas FRMS - ${mesLabel}`}>
       <div className="mb-4 flex items-center justify-between">
         <div>
-          <p className="text-xs font-bold uppercase tracking-widest text-slate-400 dark:text-slate-500">
+          <p className="text-xs font-bold uppercase tracking-widest text-slate-500 dark:text-slate-500">
             FRMS · {mesLabel}
           </p>
           <h3 className="text-sm font-extrabold tracking-tight text-slate-900 dark:text-slate-100">
@@ -105,7 +105,7 @@ export const FrmsRiskDonut = React.memo(function FrmsRiskDonut({ frmsAlertas }: 
           </svg>
           <div className="pointer-events-none absolute left-1/2 top-1/2 flex h-20 w-20 -translate-x-1/2 -translate-y-1/2 flex-col items-center justify-center rounded-full bg-white text-center dark:bg-slate-900">
             <p className="text-xl font-black text-slate-900 dark:text-slate-100">{total}</p>
-            <p className="text-xs font-semibold uppercase tracking-widest text-slate-400 dark:text-slate-500">Alertas</p>
+            <p className="text-xs font-semibold uppercase tracking-widest text-slate-500 dark:text-slate-500">Alertas</p>
           </div>
         </div>
 

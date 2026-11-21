@@ -310,7 +310,7 @@ function ResourceAssignmentCell({
           </span>
         )}
         {simRes.status === 'AMBIGUOUS' && (
-          <select
+          <select aria-label="Selecione o simulador…"
             className={`${inputClass} w-full`}
             value={current.simulator_id ?? ''}
             disabled={saving}
@@ -337,7 +337,7 @@ function ResourceAssignmentCell({
             Nenhum instrutor elegível neste tenant
           </span>
         ) : (
-          <select
+          <select aria-label="Selecione o instrutor/examinador…"
             className={`${inputClass} w-full`}
             value={current.instructor_id ?? ''}
             disabled={saving}
@@ -1559,7 +1559,7 @@ export default function PlanejamentoSimuladores() {
                         )}
                       </td>
                       <td className="px-3 py-3">
-                        <select
+                        <select aria-label="Situação do planejamento"
                           className={`${inputClass} w-48`}
                           value={draft?.status || item.planejamento_status}
                           onChange={(event) =>
@@ -1618,7 +1618,7 @@ export default function PlanejamentoSimuladores() {
                               : 'janela a definir'}
                         </div>
                         <div className="flex gap-1">
-                          <input
+                          <input aria-label="Data"
                             type="date"
                             className={`${inputClass} w-36 px-2`}
                             value={draft?.janelaInicio || ''}
@@ -1626,7 +1626,7 @@ export default function PlanejamentoSimuladores() {
                               updateDraft(item.id, { janelaInicio: event.target.value })
                             }
                           />
-                          <input
+                          <input aria-label="Data"
                             type="date"
                             className={`${inputClass} w-36 px-2`}
                             value={draft?.janelaFim || ''}
@@ -1637,7 +1637,7 @@ export default function PlanejamentoSimuladores() {
                         </div>
                       </td>
                       <td className="px-3 py-3">
-                        <input
+                        <input aria-label="Data"
                           type="date"
                           className={`${inputClass} w-36 px-2`}
                           value={draft?.dataPrevista || ''}

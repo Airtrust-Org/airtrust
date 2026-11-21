@@ -136,9 +136,9 @@ export function ImportarXLSX({ isOpen, onClose, tipo, onSuccess }: ImportarXLSXP
 
         {/* Seleção de Modo */}
         <div className="space-y-3">
-          <label className="block text-sm font-medium text-slate-700">Modo de Importação</label>
+          <span id="importarxlsx-modo-de-importacao" className="block text-sm font-medium text-slate-700">Modo de Importação</span>
 
-          <div className="space-y-2">
+          <div role="group" aria-labelledby="importarxlsx-modo-de-importacao" className="space-y-2">
             <label className="flex items-start gap-3 rounded-lg border-2 border-slate-200 p-4 cursor-pointer hover:border-blue-300 transition-colors">
               <input
                 type="radio"

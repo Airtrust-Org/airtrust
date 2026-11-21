@@ -780,7 +780,7 @@ export default function EscalasDetalheView() {
                   {/* Mais menu */}
                   <div className="relative">
                     {maisMenuAberto && (
-                      <div
+                      <div role="presentation"
                         className="fixed inset-0 z-40"
                         onClick={() => setMaisMenuAberto(false)}
                       />
@@ -1049,7 +1049,7 @@ export default function EscalasDetalheView() {
               </h3>
               <button aria-label="Fechar"
                 onClick={() => setPainelQuinzenas(false)}
-                className="text-slate-400 hover:text-slate-600 dark:text-slate-500 dark:hover:text-slate-200"
+                className="text-slate-500 hover:text-slate-600 dark:text-slate-500 dark:hover:text-slate-200"
               >
                 <X className="w-4 h-4" />
               </button>
@@ -1080,7 +1080,7 @@ export default function EscalasDetalheView() {
                           Q{q.numero}
                         </span>
                       </div>
-                      <label className="block text-xs text-slate-500 dark:text-slate-400">Início</label>
+                      <span className="block text-xs text-slate-500 dark:text-slate-400">Início</span>
                       <input aria-label="Início"
                         type="date"
                         value={di}
@@ -1092,7 +1092,7 @@ export default function EscalasDetalheView() {
                         }
                         className="mb-1 w-full rounded border border-slate-200 px-1 py-0.5 text-xs focus:outline-none focus:ring-1 focus:ring-indigo-400 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
                       />
-                      <label className="block text-xs text-slate-500 dark:text-slate-400">Fim</label>
+                      <span className="block text-xs text-slate-500 dark:text-slate-400">Fim</span>
                       <input aria-label="Fim"
                         type="date"
                         value={df}
@@ -1187,7 +1187,7 @@ export default function EscalasDetalheView() {
                     )}
                     <div className={`flex-shrink-0 relative ${dropdownAeronave ? 'z-30' : ''}`}>
                       {dropdownAeronave && (
-                        <div
+                        <div role="presentation"
                           className="fixed inset-0 z-30"
                           onClick={() => setDropdownAeronave(false)}
                         />
@@ -1246,7 +1246,7 @@ export default function EscalasDetalheView() {
 
                     <div className={`flex-shrink-0 relative ${dropdownModelo ? 'z-30' : ''}`}>
                       {dropdownModelo && (
-                        <div
+                        <div role="presentation"
                           className="fixed inset-0 z-30"
                           onClick={() => setDropdownModelo(false)}
                         />
@@ -1300,7 +1300,7 @@ export default function EscalasDetalheView() {
 
                     <div className={`flex-shrink-0 relative ${dropdownTipo ? 'z-30' : ''}`}>
                       {dropdownTipo && (
-                        <div
+                        <div role="presentation"
                           className="fixed inset-0 z-30"
                           onClick={() => setDropdownTipo(false)}
                         />
@@ -1646,7 +1646,7 @@ export default function EscalasDetalheView() {
             <button
               type="button"
               onClick={() => setLegendaVisible((v) => !v)}
-              className="ml-auto flex items-center gap-1 rounded px-2 py-0.5 text-xs font-semibold text-slate-400 transition-colors hover:bg-slate-50 hover:text-slate-600 dark:text-slate-500 dark:hover:bg-slate-800 dark:hover:text-slate-200"
+              className="ml-auto flex items-center gap-1 rounded px-2 py-0.5 text-xs font-semibold text-slate-500 transition-colors hover:bg-slate-50 hover:text-slate-600 dark:text-slate-500 dark:hover:bg-slate-800 dark:hover:text-slate-200"
             >
               {legendaVisible ? 'Ocultar legenda' : 'Legenda'}
               {legendaVisible ? (
@@ -1971,7 +1971,7 @@ export default function EscalasDetalheView() {
                 </div>
                 <button aria-label="Fechar"
                   onClick={() => setFdpModalAberto(false)}
-                  className="text-slate-400 hover:text-slate-600 dark:text-slate-500 dark:hover:text-slate-200"
+                  className="text-slate-500 hover:text-slate-600 dark:text-slate-500 dark:hover:text-slate-200"
                 >
                   <X className="w-4 h-4" />
                 </button>

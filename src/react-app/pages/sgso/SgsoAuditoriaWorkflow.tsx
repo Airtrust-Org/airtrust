@@ -371,7 +371,7 @@ export default function SgsoAuditoriaWorkflow({ auditoriaId, onClose, onChanged 
                             )}
                           </div>
                         </div>
-                        <select
+                        <select aria-label="Selecionar resultado..."
                           value={item.resultado || ''}
                           disabled={!writable || savingItemId !== null}
                           onChange={(event) =>

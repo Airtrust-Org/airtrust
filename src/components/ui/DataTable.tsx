@@ -652,7 +652,7 @@ export function DataTable<T extends { id?: string | number }>({
                     <span>{column.label}</span>
                     {column.sortable && <span className="text-lg">{getSortIcon(column.id)}</span>}
                   </div>
-                  <div
+                  <div role="presentation"
                     className="absolute right-0 top-0 h-full w-3 cursor-col-resize select-none"
                     onMouseDown={(event) => beginResize(event, column.id, column.width)}
                   />
@@ -754,7 +754,7 @@ export function DataTable<T extends { id?: string | number }>({
         {/* Page size selector */}
         <div className="flex items-center gap-2 text-sm text-slate-600">
           <span>Itens por página:</span>
-          <select
+          <select aria-label="Itens por página"
             className="rounded-md border border-slate-300 px-2 py-1 text-sm focus:border-primary-600 focus:outline-none focus:ring-1 focus:ring-primary-600"
             value={effectivePageSize}
             onChange={(e) => {

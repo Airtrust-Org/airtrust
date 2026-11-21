@@ -580,7 +580,7 @@ export function AdvancedDataTable({
                     )}
 
                     {columnResizable && (
-                      <div
+                      <div role="presentation"
                         onMouseDown={(e) => handleMouseDown(e, column.key)}
                         className="absolute right-0 top-0 h-full w-1 bg-primary-400 opacity-0 group-hover:opacity-100 cursor-col-resize hover:opacity-100 transition"
                       />

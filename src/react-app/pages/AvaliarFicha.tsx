@@ -367,10 +367,10 @@ const AvaliarFicha: React.FC = () => {
 
                   {/* Coluna 2: Pontuação */}
                   <div className="md:col-span-1">
-                    <label className="block text-xs md:text-sm font-medium text-gray-700 mb-2">
+                    <span id="avaliarficha-pontuacao-0-10" className="block text-xs md:text-sm font-medium text-gray-700 mb-2">
                       Pontuação (0-10)
-                    </label>
-                    <div className="flex items-center gap-3">
+                    </span>
+                    <div role="group" aria-labelledby="avaliarficha-pontuacao-0-10" className="flex items-center gap-3">
                       <input aria-label="Pontuação (0-10)"
                         type="range"
                         min="0"
@@ -384,6 +384,7 @@ const AvaliarFicha: React.FC = () => {
                         className="flex-1 h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-600"
                       />
                       <input
+                        aria-label="Pontuação da manobra"
                         type="number"
                         min="0"
                         max="10"
@@ -408,9 +409,9 @@ const AvaliarFicha: React.FC = () => {
 
                   {/* Coluna 3: Status e Observações (mobile) */}
                   <div className="md:col-span-1">
-                    <label className="block text-xs md:text-sm font-medium text-gray-700 mb-2">
+                    <span className="block text-xs md:text-sm font-medium text-gray-700 mb-2">
                       Observações
-                    </label>
+                    </span>
                     <textarea aria-label="Observações"
                       value={manobra.observacoes || ''}
                       onChange={(e) => atualizarObservacaoManobra(manobra.id, e.target.value)}

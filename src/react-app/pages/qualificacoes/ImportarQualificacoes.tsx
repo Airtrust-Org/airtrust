@@ -407,8 +407,8 @@ export default function ImportarQualificacoes({ onImportSuccess }: ImportarQuali
 
           {/* Upload */}
           <div>
-            <label className="block text-sm font-medium mb-2">Selecionar Arquivo (.xlsx)</label>
-            <div className="flex items-center gap-3">
+            <span id="importarqualificacoes-selecionar-arquivo-xlsx" className="block text-sm font-medium mb-2">Selecionar Arquivo (.xlsx)</span>
+            <div role="group" aria-labelledby="importarqualificacoes-selecionar-arquivo-xlsx" className="flex items-center gap-3">
               <label className="flex-1 flex items-center justify-center  py-8 border-2 border-dashed border-gray-300 rounded-lg hover:border-primary cursor-pointer transition">
                 <input type="file" accept=".xlsx" onChange={handleFileChange} className="hidden" />
                 <div className="text-center">
