@@ -373,7 +373,7 @@ export default function SessaoModal({ isOpen, onClose, onSalvar, sessaoId }: Ses
             <div className="space-y-2">
               {formData.participantes.map((participante, index) => (
                 <div key={index} className="flex gap-2">
-                  <select
+                  <select aria-label="Selecione o funcionário..."
                     value={participante.funcionario_id}
                     onChange={(e) => atualizarParticipante(index, 'funcionario_id', e.target.value)}
                     className="flex-1 rounded-md border border-slate-300 dark:border-slate-700 dark:bg-slate-800 dark:text-white px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
@@ -386,7 +386,7 @@ export default function SessaoModal({ isOpen, onClose, onSalvar, sessaoId }: Ses
                     ))}
                   </select>
 
-                  <select
+                  <select aria-label="PIC"
                     value={participante.funcao}
                     onChange={(e) => atualizarParticipante(index, 'funcao', e.target.value)}
                     className="w-32 rounded-md border border-slate-300 dark:border-slate-700 dark:bg-slate-800 dark:text-white px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"

@@ -180,7 +180,7 @@ export default function ControleVoosCoordenacaoFila() {
               <RefreshCw className={`h-4 w-4 ${isFetching ? 'animate-spin' : ''}`} />
               {isFetching ? 'Atualizando…' : 'Atualizar fila'}
             </button>
-            <span className="ml-auto text-xs text-slate-400 dark:text-slate-500" aria-live="polite">
+            <span className="ml-auto text-xs text-slate-500 dark:text-slate-500" aria-live="polite">
               Atualização automática a cada 15 s
               {dataUpdatedAt ? ` · última: ${new Date(dataUpdatedAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}` : ''}
             </span>

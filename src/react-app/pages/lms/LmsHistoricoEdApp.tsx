@@ -232,7 +232,7 @@ function LmsHistoricoEdAppContent({ canManage }: { canManage: boolean }) {
                 )}
               </div>
 
-              <select
+              <select aria-label="Todos os status"
                 value={statusFilter}
                 onChange={(e) => handleStatus(e.target.value)}
                 className="rounded-lg border border-slate-200 bg-white py-2 pl-3 pr-8 text-sm text-slate-700 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary dark:border-slate-600 dark:bg-slate-800 dark:text-slate-300"
@@ -317,7 +317,7 @@ function LmsHistoricoEdAppContent({ canManage }: { canManage: boolean }) {
                               <p className="text-xs text-slate-400">{row.curso_categoria}</p>
                             )}
                             {row.edapp_course_id && (
-                              <p className="font-mono text-xs text-slate-400 dark:text-slate-500">
+                              <p className="font-mono text-xs text-slate-500 dark:text-slate-500">
                                 ID: {row.edapp_course_id}
                               </p>
                             )}

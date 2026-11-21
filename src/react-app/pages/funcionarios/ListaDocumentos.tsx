@@ -135,7 +135,7 @@ export default function ListaDocumentos({ funcionarioId }: ListaDocumentosProps)
   if (documentos.length === 0) {
     return (
       <div className="rounded-lg border-2 border-dashed border-gray-300 bg-gray-50 py-8 text-center dark:border-slate-700 dark:bg-slate-900">
-        <FileText className="mx-auto mb-2 h-12 w-12 text-gray-400 dark:text-slate-500" />
+        <FileText className="mx-auto mb-2 h-12 w-12 text-gray-500 dark:text-slate-500" />
         <p className="font-semibold text-gray-600 dark:text-slate-200">Nenhum documento anexado</p>
         <p className="mt-1 text-sm text-gray-500 dark:text-slate-400">
           Use a aba &quot;Enviar Documento&quot; para adicionar

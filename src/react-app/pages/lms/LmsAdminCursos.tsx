@@ -274,7 +274,7 @@ export default function LmsAdminCursos() {
                 <div className="mb-3 grid gap-3 rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-3 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center dark:border-slate-700 dark:bg-slate-800">
                   <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
-                      <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-400 dark:text-slate-500">
+                      <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500 dark:text-slate-500">
                         Sincronização EAD
                       </p>
                       {lastSyncSummary ? (
@@ -347,7 +347,7 @@ export default function LmsAdminCursos() {
                     />
                   </label>
 
-                  <select
+                  <select aria-label="Todos os setores"
                     value={sectorFilter}
                     onChange={(event) => setSectorFilter(event.target.value)}
                     className="h-11 rounded-lg border border-slate-300 bg-white px-3 text-sm text-slate-700 outline-none focus:border-primary dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
@@ -360,7 +360,7 @@ export default function LmsAdminCursos() {
                     ))}
                   </select>
 
-                  <select
+                  <select aria-label="Todos os estados"
                     value={statusFilter}
                     onChange={(event) =>
                       setStatusFilter(
@@ -381,7 +381,7 @@ export default function LmsAdminCursos() {
                     <option value="missing-content">Sem pacote</option>
                   </select>
 
-                  <select
+                  <select aria-label="Todos os tipos"
                     value={typeFilter}
                     onChange={(event) => setTypeFilter(event.target.value as 'all' | TipoConteudo)}
                     className="h-11 rounded-lg border border-slate-300 bg-white px-3 text-sm text-slate-700 outline-none focus:border-primary dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"

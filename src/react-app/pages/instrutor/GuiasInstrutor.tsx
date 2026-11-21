@@ -171,7 +171,7 @@ function ProximasSessoes() {
                   <BookOpen className="w-3.5 h-3.5 mr-1.5" /> Guia desta sessão
                 </Button>
               ) : (
-                <p className="text-xs text-slate-400 dark:text-slate-500">Sem guia vinculado</p>
+                <p className="text-xs text-slate-500 dark:text-slate-500">Sem guia vinculado</p>
               )}
             </div>
           </Card>

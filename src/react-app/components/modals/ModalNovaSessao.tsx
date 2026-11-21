@@ -2070,7 +2070,7 @@ export default function ModalNovaSessao({
               </div>
             ) : modelos.length > 0 ? (
               // Dropdown com modelos disponíveis
-              <select
+              <select aria-label="Selecione um modelo de sessão"
                 value={modeloSessaoId || ''}
                 onChange={(e) => handleModeloChange(e.target.value)}
                 className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary"

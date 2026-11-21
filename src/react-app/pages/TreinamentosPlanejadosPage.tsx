@@ -1769,7 +1769,7 @@ export default function TreinamentosPlanejadosPage({
 
   if (!canManage) {
     return (
-      <main className="p-6" role="main">
+      <div className="p-6">
         <PageHeader
           title="Planejamento e Gestão de Treinamentos"
           subtitle="Calendario operacional e trilha de auditoria para treinamentos futuros."
@@ -1777,7 +1777,7 @@ export default function TreinamentosPlanejadosPage({
         <div className="rounded-2xl border border-slate-200 bg-white p-8 text-sm text-slate-600 shadow-sm">
           Seu perfil nao possui acesso a esta central operacional.
         </div>
-      </main>
+      </div>
     );
   }
 
@@ -1823,7 +1823,7 @@ export default function TreinamentosPlanejadosPage({
   );
 
   return (
-    <main
+    <div
       className={asTab ? '' : 'min-h-full bg-slate-50/70 px-4 py-6 sm:px-6 lg:px-8'}
       role={asTab ? undefined : 'main'}
     >
@@ -1969,7 +1969,7 @@ export default function TreinamentosPlanejadosPage({
               Mostrar concluídos/cancelados
             </label>
           )}
-          <select
+          <select aria-label="Todos os instrutores"
             value={instrutorFiltro}
             onChange={(event) => setInstrutorFiltro(event.target.value)}
             className="rounded-md border border-slate-300 px-2.5 py-1.5 text-sm focus:border-primary-600 focus:outline-none bg-white cursor-pointer"
@@ -4137,6 +4137,6 @@ export default function TreinamentosPlanejadosPage({
           </div>
         )}
       </div>
-    </main>
+    </div>
   );
 }

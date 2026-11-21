@@ -967,7 +967,7 @@ function CourseDrawer({
                       </div>
                       <div className="space-y-2">
                         <FieldLabel label="Tipo de conteúdo" />
-                        <select
+                        <select aria-label="SCORM"
                           value={form.tipo_conteudo ?? 'scorm'}
                           onChange={(e) =>
                             setForm((c) => ({
@@ -1003,7 +1003,7 @@ function CourseDrawer({
                     <div className="grid gap-4 md:grid-cols-3">
                       <div className="space-y-2">
                         <FieldLabel label="Categoria" />
-                        <select
+                        <select aria-label="Categoria"
                           value={form.categoria ?? ''}
                           onChange={(e) =>
                             setForm((c) => ({ ...c, categoria: e.target.value || null }))
@@ -1764,7 +1764,7 @@ function CourseCard({
                   </span>
                 </div>
               ) : null}
-              <div className="mb-1 flex items-center justify-between text-xs text-slate-400 dark:text-slate-500">
+              <div className="mb-1 flex items-center justify-between text-xs text-slate-500 dark:text-slate-500">
                 <span>Progresso</span>
                 <span>{getLmsProgressLabel(matricula.status, enrollmentProgress)}</span>
               </div>

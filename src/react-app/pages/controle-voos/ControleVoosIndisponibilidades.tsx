@@ -36,10 +36,10 @@ export default function ControleVoosIndisponibilidades() {
                     </div>
                   </div>
                   <dl className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4 text-sm">
-                    <div><dt className="text-xs font-medium text-slate-400 dark:text-slate-500">Início</dt><dd className="text-slate-700 dark:text-slate-300 font-mono">{formatDateTime(ind.dataInicio)}</dd></div>
-                    <div><dt className="text-xs font-medium text-slate-400 dark:text-slate-500">Fim previsto</dt><dd className="text-slate-700 dark:text-slate-300 font-mono">{formatDateTime(ind.dataFimPrevista)}</dd></div>
-                    <div><dt className="text-xs font-medium text-slate-400 dark:text-slate-500">Fim real</dt><dd className="text-slate-700 dark:text-slate-300 font-mono">{formatDateTime(ind.dataFimReal)}</dd></div>
-                    <div><dt className="text-xs font-medium text-slate-400 dark:text-slate-500">OS MRO</dt><dd className="text-slate-700 dark:text-slate-300 font-mono">{ind.osMroVinculada || '—'}</dd></div>
+                    <div><dt className="text-xs font-medium text-slate-500 dark:text-slate-500">Início</dt><dd className="text-slate-700 dark:text-slate-300 font-mono">{formatDateTime(ind.dataInicio)}</dd></div>
+                    <div><dt className="text-xs font-medium text-slate-500 dark:text-slate-500">Fim previsto</dt><dd className="text-slate-700 dark:text-slate-300 font-mono">{formatDateTime(ind.dataFimPrevista)}</dd></div>
+                    <div><dt className="text-xs font-medium text-slate-500 dark:text-slate-500">Fim real</dt><dd className="text-slate-700 dark:text-slate-300 font-mono">{formatDateTime(ind.dataFimReal)}</dd></div>
+                    <div><dt className="text-xs font-medium text-slate-500 dark:text-slate-500">OS MRO</dt><dd className="text-slate-700 dark:text-slate-300 font-mono">{ind.osMroVinculada || '—'}</dd></div>
                   </dl>
                   {ind.observacao && (
                     <div className="mt-3 rounded-lg bg-slate-50 border border-slate-100 p-3 dark:bg-slate-800 dark:border-slate-700">
@@ -63,7 +63,7 @@ export default function ControleVoosIndisponibilidades() {
                           ) : null;
                         })}
                       </div>
-                      <p className="mt-1 text-xs text-slate-400 dark:text-slate-500">
+                      <p className="mt-1 text-xs text-slate-500 dark:text-slate-500">
                         Referências ilustrativas do preview; não abrem registros operacionais.
                       </p>
                     </div>
@@ -72,7 +72,7 @@ export default function ControleVoosIndisponibilidades() {
               );
             })}
           </div>
-          <p className="mt-2 text-xs text-slate-400 dark:text-slate-500">{MOCK_INDISPONIBILIDADES.length} registros ilustrativos — manter fora do fluxo operacional ate schema real</p>
+          <p className="mt-2 text-xs text-slate-500 dark:text-slate-500">{MOCK_INDISPONIBILIDADES.length} registros ilustrativos — manter fora do fluxo operacional ate schema real</p>
         </ControleVoosPageShell>
       </div>
     </AppLayout>

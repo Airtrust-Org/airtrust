@@ -310,7 +310,7 @@ function ResourceAssignmentCell({
           </span>
         )}
         {simRes.status === 'AMBIGUOUS' && (
-          <select
+          <select aria-label="Selecione o simulador…"
             className={`${inputClass} w-full`}
             value={current.simulator_id ?? ''}
             disabled={saving}
@@ -337,7 +337,7 @@ function ResourceAssignmentCell({
             Nenhum instrutor elegível neste tenant
           </span>
         ) : (
-          <select
+          <select aria-label="Selecione o instrutor/examinador…"
             className={`${inputClass} w-full`}
             value={current.instructor_id ?? ''}
             disabled={saving}

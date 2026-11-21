@@ -77,7 +77,7 @@ function StatusTimeline({ status }: { status: CvFlightStatus }) {
                 ? isTerminal
                   ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300'
                   : 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300'
-                : 'bg-slate-100 text-slate-400 dark:bg-slate-800 dark:text-slate-500'
+                : 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-500'
             }`}>
               {done ? <CheckCircle className="h-3.5 w-3.5" /> : <Clock className="h-3.5 w-3.5" />}
               <ControleVoosStatusBadge status={step} className="bg-transparent text-inherit px-0 py-0 text-xs" />
@@ -376,47 +376,47 @@ export default function ControleVoosVooDetalhe() {
                   }} />}
                 <dl className="grid gap-3 sm:grid-cols-2 text-sm">
                   <div>
-                    <dt className="text-xs font-medium text-slate-400 dark:text-slate-500">Prefixo</dt>
+                    <dt className="text-xs font-medium text-slate-500 dark:text-slate-500">Prefixo</dt>
                     <dd className="text-slate-800 dark:text-slate-200 font-medium">{voo.prefixo}</dd>
                   </div>
                   <div>
-                    <dt className="text-xs font-medium text-slate-400 dark:text-slate-500">Modelo da aeronave</dt>
+                    <dt className="text-xs font-medium text-slate-500 dark:text-slate-500">Modelo da aeronave</dt>
                     <dd className="text-slate-800 dark:text-slate-200">{voo.modelo_aeronave || 'Modelo não informado'}</dd>
                   </div>
                   <div>
-                    <dt className="text-xs font-medium text-slate-400 dark:text-slate-500">Origem</dt>
+                    <dt className="text-xs font-medium text-slate-500 dark:text-slate-500">Origem</dt>
                     <dd className="text-slate-800 dark:text-slate-200">
                       {origem ? `${origem.codigo_icao} — ${origem.nome}` : `ID:${voo.origem_id}`}
                     </dd>
                   </div>
                   <div>
-                    <dt className="text-xs font-medium text-slate-400 dark:text-slate-500">Destino operacional</dt>
+                    <dt className="text-xs font-medium text-slate-500 dark:text-slate-500">Destino operacional</dt>
                     <dd className="text-slate-800 dark:text-slate-200">
                       {flightOperationalDestinationLabel(voo, aeroportos)}
                     </dd>
                   </div>
                   <div>
-                    <dt className="text-xs font-medium text-slate-400 dark:text-slate-500">Tipo de voo (ID)</dt>
+                    <dt className="text-xs font-medium text-slate-500 dark:text-slate-500">Tipo de voo (ID)</dt>
                     <dd className="text-slate-800 dark:text-slate-200">{voo.tipo_voo_id}</dd>
                   </div>
                   <div className="grid gap-3 sm:col-span-2 sm:grid-cols-2">
                     <div>
-                      <dt className="text-xs font-medium text-slate-400 dark:text-slate-500">Partida prevista</dt>
+                      <dt className="text-xs font-medium text-slate-500 dark:text-slate-500">Partida prevista</dt>
                       <dd className="text-slate-800 dark:text-slate-200 font-mono">{formatDateTime(voo.horario_previsto_partida)}</dd>
                     </div>
                     <div>
-                      <dt className="text-xs font-medium text-slate-400 dark:text-slate-500">Chegada prevista</dt>
+                      <dt className="text-xs font-medium text-slate-500 dark:text-slate-500">Chegada prevista</dt>
                       <dd className="text-slate-800 dark:text-slate-200 font-mono">{formatDateTime(voo.horario_previsto_chegada)}</dd>
                     </div>
                   </div>
                   {voo.horario_real_partida && (
                     <>
                       <div>
-                        <dt className="text-xs font-medium text-slate-400 dark:text-slate-500">Partida real</dt>
+                        <dt className="text-xs font-medium text-slate-500 dark:text-slate-500">Partida real</dt>
                         <dd className="text-emerald-700 dark:text-emerald-300 font-mono">{formatDateTime(voo.horario_real_partida)}</dd>
                       </div>
                       <div>
-                        <dt className="text-xs font-medium text-slate-400 dark:text-slate-500">Chegada real</dt>
+                        <dt className="text-xs font-medium text-slate-500 dark:text-slate-500">Chegada real</dt>
                         <dd className="text-emerald-700 dark:text-emerald-300 font-mono">{formatDateTime(voo.horario_real_chegada)}</dd>
                       </div>
                     </>
@@ -471,7 +471,7 @@ export default function ControleVoosVooDetalhe() {
                   </div>
                 ) : (
                   <div className="space-y-3">
-                    <p className="text-sm text-slate-400 dark:text-slate-500">Nenhum RDV criado para este voo.</p>
+                    <p className="text-sm text-slate-500 dark:text-slate-500">Nenhum RDV criado para este voo.</p>
                     <Link
                       to={`/controle-voos/rdv/${voo.id}`}
                       className="inline-flex items-center text-sm font-medium text-blue-600 hover:underline dark:text-blue-400"

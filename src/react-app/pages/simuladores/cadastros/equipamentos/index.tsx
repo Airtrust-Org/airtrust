@@ -246,7 +246,7 @@ const Equipamentos: React.FC = () => {
             />
           </div>
 
-          <select
+          <select aria-label="Todos os tipos"
             value={filtros.tipo_simulador}
             onChange={(e) => setFiltros((prev) => ({ ...prev, tipo_simulador: e.target.value }))}
             className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-primary"
@@ -259,7 +259,7 @@ const Equipamentos: React.FC = () => {
             ))}
           </select>
 
-          <select
+          <select aria-label="Todos os status"
             value={filtros.status}
             onChange={(e) => setFiltros((prev) => ({ ...prev, status: e.target.value }))}
             className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-primary"
@@ -272,7 +272,7 @@ const Equipamentos: React.FC = () => {
             ))}
           </select>
 
-          <select
+          <select aria-label="Todos os equipamentos"
             value={filtros.aeronave_base}
             onChange={(e) => setFiltros((prev) => ({ ...prev, aeronave_base: e.target.value }))}
             className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-primary"

@@ -210,7 +210,7 @@ function LinhaMatricula({
                   ? 'text-amber-600 dark:text-amber-400'
                   : naoIniciado
                     ? 'text-emerald-600 dark:text-emerald-400'
-                    : 'text-slate-400'
+                    : 'text-slate-500'
             }`}
           >
             {statusLabel(matricula.status)}
@@ -249,7 +249,7 @@ function LinhaMatricula({
 
         {/* subtexto para concluído */}
         {concluido && (
-          <p className="mt-1 text-xs text-slate-400 dark:text-slate-500">
+          <p className="mt-1 text-xs text-slate-500 dark:text-slate-500">
             Disponível para consulta
           </p>
         )}

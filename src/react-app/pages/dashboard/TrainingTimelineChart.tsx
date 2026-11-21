@@ -44,7 +44,7 @@ export const TrainingTimelineChart = React.memo(function TrainingTimelineChart({
     <section className="rounded-2xl border border-slate-200 bg-white px-5 py-4 shadow-sm dark:border-slate-700 dark:bg-slate-900">
       <div className="mb-5 flex items-center justify-between">
         <div>
-          <p className="text-xs font-bold uppercase tracking-widest text-slate-400 dark:text-slate-500">
+          <p className="text-xs font-bold uppercase tracking-widest text-slate-500 dark:text-slate-500">
             Treinamentos e Simulador
           </p>
           <h3 className="text-sm font-extrabold tracking-tight text-slate-900 dark:text-slate-100">Carga futura</h3>
@@ -79,7 +79,7 @@ export const TrainingTimelineChart = React.memo(function TrainingTimelineChart({
       </div>
 
       {totalEventos === 0 ? (
-        <p className="mt-4 text-center text-xs text-slate-400 dark:text-slate-500">
+        <p className="mt-4 text-center text-xs text-slate-500 dark:text-slate-500">
           Nenhuma demanda programada nos próximos 90 dias.
         </p>
       ) : (

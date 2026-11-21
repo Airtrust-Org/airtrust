@@ -35,7 +35,7 @@ export default function FuncionariosDashboard() {
       </div>
 
       {/* Main Content */}
-      <main className="container mx-auto px-4 md:px-8 py-8">
+      <div className="container mx-auto px-4 md:px-8 py-8">
         {/* Tabs Navigation - Standardized */}
         <Tabs
           defaultValue="nomes"
@@ -55,7 +55,7 @@ export default function FuncionariosDashboard() {
             <Cadastros />
           </TabsContent>
         </Tabs>
-      </main>
+      </div>
     </div>
   );
 }

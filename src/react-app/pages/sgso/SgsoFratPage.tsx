@@ -411,7 +411,7 @@ export default function SgsoFratPage() {
             <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
               <h2 className="text-lg font-semibold text-slate-900">Nova avaliação</h2>
               <div className="mt-4 space-y-4 text-sm text-slate-700">
-                <select
+                <select aria-label="Selecione um modelo FRAT"
                   value={form.modelo_id}
                   onChange={(event) =>
                     setForm((current) => ({
@@ -430,7 +430,7 @@ export default function SgsoFratPage() {
                   ))}
                 </select>
 
-                <select
+                <select aria-label="Tripulante"
                   value={form.tripulante_id}
                   onChange={(event) =>
                     setForm((current) => ({ ...current, tripulante_id: event.target.value }))

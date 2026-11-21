@@ -55,7 +55,7 @@ const QualificacoesFilters = memo(function QualificacoesFilters({
         </div>
 
         {/* Tipo */}
-        <select
+        <select aria-label="Todos os tipos"
           value={tipoFiltro}
           onChange={(e) => onTipoChange(e.target.value)}
           className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
@@ -67,7 +67,7 @@ const QualificacoesFilters = memo(function QualificacoesFilters({
         </select>
 
         {/* Equipamento */}
-        <select
+        <select aria-label="Todos os equipamentos"
           value={aeronaveFiltro}
           onChange={(e) => onAeronaveChange(e.target.value)}
           className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
@@ -81,7 +81,7 @@ const QualificacoesFilters = memo(function QualificacoesFilters({
         </select>
 
         {/* Status */}
-        <select
+        <select aria-label="Todos os status"
           value={statusFiltro}
           onChange={(e) => onStatusChange(e.target.value)}
           className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"

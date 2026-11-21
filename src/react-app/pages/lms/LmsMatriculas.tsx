@@ -344,7 +344,7 @@ export function ModalMatricular({
           <button
             onClick={onClose}
             aria-label="Fechar modal"
-            className="rounded-lg p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-800 dark:text-slate-500 dark:hover:text-slate-300"
+            className="rounded-lg p-1 text-slate-500 hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-800 dark:text-slate-500 dark:hover:text-slate-300"
           >
             ✕
           </button>
@@ -418,7 +418,7 @@ export function ModalMatricular({
                 : 'Digite um nome para localizar rapidamente o funcionário'}
             </span>
             {fetchingFunc ? (
-              <span className="inline-flex items-center gap-1 text-slate-400 dark:text-slate-500">
+              <span className="inline-flex items-center gap-1 text-slate-500 dark:text-slate-500">
                 <Loader2 className="h-3.5 w-3.5 animate-spin" />
                 Buscando...
               </span>
@@ -460,7 +460,7 @@ export function ModalMatricular({
               <Loader2 className="h-6 w-6 animate-spin text-slate-300 dark:text-slate-600" />
             </div>
           ) : filtered.length === 0 ? (
-            <p className="py-6 text-center text-sm text-slate-400 dark:text-slate-500">
+            <p className="py-6 text-center text-sm text-slate-500 dark:text-slate-500">
               {debouncedSearch
                 ? 'Nenhum funcionário encontrado para essa busca'
                 : 'Nenhum funcionário disponível para matrícula'}
@@ -496,7 +496,7 @@ export function ModalMatricular({
                     />
                     <div className="min-w-0 flex-1">
                       <div className="text-sm font-medium text-slate-800 truncate dark:text-slate-200">{f.nome}</div>
-                      <div className="text-xs text-slate-400 truncate dark:text-slate-500">
+                      <div className="text-xs text-slate-500 truncate dark:text-slate-500">
                         {[f.matricula, f.cargo].filter(Boolean).join(' · ')}
                       </div>
                     </div>
@@ -981,7 +981,7 @@ export default function LmsMatriculas() {
                             nome={m.funcionario_nome ?? `ID ${m.funcionario_id}`}
                             className="font-medium text-slate-900 dark:text-slate-100"
                           />
-                          <div className="text-xs text-slate-400 dark:text-slate-500">Matrícula #{m.id}</div>
+                          <div className="text-xs text-slate-500 dark:text-slate-500">Matrícula #{m.id}</div>
                           {m.aluno_vinculado === 0 && (
                             <div className="mt-1 text-xs font-medium text-amber-700" title={LMS_UNLINKED_ACCOUNT_HINT}>
                               Sem conta vinculada
@@ -1110,7 +1110,7 @@ export default function LmsMatriculas() {
           {cancelTarget ? (
             <div className="space-y-4 text-sm text-slate-600 dark:text-slate-400">
               <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 dark:border-slate-700 dark:bg-slate-800">
-                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400 dark:text-slate-500">
+                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500 dark:text-slate-500">
                   Curso
                 </p>
                 <p className="mt-1 text-base font-semibold text-slate-900">

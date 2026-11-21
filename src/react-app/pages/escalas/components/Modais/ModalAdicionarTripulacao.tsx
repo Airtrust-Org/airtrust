@@ -1093,7 +1093,7 @@ export default function ModalAdicionarTripulacao({
                   <Plane className="h-4 w-4" />
                   <span className="text-xs font-semibold uppercase tracking-wide">Equipamento</span>
                 </div>
-                <select
+                <select aria-label="Selecione o equipamento"
                   value={aeronaveId}
                   onChange={(event) => setAeronaveId(event.target.value)}
                   disabled={modoEdicao}

@@ -21,7 +21,7 @@ export default function ControleVoosDateControls({
 }: ControleVoosDateControlsProps) {
   return (
     <div className="flex flex-wrap items-center gap-2">
-      <span className="text-xs font-medium uppercase tracking-wide text-slate-400 dark:text-slate-500">
+      <span className="text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-slate-500">
         {label}
       </span>
       <button

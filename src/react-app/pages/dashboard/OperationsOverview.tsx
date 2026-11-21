@@ -31,7 +31,7 @@ export const OperationsOverview = React.memo(function OperationsOverview({
       <div className="flex items-center justify-between gap-4">
         <div className="flex items-center gap-4">
           <div>
-            <p className="text-xs font-bold uppercase tracking-[0.2em] text-slate-400 dark:text-slate-500">
+            <p className="text-xs font-bold uppercase tracking-[0.2em] text-slate-500 dark:text-slate-500">
               Visão geral
             </p>
             <p className="mt-0.5 text-xl font-black leading-none text-slate-900 dark:text-slate-100">{score}%</p>

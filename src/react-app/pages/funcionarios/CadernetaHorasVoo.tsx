@@ -218,7 +218,7 @@ export default function CadernetaHorasVoo({ funcionarioId, funcionarioNome, canE
                       }))
                     }
                   />
-                  <select
+                  <select aria-label="Origem"
                     className="border rounded px-2 py-1 text-sm"
                     value={String(filters.origem_registro || '')}
                     onChange={(e) =>

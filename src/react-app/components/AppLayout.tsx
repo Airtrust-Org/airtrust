@@ -385,7 +385,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
                           onClick={() => setTreinamentosOpen(false)}
                           className={`flex items-center gap-2.5 px-3.5 py-2 text-sm transition-colors hover:bg-slate-50 dark:hover:bg-slate-800 ${isActivePath('/qualificacoes') || isActivePath('/treinamentos/planejados') || isActivePath('/treinamentos/solicitacoes') ? 'font-semibold text-primary dark:text-blue-300' : 'text-slate-600 dark:text-slate-300'}`}
                         >
-                          <BadgeCheck className="h-4 w-4 shrink-0 text-slate-400 dark:text-slate-500" />
+                          <BadgeCheck className="h-4 w-4 shrink-0 text-slate-500 dark:text-slate-500" />
                           Qualificações
                         </Link>
                       )}
@@ -395,7 +395,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
                           onClick={() => setTreinamentosOpen(false)}
                           className={`flex items-center gap-2.5 px-3.5 py-2 text-sm transition-colors hover:bg-slate-50 dark:hover:bg-slate-800 ${isActivePath('/treinamentos/compliance') ? 'font-semibold text-primary dark:text-blue-300' : 'text-slate-600 dark:text-slate-300'}`}
                         >
-                          <ShieldCheck className="h-4 w-4 shrink-0 text-slate-400 dark:text-slate-500" />
+                          <ShieldCheck className="h-4 w-4 shrink-0 text-slate-500 dark:text-slate-500" />
                           Compliance de Treinamentos
                         </Link>
                       )}
@@ -405,7 +405,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
                           onClick={() => setTreinamentosOpen(false)}
                           className={`flex items-center gap-2.5 px-3.5 py-2 text-sm transition-colors hover:bg-slate-50 dark:hover:bg-slate-800 ${isActivePath('/lms') ? 'font-semibold text-primary dark:text-blue-300' : 'text-slate-600 dark:text-slate-300'}`}
                         >
-                          <BookOpen className="h-4 w-4 shrink-0 text-slate-400 dark:text-slate-500" />
+                          <BookOpen className="h-4 w-4 shrink-0 text-slate-500 dark:text-slate-500" />
                           LMS / Cursos EAD
                         </Link>
                       )}
@@ -421,7 +421,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
                           onClick={() => setTreinamentosOpen(false)}
                           className={`flex items-center gap-2.5 px-3.5 py-2 text-sm transition-colors hover:bg-slate-50 dark:hover:bg-slate-800 ${isActivePath('/conhecimento-ativo/admin') ? 'font-semibold text-primary dark:text-blue-300' : 'text-slate-600 dark:text-slate-300'}`}
                         >
-                          <BrainCircuit className="h-4 w-4 shrink-0 text-slate-400 dark:text-slate-500" />
+                          <BrainCircuit className="h-4 w-4 shrink-0 text-slate-500 dark:text-slate-500" />
                           Conhecimento Ativo
                         </Link>
                       )}
@@ -431,7 +431,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
                           onClick={() => setTreinamentosOpen(false)}
                           className={`flex items-center gap-2.5 px-3.5 py-2 text-sm transition-colors hover:bg-slate-50 dark:hover:bg-slate-800 ${isActivePath('/simuladores') ? 'font-semibold text-primary dark:text-blue-300' : 'text-slate-600 dark:text-slate-300'}`}
                         >
-                          <Plane className="h-4 w-4 shrink-0 text-slate-400 dark:text-slate-500" />
+                          <Plane className="h-4 w-4 shrink-0 text-slate-500 dark:text-slate-500" />
                           Treinamento de Voo
                         </Link>
                       )}
@@ -578,7 +578,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
                   {user?.nome?.split(' ')[0] || t('layout.user.default')}
                 </span>
                 {user?.role && (
-                  <span className="mt-0.5 text-xs capitalize leading-none text-slate-400 dark:text-slate-500">
+                  <span className="mt-0.5 text-xs capitalize leading-none text-slate-600 dark:text-slate-400">
                     {user.role.toLowerCase()}
                   </span>
                 )}

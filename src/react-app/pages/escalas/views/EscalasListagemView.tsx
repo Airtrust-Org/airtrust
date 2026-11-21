@@ -206,7 +206,7 @@ export default function EscalasListagemView() {
                     : isCurrent && isEmpty
                       ? 'border border-dashed border-emerald-200 bg-emerald-50 text-emerald-400'
                       : isEmpty
-                        ? 'text-gray-400 hover:bg-gray-50 border border-transparent hover:border-gray-200 dark:text-slate-500 dark:hover:bg-slate-800/80 dark:hover:border-slate-700' +
+                        ? 'text-gray-500 hover:bg-gray-50 border border-transparent hover:border-gray-200 dark:text-slate-500 dark:hover:bg-slate-800/80 dark:hover:border-slate-700' +
                           (isPast ? ' opacity-40' : '')
                         : isPast
                           ? 'text-gray-500 opacity-50 hover:opacity-80 border border-transparent dark:text-slate-400'
@@ -247,7 +247,7 @@ export default function EscalasListagemView() {
         <div className="rounded-2xl border-2 border-dashed border-gray-200 bg-gray-50/50 py-20 text-center dark:border-slate-700 dark:bg-slate-900/40">
           <div className="text-5xl mb-3">📅</div>
           <h3 className="text-base font-semibold text-gray-800 dark:text-slate-100">Nenhuma escala encontrada</h3>
-          <p className="mt-1 text-sm text-gray-400 dark:text-slate-400">Crie a primeira escala do ano manualmente.</p>
+          <p className="mt-1 text-sm text-gray-500 dark:text-slate-400">Crie a primeira escala do ano manualmente.</p>
           <div className="flex items-center justify-center gap-3 mt-5">
             <Button
               size="sm"
@@ -286,7 +286,7 @@ export default function EscalasListagemView() {
                     <div className="flex items-start justify-between gap-2">
                       <div className="min-w-0">
                         <h3 className="text-lg font-bold leading-tight text-gray-900 dark:text-slate-100">{mesNome}</h3>
-                        <p className="mt-0.5 text-xs text-gray-400 dark:text-slate-400">
+                        <p className="mt-0.5 text-xs text-gray-500 dark:text-slate-400">
                           Escala {escala.mes}/{escala.ano}
                         </p>
                       </div>
@@ -300,7 +300,7 @@ export default function EscalasListagemView() {
                                 ? 'bg-blue-50 text-blue-700 border-blue-200 dark:border-blue-500/30 dark:bg-blue-500/10 dark:text-blue-200'
                                 : escala.status === 'publicada'
                                   ? 'bg-green-50 text-green-700 border-green-200 dark:border-green-500/30 dark:bg-green-500/10 dark:text-green-200'
-                                  : 'bg-gray-50 text-gray-400 border-gray-200 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-500'
+                                  : 'bg-gray-50 text-gray-500 border-gray-200 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-500'
                         }`}
                       >
                         <span className={`w-1.5 h-1.5 rounded-full ${conf.dotColor}`} />
@@ -364,7 +364,7 @@ export default function EscalasListagemView() {
                     </div>
 
                     <div className="mt-5 flex items-center justify-between border-t border-gray-100 pt-3 dark:border-slate-800">
-                      <div className="text-xs text-slate-400 dark:text-slate-500">
+                      <div className="text-xs text-slate-500 dark:text-slate-500">
                         {escala.status === 'publicada'
                           ? 'Pronta para consulta da tripulação'
                           : 'Escala em construção operacional'}
@@ -458,7 +458,7 @@ export default function EscalasListagemView() {
                     <p className="text-sm font-semibold text-slate-600 group-hover:text-slate-800 dark:text-slate-300 dark:group-hover:text-slate-100">
                       + Criar {MESES[mesNumero - 1]}
                     </p>
-                    <p className="mt-1 text-xs text-slate-400 dark:text-slate-500">
+                    <p className="mt-1 text-xs text-slate-500 dark:text-slate-500">
                       Sem escala para este mês
                     </p>
                   </button>

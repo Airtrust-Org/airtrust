@@ -473,7 +473,7 @@ export default function HospedagemPage() {
 
         {/* Filters */}
         <div className="flex flex-wrap gap-3 items-center">
-          <select
+          <select aria-label="Todos os status"
             value={filtroAtivo}
             onChange={(e) => setFiltroAtivo(e.target.value as '' | '1' | '0')}
             className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
@@ -482,7 +482,7 @@ export default function HospedagemPage() {
             <option value="1">Hospedados agora</option>
             <option value="0">Com checkout</option>
           </select>
-          <select
+          <select aria-label="Todos os tipos"
             value={filtroTipo}
             onChange={(e) => setFiltroTipo(e.target.value as TipoHospedagem | '')}
             className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"

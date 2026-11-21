@@ -34,7 +34,7 @@ export const PageHeader: React.FC<PageHeaderProps> = ({
             </p>
           )}
           {lastUpdated && (
-            <p className="text-xs text-slate-400 font-normal leading-normal dark:text-slate-500">
+            <p className="text-xs text-slate-500 font-normal leading-normal dark:text-slate-500">
               {lastUpdated}
             </p>
           )}

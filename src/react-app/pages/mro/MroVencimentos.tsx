@@ -28,7 +28,7 @@ export default function MroVencimentos() {
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
             <input aria-label="Buscar por tarefa, ATA ou referência..." type="text" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Buscar por tarefa, ATA ou referência..." className="w-full rounded-lg border border-slate-300 bg-white py-2 pl-10 pr-4 text-sm text-slate-700 placeholder:text-slate-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:placeholder:text-slate-500" />
           </div>
-          <select value={criticidadeFilter} onChange={(e) => setCriticidadeFilter(e.target.value)} className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200">
+          <select aria-label="Todas as criticidades" value={criticidadeFilter} onChange={(e) => setCriticidadeFilter(e.target.value)} className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200">
             <option value="todos">Todas as criticidades</option>
             <option value="critica">Crítica</option><option value="alta">Alta</option>
             <option value="media">Média</option><option value="baixa">Baixa</option>

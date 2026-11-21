@@ -741,7 +741,7 @@ export function TrainingComplianceApplicabilityEditor({
                 ) : null}
               </div>
               <div className="mt-3 flex items-center gap-2 border-t border-slate-200 pt-3">
-                <select
+                <select aria-label="Incluir · obrigatório"
                   value={rule.obrigatoriedade}
                 disabled={editBlocked || updateRule.isPending}
                 onChange={(event) =>

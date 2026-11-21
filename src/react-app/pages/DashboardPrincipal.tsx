@@ -223,7 +223,7 @@ function SectorSelector({
                 {sector.nome}
               </span>
               {sector.codigo ? (
-                <span className="text-xs text-slate-400 dark:text-slate-500">{sector.codigo}</span>
+                <span className="text-xs text-slate-500 dark:text-slate-500">{sector.codigo}</span>
               ) : null}
             </label>
           ))}
@@ -732,7 +732,7 @@ export default function DashboardPrincipal() {
 
   return (
     <AppLayout>
-      <main className="mx-auto max-w-screen-2xl space-y-5 px-4 py-5 md:px-6 md:py-6">
+      <div className="mx-auto max-w-screen-2xl space-y-5 px-4 py-5 md:px-6 md:py-6">
         <section className="relative overflow-visible rounded-3xl border border-slate-200 bg-gradient-to-br from-white via-slate-50 to-blue-50/70 p-5 shadow-[0_20px_55px_-38px_rgba(15,23,42,0.8)] dark:border-slate-700 dark:from-slate-900 dark:via-slate-900 dark:to-slate-800 md:p-6">
           <div className="pointer-events-none absolute -right-12 -top-16 h-44 w-44 rounded-full bg-blue-500/10 blur-3xl" />
           <div className="relative flex flex-col gap-5 xl:flex-row xl:items-center xl:justify-between">
@@ -957,11 +957,11 @@ export default function DashboardPrincipal() {
           </div>
         </section>
 
-        <p className="pb-2 text-center text-xs text-slate-400 dark:text-slate-500">
+        <p className="pb-2 text-center text-xs text-slate-500 dark:text-slate-500">
           O painel resume decisões; os módulos permanecem como fonte detalhada e auditável dos
           registros.
         </p>
-      </main>
+      </div>
     </AppLayout>
   );
 }

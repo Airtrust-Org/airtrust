@@ -433,7 +433,7 @@ export default function ControleVoosRdvWorkflowPanel({
               Aprovações
             </p>
             {aprovacoes.length === 0 ? (
-              <p className="text-xs text-slate-400 dark:text-slate-500">
+              <p className="text-xs text-slate-500 dark:text-slate-500">
                 Nenhum evento registrado.
               </p>
             ) : (
@@ -443,7 +443,7 @@ export default function ControleVoosRdvWorkflowPanel({
                     <span>
                       {a.status} (v{a.versao}){a.justificativa ? ` — ${a.justificativa}` : ''}
                     </span>
-                    <span className="shrink-0 text-slate-400 dark:text-slate-500">
+                    <span className="shrink-0 text-slate-500 dark:text-slate-500">
                       {formatDateTime(a.created_at)}
                     </span>
                   </li>
@@ -456,7 +456,7 @@ export default function ControleVoosRdvWorkflowPanel({
               Correções (diff campo a campo)
             </p>
             {revisoes.length === 0 ? (
-              <p className="text-xs text-slate-400 dark:text-slate-500">
+              <p className="text-xs text-slate-500 dark:text-slate-500">
                 Nenhuma correção registrada.
               </p>
             ) : (
@@ -467,7 +467,7 @@ export default function ControleVoosRdvWorkflowPanel({
                     <span className="line-through">{r.valor_anterior ?? '—'}</span> →{' '}
                     <span className="font-medium">{r.valor_novo ?? '—'}</span>
                     {r.justificativa && (
-                      <span className="text-slate-400 dark:text-slate-500">
+                      <span className="text-slate-500 dark:text-slate-500">
                         {' '}
                         ({r.justificativa})
                       </span>

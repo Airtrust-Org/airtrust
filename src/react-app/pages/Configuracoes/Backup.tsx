@@ -976,7 +976,7 @@ export default function BackupPage() {
               className="w-full pl-9 pr-4 py-2 text-sm border border-slate-200 dark:border-slate-700 rounded-xl bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-transparent"
             />
           </div>
-          <select
+          <select aria-label="Todos os status"
             value={filterStatus}
             onChange={(e) => setFilterStatus(e.target.value)}
             className="px-3 py-2 text-sm border border-slate-200 dark:border-slate-700 rounded-xl bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-primary/30"
@@ -986,7 +986,7 @@ export default function BackupPage() {
             <option value="EM_PROGRESSO">Em Progresso</option>
             <option value="FALHOU">Falhou</option>
           </select>
-          <select
+          <select aria-label="Todos os tipos"
             value={filterTipo}
             onChange={(e) => setFilterTipo(e.target.value)}
             className="px-3 py-2 text-sm border border-slate-200 dark:border-slate-700 rounded-xl bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-primary/30"

@@ -68,7 +68,7 @@ export default function HorasVooPage() {
                 <Plane className="h-4 w-4 text-blue-600" />
                 Piloto / Tripulante
               </div>
-              <select
+              <select aria-label="— Selecione um piloto —"
                 value={selectedId ?? ''}
                 onChange={(e) => setSelectedId(e.target.value ? Number(e.target.value) : null)}
                 className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"

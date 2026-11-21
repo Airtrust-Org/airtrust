@@ -28,13 +28,13 @@ export default function MroOrdensServico() {
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
             <input aria-label="Buscar por número, título ou ATA..." type="text" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Buscar por número, título ou ATA..." className="w-full rounded-lg border border-slate-300 bg-white py-2 pl-10 pr-4 text-sm text-slate-700 placeholder:text-slate-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:placeholder:text-slate-500" />
           </div>
-          <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200">
+          <select aria-label="Todos os status" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200">
             <option value="todos">Todos os status</option>
             <option value="aberta">Aberta</option><option value="em-andamento">Em Andamento</option>
             <option value="aguardando-material">Aguard. Material</option><option value="aguardando-aprovacao">Aguard. Aprovação</option>
             <option value="concluida">Concluída</option><option value="cancelada">Cancelada</option>
           </select>
-          <select value={tipoFilter} onChange={(e) => setTipoFilter(e.target.value)} className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200">
+          <select aria-label="Todos os tipos" value={tipoFilter} onChange={(e) => setTipoFilter(e.target.value)} className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200">
             <option value="todos">Todos os tipos</option>
             <option value="preventiva">Preventiva</option><option value="corretiva">Corretiva</option>
             <option value="modificacao">Modificação</option><option value="inspecao">Inspeção</option>

@@ -40,7 +40,7 @@ export const FrmsSummary = React.memo(function FrmsSummary({ frmsAlertas }: Frms
               <span className={`h-2 w-2 rounded-full ${conf.dot}`} />
               <span className="text-xs font-medium text-slate-700 dark:text-slate-300">{conf.label}</span>
             </div>
-            <span className={`rounded-full px-2.5 py-0.5 text-xs font-bold ${count > 0 ? conf.cls : 'bg-slate-100 text-slate-400 dark:bg-slate-800 dark:text-slate-500'}`}>
+            <span className={`rounded-full px-2.5 py-0.5 text-xs font-bold ${count > 0 ? conf.cls : 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-500'}`}>
               {count}
             </span>
           </Link>

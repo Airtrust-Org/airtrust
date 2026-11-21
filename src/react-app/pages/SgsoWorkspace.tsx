@@ -913,7 +913,7 @@ export default function Sgso() {
                             >
                               Copiar protocolo
                             </button>
-                            <select
+                            <select aria-label="Aberto"
                               value={r.status}
                               disabled={updatingRelatoId === r.id}
                               onChange={(event) =>

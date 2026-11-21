@@ -1055,7 +1055,7 @@ function ModalCriarUsuario({
                 Vincular ao funcionário{' '}
                 <span className="text-slate-400 font-normal">(opcional)</span>
               </label>
-              <select
+              <select aria-label="— Nenhum —"
                 value={funcionarioId ?? ''}
                 onChange={(e) => handleFuncionarioChange(e.target.value)}
                 className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-primary/30 focus:border-primary bg-white"

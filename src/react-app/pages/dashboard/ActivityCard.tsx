@@ -29,7 +29,7 @@ export const ActivityCard = React.memo(function ActivityCard({ atividades }: Act
       {atividades.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-8 text-center">
           <Activity className="mb-2 h-8 w-8 text-slate-200 dark:text-slate-700" />
-          <p className="text-xs text-slate-400 dark:text-slate-500">Nenhuma atividade recente registrada.</p>
+          <p className="text-xs text-slate-500 dark:text-slate-500">Nenhuma atividade recente registrada.</p>
         </div>
       ) : (
         <div className="divide-y divide-slate-50 dark:divide-slate-700">
@@ -38,7 +38,7 @@ export const ActivityCard = React.memo(function ActivityCard({ atividades }: Act
               <div className={`mt-1.5 h-1.5 w-1.5 flex-shrink-0 rounded-full ${colorMap[a.cor ?? ''] ?? 'bg-slate-400'}`} />
               <div className="min-w-0">
                 <p className="text-xs font-semibold text-slate-900 dark:text-slate-100">{a.descricao}</p>
-                <p className="mt-0.5 text-xs text-slate-400 dark:text-slate-500">
+                <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-500">
                   {formatRelativeTime(a.timestamp)}
                   {a.tripulanteNome ? ` · ${a.tripulanteNome}` : ''}
                 </p>

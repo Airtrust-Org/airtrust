@@ -262,7 +262,7 @@ export default function LmsDashboard() {
                               />
                               <p className="text-xs text-slate-500 dark:text-slate-400">{item.curso_titulo}</p>
                             </div>
-                            <span className="text-xs text-slate-400 dark:text-slate-500">
+                            <span className="text-xs text-slate-500 dark:text-slate-500">
                               {new Date(item.data_conclusao).toLocaleDateString('pt-BR')}
                             </span>
                           </button>
@@ -277,7 +277,7 @@ export default function LmsDashboard() {
                     ) : (
                       <div className="flex flex-col items-center gap-2 rounded-xl border border-dashed border-slate-200 py-8 text-center dark:border-slate-700">
                         <Users className="h-8 w-8 text-slate-300 dark:text-slate-600" />
-                        <p className="text-sm text-slate-400 dark:text-slate-500">Sem conclusões recentes.</p>
+                        <p className="text-sm text-slate-500 dark:text-slate-500">Sem conclusões recentes.</p>
                       </div>
                     )}
                   </div>
@@ -301,12 +301,12 @@ export default function LmsDashboard() {
                                 {curso.titulo}
                               </p>
                               {curso.source === 'performance' ? (
-                                <span className="flex-shrink-0 text-xs text-slate-400 dark:text-slate-500">
+                                <span className="flex-shrink-0 text-xs text-slate-500 dark:text-slate-500">
                                   {curso.total_matriculas} matriculado
                                   {curso.total_matriculas !== 1 ? 's' : ''}
                                 </span>
                               ) : (
-                                <span className="flex-shrink-0 text-xs text-slate-400 dark:text-slate-500">
+                                <span className="flex-shrink-0 text-xs text-slate-500 dark:text-slate-500">
                                   {curso.categoria ?? 'Catálogo'}
                                 </span>
                               )}
@@ -346,7 +346,7 @@ export default function LmsDashboard() {
                     ) : (
                       <div className="flex flex-col items-center gap-2 rounded-xl border border-dashed border-slate-200 py-8 text-center dark:border-slate-700">
                         <BookOpen className="h-8 w-8 text-slate-300 dark:text-slate-600" />
-                        <p className="text-sm text-slate-400 dark:text-slate-500">Nenhum curso publicado ainda.</p>
+                        <p className="text-sm text-slate-500 dark:text-slate-500">Nenhum curso publicado ainda.</p>
                         <Button variant="primary" onClick={() => navigate('/lms/cursos')}>
                           <Plus className="h-4 w-4" />
                           Criar primeiro curso
@@ -399,7 +399,7 @@ export default function LmsDashboard() {
                       <div className="min-w-0 flex-1">
                         <div className="mb-1 flex flex-wrap items-center gap-2">
                           <LmsStatPill status={getMatriculaStatusMeta(item.status)} />
-                          <span className="text-xs text-slate-400 dark:text-slate-500">
+                          <span className="text-xs text-slate-500 dark:text-slate-500">
                             {formatMinutes(item.carga_horaria_minutos)}
                           </span>
                         </div>
@@ -413,7 +413,7 @@ export default function LmsDashboard() {
                           />
                         </div>
                       </div>
-                      <ArrowRight className="h-4 w-4 flex-shrink-0 text-slate-400 dark:text-slate-500" />
+                      <ArrowRight className="h-4 w-4 flex-shrink-0 text-slate-500 dark:text-slate-500" />
                     </button>
                   ))}
                 </div>

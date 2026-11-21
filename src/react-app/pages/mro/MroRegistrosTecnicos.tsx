@@ -28,11 +28,11 @@ export default function MroRegistrosTecnicos() {
           <div className="relative flex-1 max-w-md"><Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
             <input aria-label="Buscar por serviço, OS, liberador ou referência..." type="text" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Buscar por serviço, OS, liberador ou referência..." className="w-full rounded-lg border border-slate-300 bg-white py-2 pl-10 pr-4 text-sm text-slate-700 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200" />
           </div>
-          <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200">
+          <select aria-label="Todos os status" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200">
             <option value="todos">Todos os status</option><option value="pendente">Pendente</option>
             <option value="aprovado">Aprovado</option><option value="rejeitado">Rejeitado</option>
           </select>
-          <select value={tipoFilter} onChange={(e) => setTipoFilter(e.target.value)} className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200">
+          <select aria-label="Todos os tipos" value={tipoFilter} onChange={(e) => setTipoFilter(e.target.value)} className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200">
             <option value="todos">Todos os tipos</option><option value="manutencao">Manutenção</option>
             <option value="inspecao">Inspeção</option><option value="alteracao">Alteração</option><option value="reparo">Reparo</option>
           </select>
@@ -57,7 +57,7 @@ export default function MroRegistrosTecnicos() {
                 <td className="px-4 py-3 text-slate-500 dark:text-slate-400">{r.data}</td>
                 <td className="px-4 py-3 max-w-[280px] truncate text-slate-700 dark:text-slate-300" title={r.servico}>{r.servico}</td>
                 <td className="px-4 py-3 max-w-[150px] truncate text-xs text-slate-500 dark:text-slate-400">{r.referenciaTecnica}</td>
-                <td className="px-4 py-3 text-slate-600 dark:text-slate-400"><span className="font-medium">{r.liberador}</span><br /><span className="text-xs text-slate-400 dark:text-slate-500">{r.crmLiberador}</span></td>
+                <td className="px-4 py-3 text-slate-600 dark:text-slate-400"><span className="font-medium">{r.liberador}</span><br /><span className="text-xs text-slate-500 dark:text-slate-500">{r.crmLiberador}</span></td>
                 <td className="px-4 py-3"><MroStatusBadge status={r.status} /></td>
                 <td className="px-4 py-3 text-center"><button type="button" disabled onClick={() => toast.info('Protótipo: exportação de PDF não disponível nesta prévia.')} className="inline-flex items-center gap-1 rounded-md border border-slate-300 bg-white px-2 py-1 text-xs font-medium text-slate-500 opacity-50 cursor-not-allowed dark:border-slate-600 dark:bg-slate-800 dark:text-slate-400" title="Funcionalidade não disponível no protótipo"><Download className="h-3 w-3" /> PDF</button></td>
               </tr>);

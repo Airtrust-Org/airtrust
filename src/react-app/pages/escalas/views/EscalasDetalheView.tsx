@@ -1049,7 +1049,7 @@ export default function EscalasDetalheView() {
               </h3>
               <button aria-label="Fechar"
                 onClick={() => setPainelQuinzenas(false)}
-                className="text-slate-400 hover:text-slate-600 dark:text-slate-500 dark:hover:text-slate-200"
+                className="text-slate-500 hover:text-slate-600 dark:text-slate-500 dark:hover:text-slate-200"
               >
                 <X className="w-4 h-4" />
               </button>
@@ -1646,7 +1646,7 @@ export default function EscalasDetalheView() {
             <button
               type="button"
               onClick={() => setLegendaVisible((v) => !v)}
-              className="ml-auto flex items-center gap-1 rounded px-2 py-0.5 text-xs font-semibold text-slate-400 transition-colors hover:bg-slate-50 hover:text-slate-600 dark:text-slate-500 dark:hover:bg-slate-800 dark:hover:text-slate-200"
+              className="ml-auto flex items-center gap-1 rounded px-2 py-0.5 text-xs font-semibold text-slate-500 transition-colors hover:bg-slate-50 hover:text-slate-600 dark:text-slate-500 dark:hover:bg-slate-800 dark:hover:text-slate-200"
             >
               {legendaVisible ? 'Ocultar legenda' : 'Legenda'}
               {legendaVisible ? (
@@ -1971,7 +1971,7 @@ export default function EscalasDetalheView() {
                 </div>
                 <button aria-label="Fechar"
                   onClick={() => setFdpModalAberto(false)}
-                  className="text-slate-400 hover:text-slate-600 dark:text-slate-500 dark:hover:text-slate-200"
+                  className="text-slate-500 hover:text-slate-600 dark:text-slate-500 dark:hover:text-slate-200"
                 >
                   <X className="w-4 h-4" />
                 </button>

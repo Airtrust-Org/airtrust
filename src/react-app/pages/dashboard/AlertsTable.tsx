@@ -40,7 +40,7 @@ export const AlertsTable = React.memo(function AlertsTable({ alertas }: AlertsTa
           <ShieldCheck className="h-8 w-8 text-emerald-500" />
           <div>
             <p className="text-sm font-bold text-slate-700 dark:text-slate-300">Nenhum alerta ativo</p>
-            <p className="text-xs text-slate-400 dark:text-slate-500">Todas as qualificações estão em dia.</p>
+            <p className="text-xs text-slate-500 dark:text-slate-500">Todas as qualificações estão em dia.</p>
           </div>
         </div>
       ) : (

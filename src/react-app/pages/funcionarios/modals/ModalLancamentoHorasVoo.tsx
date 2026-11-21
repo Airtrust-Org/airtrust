@@ -161,13 +161,13 @@ export default function ModalLancamentoHorasVoo({ isOpen, onClose, onSubmit, sub
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
           <Field label="Função">
-            <select className="w-full border rounded px-3 py-2" {...form.register('funcao')}>
+            <select aria-label="PIC" className="w-full border rounded px-3 py-2" {...form.register('funcao')}>
               <option value="PIC">PIC</option>
               <option value="SIC">SIC</option>
             </select>
           </Field>
           <Field label="Tipo operação">
-            <select className="w-full border rounded px-3 py-2" {...form.register('tipo_operacao')}>
+            <select aria-label="OFFSHORE" className="w-full border rounded px-3 py-2" {...form.register('tipo_operacao')}>
               <option value="OFFSHORE">OFFSHORE</option>
               <option value="SAR">SAR</option>
               <option value="TAXI">TAXI</option>

@@ -38,7 +38,7 @@ export const PipelineResolucaoCard = React.memo(function PipelineResolucaoCard({
           </div>
           <div className="space-y-2">
             {itensTreino.length === 0 ? (
-              <p className="text-xs text-slate-400 dark:text-slate-500">Sem treinamentos planejados.</p>
+              <p className="text-xs text-slate-500 dark:text-slate-500">Sem treinamentos planejados.</p>
             ) : (
               itensTreino.map((item) => (
                 <div key={item.id} className="rounded-xl border border-slate-100 bg-slate-50 px-3 py-2 dark:border-slate-700 dark:bg-slate-800/50">
@@ -60,7 +60,7 @@ export const PipelineResolucaoCard = React.memo(function PipelineResolucaoCard({
           </p>
           <div className="space-y-2">
             {itensSessoes.length === 0 ? (
-              <p className="text-xs text-slate-400 dark:text-slate-500">Sem sessões nos próximos 30 dias.</p>
+              <p className="text-xs text-slate-500 dark:text-slate-500">Sem sessões nos próximos 30 dias.</p>
             ) : (
               itensSessoes.map((s) => (
                 <div key={s.id} className="rounded-xl border border-slate-100 bg-slate-50 px-3 py-2 dark:border-slate-700 dark:bg-slate-800/50">

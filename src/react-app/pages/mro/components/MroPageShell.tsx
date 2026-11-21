@@ -3,10 +3,10 @@ import MroSubnav from './MroSubnav';
 
 export default function MroPageShell({ children }: { children: React.ReactNode }) {
   return (
-    <main className="w-full" role="main">
+    <div className="w-full">
       <MroPrototypeBanner />
       <MroSubnav />
       {children}
-    </main>
+    </div>
   );
 }
