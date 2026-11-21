@@ -269,7 +269,7 @@ export default function CrudTiposSessao({ embedded = false, onBack }: Props = {}
       {/* Modal */}
       {showModal && (
         <ModalOverlay className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 animate-fade-in" onClick={fecharModal}>
-          <div className="bg-white dark:bg-slate-900 rounded-lg max-w-md w-full animate-scale-in" onClick={(e) => e.stopPropagation()}>
+          <div role="presentation" className="bg-white dark:bg-slate-900 rounded-lg max-w-md w-full animate-scale-in" onClick={(e) => e.stopPropagation()}>
             <div className="p-6 border-b border-gray-200 dark:border-slate-700">
               <h3 className="text-lg font-semibold text-gray-900 dark:text-slate-100">
                 {editando ? 'Editar' : 'Novo'} Tipo de Sessão

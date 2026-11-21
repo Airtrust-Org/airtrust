@@ -780,7 +780,7 @@ export default function EscalasDetalheView() {
                   {/* Mais menu */}
                   <div className="relative">
                     {maisMenuAberto && (
-                      <div
+                      <div role="presentation"
                         className="fixed inset-0 z-40"
                         onClick={() => setMaisMenuAberto(false)}
                       />
@@ -1080,7 +1080,7 @@ export default function EscalasDetalheView() {
                           Q{q.numero}
                         </span>
                       </div>
-                      <label className="block text-xs text-slate-500 dark:text-slate-400">Início</label>
+                      <span className="block text-xs text-slate-500 dark:text-slate-400">Início</span>
                       <input aria-label="Início"
                         type="date"
                         value={di}
@@ -1092,7 +1092,7 @@ export default function EscalasDetalheView() {
                         }
                         className="mb-1 w-full rounded border border-slate-200 px-1 py-0.5 text-xs focus:outline-none focus:ring-1 focus:ring-indigo-400 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
                       />
-                      <label className="block text-xs text-slate-500 dark:text-slate-400">Fim</label>
+                      <span className="block text-xs text-slate-500 dark:text-slate-400">Fim</span>
                       <input aria-label="Fim"
                         type="date"
                         value={df}
@@ -1187,7 +1187,7 @@ export default function EscalasDetalheView() {
                     )}
                     <div className={`flex-shrink-0 relative ${dropdownAeronave ? 'z-30' : ''}`}>
                       {dropdownAeronave && (
-                        <div
+                        <div role="presentation"
                           className="fixed inset-0 z-30"
                           onClick={() => setDropdownAeronave(false)}
                         />
@@ -1246,7 +1246,7 @@ export default function EscalasDetalheView() {
 
                     <div className={`flex-shrink-0 relative ${dropdownModelo ? 'z-30' : ''}`}>
                       {dropdownModelo && (
-                        <div
+                        <div role="presentation"
                           className="fixed inset-0 z-30"
                           onClick={() => setDropdownModelo(false)}
                         />
@@ -1300,7 +1300,7 @@ export default function EscalasDetalheView() {
 
                     <div className={`flex-shrink-0 relative ${dropdownTipo ? 'z-30' : ''}`}>
                       {dropdownTipo && (
-                        <div
+                        <div role="presentation"
                           className="fixed inset-0 z-30"
                           onClick={() => setDropdownTipo(false)}
                         />

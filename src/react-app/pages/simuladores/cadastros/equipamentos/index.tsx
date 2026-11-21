@@ -421,28 +421,28 @@ const Equipamentos: React.FC = () => {
           <div className="space-y-4">
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-gray-500">Nome</label>
+                <span className="block text-sm font-medium text-gray-500">Nome</span>
                 <p className="mt-1 text-sm text-gray-900">{equipamentoSelecionado.nome}</p>
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-500">Código</label>
+                <span className="block text-sm font-medium text-gray-500">Código</span>
                 <p className="mt-1 text-sm text-gray-900">
                   {equipamentoSelecionado.codigo_identificacao}
                 </p>
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-500">Tipo</label>
+                <span className="block text-sm font-medium text-gray-500">Tipo</span>
                 <p className="mt-1 text-sm text-gray-900">
                   {equipamentoSelecionado.tipo_simulador}
                 </p>
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-500">Equipamento Base</label>
+                <span className="block text-sm font-medium text-gray-500">Equipamento Base</span>
                 <p className="mt-1 text-sm text-gray-900">{equipamentoSelecionado.aeronave_base}</p>
               </div>
               {equipamentoSelecionado.empresa_local && (
                 <div>
-                  <label className="block text-sm font-medium text-gray-500">Empresa/Local</label>
+                  <span className="block text-sm font-medium text-gray-500">Empresa/Local</span>
                   <p className="mt-1 text-sm text-gray-900">
                     {equipamentoSelecionado.empresa_local}
                   </p>
@@ -450,7 +450,7 @@ const Equipamentos: React.FC = () => {
               )}
               {equipamentoSelecionado.fabricante && (
                 <div>
-                  <label className="block text-sm font-medium text-gray-500">Fabricante</label>
+                  <span className="block text-sm font-medium text-gray-500">Fabricante</span>
                   <p className="mt-1 text-sm text-gray-900">{equipamentoSelecionado.fabricante}</p>
                 </div>
               )}

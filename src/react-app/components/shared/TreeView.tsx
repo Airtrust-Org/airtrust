@@ -174,7 +174,7 @@ function TreeNodeComponent({
         </div>
         
         {/* Actions */}
-        <div className="flex items-center space-x-2 flex-shrink-0" onClick={(e) => e.stopPropagation()}>
+        <div role="presentation" className="flex items-center space-x-2 flex-shrink-0" onClick={(e) => e.stopPropagation()}>
           {renderNodeActions && renderNodeActions(node)}
           
           {node.type === 'file' && node.metadata?.download_url && onDownload && (

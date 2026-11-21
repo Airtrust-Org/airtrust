@@ -180,42 +180,42 @@ export default function ValidarCertificado() {
         <div className="space-y-4">
           {/* Número do Certificado */}
           <div className="bg-slate-50 rounded-2xl p-6 border border-slate-200">
-            <label className="text-sm font-semibold text-slate-500 uppercase tracking-wide mb-2 block">
+            <span className="text-sm font-semibold text-slate-500 uppercase tracking-wide mb-2 block">
               Número do Certificado
-            </label>
+            </span>
             <p className="text-lg font-mono text-slate-900 break-all">{cert.numero}</p>
           </div>
 
           {/* Funcionário */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div className="bg-slate-50 rounded-2xl p-6 border border-slate-200">
-              <label className="text-sm font-semibold text-slate-500 uppercase tracking-wide mb-2 block">
+              <span className="text-sm font-semibold text-slate-500 uppercase tracking-wide mb-2 block">
                 Funcionário
-              </label>
+              </span>
               <p className="text-lg font-semibold text-slate-900">{cert.funcionario_nome}</p>
             </div>
 
             <div className="bg-slate-50 rounded-2xl p-6 border border-slate-200">
-              <label className="text-sm font-semibold text-slate-500 uppercase tracking-wide mb-2 block">
+              <span className="text-sm font-semibold text-slate-500 uppercase tracking-wide mb-2 block">
                 CPF
-              </label>
+              </span>
               <p className="text-lg font-mono text-slate-900">{cert.funcionario_cpf}</p>
             </div>
           </div>
 
           {/* Código ANAC */}
           <div className="bg-blue-50 rounded-2xl p-6 border border-blue-200">
-            <label className="text-sm font-semibold text-blue-600 uppercase tracking-wide mb-2 block">
+            <span className="text-sm font-semibold text-blue-600 uppercase tracking-wide mb-2 block">
               Código ANAC
-            </label>
+            </span>
             <p className="text-2xl font-bold text-blue-900">{cert.codigo_anac}</p>
           </div>
 
           {/* Qualificação */}
           <div className="bg-slate-50 rounded-2xl p-6 border border-slate-200">
-            <label className="text-sm font-semibold text-slate-500 uppercase tracking-wide mb-2 block">
+            <span className="text-sm font-semibold text-slate-500 uppercase tracking-wide mb-2 block">
               Qualificação
-            </label>
+            </span>
             <p className="text-lg font-semibold text-slate-900 mb-1">{cert.qualificacao_nome}</p>
             <p className="text-sm text-slate-600">
               Categoria: {cert.qualificacao_tipo} | Modalidade: {tipoTreinamento}
@@ -225,25 +225,25 @@ export default function ValidarCertificado() {
           {/* Datas */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div className="bg-slate-50 rounded-2xl p-6 border border-slate-200">
-              <label className="text-sm font-semibold text-slate-500 uppercase tracking-wide mb-2 block">
+              <span className="text-sm font-semibold text-slate-500 uppercase tracking-wide mb-2 block">
                 Data de Realização
-              </label>
+              </span>
               <p className="text-lg font-semibold text-slate-900">{dataConclusao}</p>
             </div>
 
             <div className="bg-slate-50 rounded-2xl p-6 border border-slate-200">
-              <label className="text-sm font-semibold text-slate-500 uppercase tracking-wide mb-2 block">
+              <span className="text-sm font-semibold text-slate-500 uppercase tracking-wide mb-2 block">
                 Validade
-              </label>
+              </span>
               <p className="text-lg font-semibold text-slate-900">{dataValidade}</p>
             </div>
           </div>
 
           {/* Instrutor */}
           <div className="bg-slate-50 rounded-2xl p-6 border border-slate-200">
-            <label className="text-sm font-semibold text-slate-500 uppercase tracking-wide mb-2 block">
+            <span className="text-sm font-semibold text-slate-500 uppercase tracking-wide mb-2 block">
               Instrutor Responsável
-            </label>
+            </span>
             <p className="text-lg font-semibold text-slate-900 mb-1">{cert.instrutor_nome}</p>
             <p className="text-sm text-slate-600">Código ANAC: {cert.instrutor_codigo_anac}</p>
           </div>

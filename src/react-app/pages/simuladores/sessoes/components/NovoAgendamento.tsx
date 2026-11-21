@@ -170,7 +170,7 @@ export default function NovoAgendamento() {
 
           {/* Seleção de Funcionário */}
           <div className="mb-6">
-            <label className="block text-sm font-semibold text-gray-700 mb-2">Funcionário *</label>
+            <span className="block text-sm font-semibold text-gray-700 mb-2">Funcionário *</span>
             <FuncionarioCombobox selected={funcionario} onSelect={(func) => setFuncionario(func)} />
 
             {funcionario && (
@@ -231,10 +231,10 @@ export default function NovoAgendamento() {
 
           {/* Tipo de Sessão */}
           <div className="mb-6">
-            <label className="block text-sm font-semibold text-gray-700 mb-2">
+            <span id="novoagendamento-tipo-de-sessao" className="block text-sm font-semibold text-gray-700 mb-2">
               Tipo de Sessão *
-            </label>
-            <div className="grid grid-cols-4 gap-3">
+            </span>
+            <div role="group" aria-labelledby="novoagendamento-tipo-de-sessao" className="grid grid-cols-4 gap-3">
               {['TREINAMENTO', 'CHECK', 'AVALIACAO', 'PRATICA'].map((tipo) => (
                 <button
                   key={tipo}

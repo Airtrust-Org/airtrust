@@ -598,10 +598,10 @@ export function ModalAtribuirQualificacao({
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                <span className="block text-sm font-medium text-gray-700 mb-2">
                   <Tag className="inline w-4 h-4 mr-1" />
                   Modalidade do Treinamento <span className="text-red-500">*</span>
-                </label>
+                </span>
                 {isG1SemSelected ? (
                   <div className="rounded-lg border border-blue-200 bg-blue-50 px-4 py-3">
                     <p className="text-sm font-medium text-blue-900">Semestral</p>

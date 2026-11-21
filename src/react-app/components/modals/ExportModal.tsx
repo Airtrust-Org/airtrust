@@ -52,10 +52,10 @@ export function ExportModal({ isOpen, onClose, title = "Exportar Dados", onExpor
       <div className="space-y-4">
         {/* Seleção de Formato */}
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-3">
+          <span id="exportmodal-selecione-o-formato-de-exportacao" className="block text-sm font-medium text-gray-700 mb-3">
             Selecione o formato de exportação:
-          </label>
-          <div className="space-y-2">
+          </span>
+          <div role="group" aria-labelledby="exportmodal-selecione-o-formato-de-exportacao" className="space-y-2">
             {formats.map((fmt) => {
               const Icon = fmt.icon;
               const isSelected = format === fmt.id;

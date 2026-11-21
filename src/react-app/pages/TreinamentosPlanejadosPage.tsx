@@ -3639,9 +3639,9 @@ export default function TreinamentosPlanejadosPage({
                                     </div>
                                     {draft.resultado === 'APROVADO' ? (
                                       <div className="mt-3 max-w-[180px]">
-                                        <label className="block text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
+                                        <span className="block text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
                                           Data de conclusão
-                                        </label>
+                                        </span>
                                         <input aria-label="Data de conclusão"
                                           type="date"
                                           value={draft.data_conclusao_efetiva || ''}

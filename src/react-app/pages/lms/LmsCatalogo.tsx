@@ -892,7 +892,7 @@ function CourseDrawer({
       onClick={safeClose}
     >
       <div className="flex min-h-full w-full overflow-y-auto overscroll-y-contain p-3 sm:p-6">
-        <div
+        <div role="presentation"
           className="relative mx-auto flex min-h-0 w-full max-w-6xl flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl sm:my-auto sm:max-h-[calc(100dvh-3rem)] animate-scale-in"
           onClick={(event) => event.stopPropagation()}
         >

@@ -630,7 +630,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
       {mobileMenuOpen && (
         <>
           {/* Backdrop */}
-          <div
+          <div role="presentation"
             className="fixed inset-0 z-sidebar bg-black/30 md:hidden"
             onClick={() => setMobileMenuOpen(false)}
           />

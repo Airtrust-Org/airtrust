@@ -248,10 +248,10 @@ export default function ModalDetalhesEvento({
         <div className="space-y-4">
           {/* Tipo */}
           <div>
-            <label className="block text-xs font-semibold text-slate-700 mb-2">
+            <span id="modaldetalhesevento-tipo-de-evento" className="block text-xs font-semibold text-slate-700 mb-2">
               Tipo de Evento
-            </label>
-            <div className="grid grid-cols-2 gap-1.5">
+            </span>
+            <div role="group" aria-labelledby="modaldetalhesevento-tipo-de-evento" className="grid grid-cols-2 gap-1.5">
               {tiposAtivos.map((t) => {
                 const c = configMap[t];
                 return (

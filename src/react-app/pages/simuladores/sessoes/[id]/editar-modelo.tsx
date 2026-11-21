@@ -76,26 +76,26 @@ export default function EditarModeloSessao() {
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div>
-              <label className="text-sm font-medium text-gray-700">Código</label>
+              <span className="text-sm font-medium text-gray-700">Código</span>
               <p className="mt-1 text-gray-900">{modelo?.codigo_canonico || modelo?.codigo}</p>
             </div>
 
             <div>
-              <label className="text-sm font-medium text-gray-700">Tipo</label>
+              <span className="text-sm font-medium text-gray-700">Tipo</span>
               <p className="mt-1 text-gray-900">
                 {modelo.tipo_sessao_nome || modelo.tipo_sessao_codigo || 'N/A'}
               </p>
             </div>
 
             <div>
-              <label className="text-sm font-medium text-gray-700">Duração</label>
+              <span className="text-sm font-medium text-gray-700">Duração</span>
               <p className="mt-1 text-gray-900">{modelo.duracao_estimada} minutos</p>
             </div>
           </div>
 
           {modelo.descricao && (
             <div className="mt-4">
-              <label className="text-sm font-medium text-gray-700">Descrição</label>
+              <span className="text-sm font-medium text-gray-700">Descrição</span>
               <p className="mt-1 text-gray-600">{modelo.descricao}</p>
             </div>
           )}

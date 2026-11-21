@@ -844,9 +844,9 @@ function SetoresGerenciadosField({
 
   return (
     <div>
-      <label className="block text-sm font-medium text-slate-700 mb-1">
+      <span className="block text-sm font-medium text-slate-700 mb-1">
         Setores gerenciados <span className="text-red-500">*</span>
-      </label>
+      </span>
       <p className="text-xs text-slate-500 mb-2">
         O gestor verá apenas dados e qualificações dos setores selecionados abaixo.
       </p>

@@ -1851,10 +1851,10 @@ export default function ModalNovaSessao({
               session is safely convertible (planned, no evidence). */}
           {(!isEditMode || !originalModoCompartilhado) && sharedSessionsEnabled && !editHydrating && (
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-2">
+              <span id="modalnovasessao-modalidade-da-sessao" className="block text-sm font-medium text-slate-700 mb-2">
                 Modalidade da sessão
-              </label>
-              <div className="flex gap-2">
+              </span>
+              <div role="group" aria-labelledby="modalnovasessao-modalidade-da-sessao" className="flex gap-2">
                 <button
                   type="button"
                   onClick={() => {
@@ -1901,10 +1901,10 @@ export default function ModalNovaSessao({
           <>
           {/* 0️⃣ TIPO DE DISPOSITIVO */}
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-2">
+            <span id="modalnovasessao-tipo-de-sessao-de-voo" className="block text-sm font-medium text-slate-700 mb-2">
               Tipo de Sessão de Voo <span className="text-red-500">*</span>
-            </label>
-            <div className="flex gap-2">
+            </span>
+            <div role="group" aria-labelledby="modalnovasessao-tipo-de-sessao-de-voo" className="flex gap-2">
               <button
                 type="button"
                 onClick={() => handleTipoDispositivoChange('SIMULADOR')}
@@ -2060,9 +2060,9 @@ export default function ModalNovaSessao({
 
           {/* 4️⃣ TEMA DA SESSÃO - SELECIONAR MODELO */}
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-2">
+            <span className="block text-sm font-medium text-slate-700 mb-2">
               4. Tema da Sessão <span className="text-red-500">*</span>
-            </label>
+            </span>
 
             {loadingModelos || editHydrating ? (
               <div className="w-full px-4 py-3 border border-slate-300 rounded-lg bg-slate-50 text-slate-500 text-sm">
@@ -2241,10 +2241,10 @@ export default function ModalNovaSessao({
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-2">
+              <span id="modalnovasessao-checks-vinculados" className="block text-sm font-medium text-slate-700 mb-2">
                 Checks vinculados
-              </label>
-              <div
+              </span>
+              <div role="group" aria-labelledby="modalnovasessao-checks-vinculados"
                 className={`w-full px-4 py-3 border rounded-lg text-sm ${
                   examinadorId
                     ? 'border-slate-300 bg-white'
@@ -2325,9 +2325,9 @@ export default function ModalNovaSessao({
           {/* 6. PARTICIPANTES */}
           <div>
             <div className="flex items-center justify-between mb-3">
-              <label className="block text-sm font-medium text-slate-700">
+              <span className="block text-sm font-medium text-slate-700">
                 Participantes da Sessão <span className="text-red-500">*</span>
-              </label>
+              </span>
               {participantes.length < 2 && (
                 <button
                   type="button"

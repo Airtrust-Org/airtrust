@@ -664,10 +664,10 @@ export function EmpresaForm({
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               {/* Logo Empresa */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                <span id="empresaform-logo-da-empresa-painel" className="block text-sm font-medium text-gray-700 mb-2">
                   Logo da Empresa (Painel)
-                </label>
-                <div className="flex items-center gap-4">
+                </span>
+                <div role="group" aria-labelledby="empresaform-logo-da-empresa-painel" className="flex items-center gap-4">
                   <div className="w-24 h-24 bg-gray-50 border border-gray-200 rounded-lg flex items-center justify-center overflow-hidden relative">
                     {data.logo_url && !logoPreviewError ? (
                       <img

@@ -347,9 +347,9 @@ export default function FormularioAgendamento({
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   {/* Tripulante */}
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                    <span className="block text-sm font-medium text-gray-700 mb-1">
                       Tripulante <span className="text-red-500">*</span>
-                    </label>
+                    </span>
                     <select aria-label="Tripulante"
                       value={p.colaborador_id}
                       onChange={(e) => {
@@ -371,9 +371,9 @@ export default function FormularioAgendamento({
 
                   {/* Função */}
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                    <span className="block text-sm font-medium text-gray-700 mb-1">
                       Função <span className="text-red-500">*</span>
-                    </label>
+                    </span>
                     <select aria-label="Função"
                       value={p.funcao_na_sessao}
                       onChange={(e) => {
@@ -392,9 +392,9 @@ export default function FormularioAgendamento({
 
                   {/* Template */}
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                    <span className="block text-sm font-medium text-gray-700 mb-1">
                       Template <span className="text-red-500">*</span>
-                    </label>
+                    </span>
                     <select aria-label="Template"
                       value={p.template_id}
                       onChange={(e) => {

@@ -250,7 +250,7 @@ export const Header: React.FC = () => {
 
       {mobileMenuOpen && (
         <>
-          <div
+          <div role="presentation"
             className="fixed inset-0 z-40 bg-black/20 md:hidden"
             onClick={() => {
               setMobileMenuOpen(false);

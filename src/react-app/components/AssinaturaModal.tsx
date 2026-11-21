@@ -183,8 +183,8 @@ export default function AssinaturaModal({
 
           {/* Campo de Assinatura (Canvas) */}
           <div className="mb-4">
-            <label className="block text-sm font-semibold text-slate-700 mb-2">Assinatura *</label>
-            <div className="border-2 border-slate-300 rounded-lg overflow-hidden bg-slate-50 hover:border-blue-500 transition">
+            <span id="assinaturamodal-assinatura" className="block text-sm font-semibold text-slate-700 mb-2">Assinatura *</span>
+            <div role="group" aria-labelledby="assinaturamodal-assinatura" className="border-2 border-slate-300 rounded-lg overflow-hidden bg-slate-50 hover:border-blue-500 transition">
               <canvas
                 ref={canvasRef}
                 width={700}
@@ -261,9 +261,9 @@ export default function AssinaturaModal({
           {/* Aprovação do Instrutor (OBRIGATÓRIO) */}
           {papel === 'INSTRUTOR' && (
             <div className="bg-amber-50 border-2 border-amber-300 rounded-lg p-5 mb-6">
-              <label className="block text-sm font-bold text-amber-900 mb-3">
+              <span className="block text-sm font-bold text-amber-900 mb-3">
                 <span aria-hidden="true">⚠️</span> Aprovação da Sessão *
-              </label>
+              </span>
               <p className="text-xs text-amber-700 mb-4">
                 Como instrutor, você deve indicar se a sessão foi APROVADA ou NÃO APROVADA.
               </p>

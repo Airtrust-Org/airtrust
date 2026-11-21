@@ -48,7 +48,7 @@ export const ListTemplate: React.FC<ListTemplateProps> = ({
 
               <div className={styles.listRight}>
                 {item.badge && <span className={styles.badge}>{item.badge}</span>}
-                {item.actions && <div onClick={(e) => e.stopPropagation()}>{item.actions}</div>}
+                {item.actions && <div role="presentation" onClick={(e) => e.stopPropagation()}>{item.actions}</div>}
               </div>
             </div>
           ))

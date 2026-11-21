@@ -259,8 +259,8 @@ export default function ReclassificacaoQualificacoes() {
           />
         </div>
         <div className="flex flex-col gap-2">
-          <label className="text-xs font-medium text-gray-600">Ações</label>
-          <div className="flex gap-2">
+          <span id="reclassificacaoqualificacoes-acoes" className="text-xs font-medium text-gray-600">Ações</span>
+          <div role="group" aria-labelledby="reclassificacaoqualificacoes-acoes" className="flex gap-2">
             <button
               onClick={carregarQueue}
               className="px-3 py-2 text-sm border rounded-lg hover:bg-gray-50"

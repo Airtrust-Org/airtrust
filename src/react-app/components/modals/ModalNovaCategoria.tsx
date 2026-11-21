@@ -126,8 +126,8 @@ export function ModalNovaCategoria({ isOpen, onClose, onSave, categoria }: Props
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Status</label>
-            <div className="flex items-center gap-2 mb-4">
+            <span id="modalnovacategoria-status" className="block text-sm font-medium text-gray-700 mb-2">Status</span>
+            <div role="group" aria-labelledby="modalnovacategoria-status" className="flex items-center gap-2 mb-4">
               <input
                 type="checkbox"
                 checked={form.ativo === 1}

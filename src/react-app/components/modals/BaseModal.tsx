@@ -79,7 +79,7 @@ export function BaseModal({
       role="presentation"
     >
       {/* Backdrop com blur */}
-      <div
+      <div role="presentation"
         className="absolute inset-0 bg-black/40 backdrop-blur-[2px]"
         onClick={handleBackdropClick}
         aria-hidden="true"

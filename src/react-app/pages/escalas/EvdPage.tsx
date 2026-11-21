@@ -2343,9 +2343,9 @@ function EvdCreateForm({
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               {/* PIC */}
               <div className="rounded-lg border border-slate-200 bg-slate-50/50 p-3 dark:border-slate-700 dark:bg-slate-800/50">
-                <label className="mb-1.5 block text-xs font-semibold text-slate-700 dark:text-slate-300">
+                <span className="mb-1.5 block text-xs font-semibold text-slate-700 dark:text-slate-300">
                   Comandante <span className="text-slate-400 font-normal">PIC</span>
-                </label>
+                </span>
                 {loadingTripulantes ? (
                   <div className="animate-pulse space-y-2">
                     <div className="h-9 w-full bg-slate-200 rounded-lg dark:bg-slate-700" />
@@ -2413,9 +2413,9 @@ function EvdCreateForm({
 
               {/* SIC */}
               <div className="rounded-lg border border-slate-200 bg-slate-50/50 p-3 dark:border-slate-700 dark:bg-slate-800/50">
-                <label className="mb-1.5 block text-xs font-semibold text-slate-700 dark:text-slate-300">
+                <span className="mb-1.5 block text-xs font-semibold text-slate-700 dark:text-slate-300">
                   Copiloto <span className="text-slate-400 font-normal">SIC</span>
-                </label>
+                </span>
                 {loadingTripulantes ? (
                   <div className="animate-pulse space-y-2">
                     <div className="h-9 w-full bg-slate-200 rounded-lg dark:bg-slate-700" />

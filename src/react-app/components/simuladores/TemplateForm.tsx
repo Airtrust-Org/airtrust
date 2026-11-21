@@ -232,7 +232,7 @@ const TemplateForm: React.FC<TemplateFormProps> = ({ template, onSubmit, onCance
           {/* Seleção de Manobras */}
           <div>
             <div className="flex items-center gap-2 mb-4">
-              <label className="text-sm font-medium text-gray-700">Manobras do Modelo</label>
+              <span className="text-sm font-medium text-gray-700">Manobras do Modelo</span>
               <span className="text-xs text-gray-500">
                 ({manobrasSelecionadas.length} selecionadas)
               </span>

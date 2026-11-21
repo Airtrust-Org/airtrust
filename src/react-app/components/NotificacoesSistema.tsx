@@ -152,7 +152,7 @@ export function NotificacoesSistema() {
       {aberto && (
         <>
           {/* Overlay para fechar ao clicar fora */}
-          <div className="fixed inset-0 z-40" onClick={() => setAberto(false)} />
+          <div role="presentation" className="fixed inset-0 z-40" onClick={() => setAberto(false)} />
 
           {/* Painel */}
           <div className="absolute right-0 mt-2 w-96 bg-zinc-900 border border-zinc-800 rounded-lg shadow-2xl z-50 max-h-[80vh] overflow-hidden flex flex-col">

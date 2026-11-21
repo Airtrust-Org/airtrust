@@ -310,8 +310,8 @@ export function ModalHabilitacao({ isOpen, onClose, onSave, habilitacao }: Props
 
             {/* VALIDADE - READ ONLY */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Validade</label>
-              <div className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-primary/10 text-blue-900 font-semibold flex items-center">
+              <span id="modalhabilitacao-validade" className="block text-sm font-medium text-gray-700 mb-1">Validade</span>
+              <div role="group" aria-labelledby="modalhabilitacao-validade" className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-primary/10 text-blue-900 font-semibold flex items-center">
                 {validadeMeses !== null ? `${validadeMeses} meses` : '—'}
               </div>
             </div>
@@ -334,10 +334,10 @@ export function ModalHabilitacao({ isOpen, onClose, onSave, habilitacao }: Props
 
             {/* DATA DE VENCIMENTO - READ ONLY */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <span id="modalhabilitacao-data-de-vencimento" className="block text-sm font-medium text-gray-700 mb-1">
                 Data de Vencimento *
-              </label>
-              <div className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-green-50 text-green-900 font-semibold flex items-center">
+              </span>
+              <div role="group" aria-labelledby="modalhabilitacao-data-de-vencimento" className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-green-50 text-green-900 font-semibold flex items-center">
                 {dataVencimento ? new Date(dataVencimento).toLocaleDateString('pt-BR') : '—'}
               </div>
             </div>

@@ -35,6 +35,23 @@ export default tseslint.config(
       ...Object.fromEntries(
         Object.keys(jsxA11y.flatConfigs.recommended.rules).map((rule) => [rule, 'warn']),
       ),
+      'jsx-a11y/label-has-associated-control': [
+        'warn',
+        {
+          assert: 'either',
+          depth: 4,
+          controlComponents: [
+            'Input',
+            'Select',
+            'TextArea',
+            'TimeInput',
+            'FuncionarioCombobox',
+            'SeletorFuncionario',
+            'AeronaveSelect',
+            'AeronaveMultiSelect',
+          ],
+        },
+      ],
       'jsx-a11y/label-has-for': 'off',
       'jsx-a11y/control-has-associated-label': 'off',
       'jsx-a11y/no-autofocus': 'off',
