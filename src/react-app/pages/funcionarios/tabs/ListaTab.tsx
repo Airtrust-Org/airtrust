@@ -298,7 +298,7 @@ export const ListaTab: React.FC<ListaTabProps> = ({ funcionarios = [], loading =
             onRowClick={(func) => setSelectedFuncionario(func)}
           />
         ) : (
-          // ✅ Table normal para < 100 itens
+          // <span aria-hidden="true">✅</span> Table normal para < 100 itens
           <div className="overflow-x-auto">
             <Table>
               <TableHeader>

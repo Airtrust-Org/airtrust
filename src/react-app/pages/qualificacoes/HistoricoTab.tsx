@@ -364,7 +364,7 @@ export const HistoricoTab: React.FC<HistoricoTabProps> = ({
           ]}
         />
       ) : (
-        // ✅ Table normal para < 100 itens
+        // <span aria-hidden="true">✅</span> Table normal para < 100 itens
         <div className="overflow-x-auto">
           <table className="w-full">
             <thead>

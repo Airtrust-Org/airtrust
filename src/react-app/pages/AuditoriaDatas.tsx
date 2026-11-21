@@ -137,7 +137,7 @@ const AuditoriaDatas: React.FC = () => {
             <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
               <div className="flex items-center justify-between mb-6">
                 <h3 className="text-lg font-semibold text-gray-900">
-                  📊 Estatísticas da Auditoria
+                  <span aria-hidden="true">📊</span> Estatísticas da Auditoria
                 </h3>
                 <Button
                   variant="secondary"
@@ -161,14 +161,14 @@ const AuditoriaDatas: React.FC = () => {
                   <div className="text-2xl font-bold text-green-800 mb-2">
                     {resultados.estatisticas.camposCorretos}
                   </div>
-                  <p className="text-green-700 text-sm">✅ Formato Brasileiro</p>
+                  <p className="text-green-700 text-sm"><span aria-hidden="true">✅</span> Formato Brasileiro</p>
                 </div>
 
                 <div className="bg-red-50 rounded-lg p-6 text-center border border-red-200">
                   <div className="text-2xl font-bold text-red-800 mb-2">
                     {resultados.estatisticas.camposProblematicos}
                   </div>
-                  <p className="text-red-700 text-sm">❌ Precisam Correção</p>
+                  <p className="text-red-700 text-sm"><span aria-hidden="true">❌</span> Precisam Correção</p>
                 </div>
 
                 <div className="bg-primary/10 rounded-lg p-6 text-center border border-blue-200">
@@ -198,7 +198,7 @@ const AuditoriaDatas: React.FC = () => {
 
           <PageSection>
             <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-              <h3 className="text-lg font-semibold text-gray-900 mb-4">🏗️ Módulos Analisados</h3>
+              <h3 className="text-lg font-semibold text-gray-900 mb-4"><span aria-hidden="true">🏗️</span> Módulos Analisados</h3>
               <div className="flex flex-wrap gap-2">
                 {resultados.estatisticas.modulosAfetados.map((modulo, index) => (
                   <span
@@ -252,7 +252,7 @@ const AuditoriaDatas: React.FC = () => {
                         </div>
                         {problema.correcaoSugerida && (
                           <div className="ml-4 text-right">
-                            <p className="text-xs text-gray-500 mb-1">💡 Sugestão:</p>
+                            <p className="text-xs text-gray-500 mb-1"><span aria-hidden="true">💡</span> Sugestão:</p>
                             <code className="text-xs bg-green-100 text-green-800 px-2 py-1 rounded">
                               "{problema.correcaoSugerida}"
                             </code>
@@ -273,7 +273,7 @@ const AuditoriaDatas: React.FC = () => {
                   <CheckCircle className="w-8 h-8 text-green-600 mr-4" />
                   <div>
                     <h3 className="text-lg font-semibold text-green-900">
-                      🎉 Parabéns! Sistema 100% Brasileiro!
+                      <span aria-hidden="true">🎉</span> Parabéns! Sistema 100% Brasileiro!
                     </h3>
                     <p className="text-green-700 mt-1">
                       Todos os campos de data estão no formato brasileiro obrigatório dd/mm/aaaa. O
@@ -288,7 +288,7 @@ const AuditoriaDatas: React.FC = () => {
                   <AlertCircle className="w-8 h-8 text-yellow-600 mr-4" />
                   <div>
                     <h3 className="text-lg font-semibold text-yellow-900">
-                      🔧 Trabalho em Andamento
+                      <span aria-hidden="true">🔧</span> Trabalho em Andamento
                     </h3>
                     <p className="text-yellow-700 mt-1">
                       {resultados.estatisticas.camposProblematicos} campos ainda precisam ser

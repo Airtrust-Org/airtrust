@@ -978,7 +978,7 @@ export default function FrmsImportacaoFira() {
                       ou clique para selecionar (máx. 10 MB por arquivo)
                     </p>
                     <p className="mt-2 text-xs text-blue-500 font-medium">
-                      📄 PDFs com várias FIRAs (uma por página) são detectados automaticamente
+                      <span aria-hidden="true">📄</span> PDFs com várias FIRAs (uma por página) são detectados automaticamente
                     </p>
                   </>
                 )}

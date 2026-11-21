@@ -424,7 +424,7 @@ const AvaliacaoManobras: React.FC<AvaliacaoManobrasProps> = ({ fichaUuid, onClos
                     </div>
                   ) : (
                     <div className="text-sm text-gray-500 italic">
-                      📝 Primeira avaliação desta manobra
+                      <span aria-hidden="true">📝</span> Primeira avaliação desta manobra
                     </div>
                   )}
                 </div>

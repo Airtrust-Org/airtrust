@@ -101,7 +101,7 @@ export function ConfirmDeleteModal({
             </div>
           )}
           <p id={warningId} className="text-sm text-gray-600 mt-4">
-            ⚠️ Esta ação não pode ser desfeita.
+            <span aria-hidden="true">⚠️</span> Esta ação não pode ser desfeita.
           </p>
         </div>
 

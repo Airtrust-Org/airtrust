@@ -352,7 +352,7 @@ function LmsHistoricoEdAppContent({ canManage }: { canManage: boolean }) {
                                   {row.qualificacao_codigo}
                                 </span>
                                 {row.qualificacao_historico_id && (
-                                  <p className="mt-0.5 text-xs text-emerald-600">✓ Gerada</p>
+                                  <p className="mt-0.5 text-xs text-emerald-600"><span aria-hidden="true">✓</span> Gerada</p>
                                 )}
                               </div>
                             ) : (

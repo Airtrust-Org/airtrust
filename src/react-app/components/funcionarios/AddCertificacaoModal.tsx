@@ -232,7 +232,7 @@ export default function AddCertificacaoModal({
           </select>
           {treinamentosAtivos.length === 0 && (
             <p className="text-sm text-amber-600 mt-1">
-              ⚠️ Nenhum treinamento ativo encontrado no catálogo
+              <span aria-hidden="true">⚠️</span> Nenhum treinamento ativo encontrado no catálogo
             </p>
           )}
         </div>

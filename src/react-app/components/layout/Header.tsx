@@ -195,7 +195,7 @@ export const Header: React.FC = () => {
                   role="none"
                   className="mb-2 rounded bg-amber-50 px-4 py-2 text-xs text-amber-600"
                 >
-                  ⚠️ Login desativado (dev mode)
+                  <span aria-hidden="true">⚠️</span> Login desativado (dev mode)
                 </div>
                 <button
                   type="button"
@@ -337,7 +337,7 @@ export const Header: React.FC = () => {
 
             <div role="none" className="p-3">
               <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-600">
-                ⚠️ Login desativado (dev mode)
+                <span aria-hidden="true">⚠️</span> Login desativado (dev mode)
               </div>
             </div>
           </div>

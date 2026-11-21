@@ -68,7 +68,7 @@ export function FixRenovadasButton() {
 
   return (
     <div className="bg-white rounded-lg shadow-md p-6">
-      <h3 className="text-lg font-semibold text-gray-800 mb-3">🔄 Corrigir Lógica de Renovadas</h3>
+      <h3 className="text-lg font-semibold text-gray-800 mb-3"><span aria-hidden="true">🔄</span> Corrigir Lógica de Renovadas</h3>
 
       <p className="text-sm text-gray-600 mb-4">
         Identifica automaticamente qualificações renovadas após importação de dados e marca
@@ -78,7 +78,7 @@ export function FixRenovadasButton() {
       {/* Estatísticas atuais */}
       {stats && (
         <div className="mb-4 p-3 bg-gray-50 rounded-md">
-          <h4 className="text-sm font-semibold text-gray-700 mb-2">📊 Status Atual:</h4>
+          <h4 className="text-sm font-semibold text-gray-700 mb-2"><span aria-hidden="true">📊</span> Status Atual:</h4>
           <div className="grid grid-cols-2 gap-3 text-xs">
             <div>
               <span className="text-gray-600">Total de registros:</span>
@@ -113,7 +113,7 @@ export function FixRenovadasButton() {
       ) : (
         <div className="space-y-3">
           <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-md">
-            <p className="text-sm font-semibold text-yellow-800 mb-1">⚠️ Esta operação irá:</p>
+            <p className="text-sm font-semibold text-yellow-800 mb-1"><span aria-hidden="true">⚠️</span> Esta operação irá:</p>
             <ul className="text-xs text-yellow-700 space-y-1 ml-4">
               <li>
                 • Identificar qualificações sequenciais (mesmo funcionário + mesmo tipo de
@@ -155,7 +155,7 @@ export function FixRenovadasButton() {
       {/* Resultado da execução */}
       {result?.success && result.data && (
         <div className="mt-4 p-4 bg-green-50 border border-green-200 rounded-md">
-          <h4 className="font-semibold text-green-800 mb-2">✅ Correção aplicada com sucesso!</h4>
+          <h4 className="font-semibold text-green-800 mb-2"><span aria-hidden="true">✅</span> Correção aplicada com sucesso!</h4>
           <ul className="text-sm text-green-700 space-y-1">
             <li>
               • <strong>{result.data.total_renovadas}</strong> registros marcados como RENOVADA
@@ -168,14 +168,14 @@ export function FixRenovadasButton() {
             </li>
           </ul>
           <p className="text-xs text-green-600 mt-2">
-            💡 Atualize a página de histórico para ver as mudanças
+            <span aria-hidden="true">💡</span> Atualize a página de histórico para ver as mudanças
           </p>
         </div>
       )}
 
       {result?.error && (
         <div className="mt-4 p-4 bg-red-50 border border-red-200 rounded-md">
-          <p className="font-semibold text-red-800 mb-1">❌ Erro ao executar correção</p>
+          <p className="font-semibold text-red-800 mb-1"><span aria-hidden="true">❌</span> Erro ao executar correção</p>
           <p className="text-sm text-red-700">{result.error}</p>
         </div>
       )}

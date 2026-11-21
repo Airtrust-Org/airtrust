@@ -185,7 +185,7 @@ export default function ModalEditarQualificacaoSimples({
           {dataVencimentoPreview && (
             <div className="bg-green-50 border-2 border-green-200 rounded-xl p-4">
               <h3 className="font-semibold text-green-900 mb-2">
-                📅 Vencimento Calculado Automaticamente
+                <span aria-hidden="true">📅</span> Vencimento Calculado Automaticamente
               </h3>
               <p className="text-2xl font-bold text-green-700">
                 {new Date(dataVencimentoPreview + 'T00:00:00').toLocaleDateString('pt-BR', {

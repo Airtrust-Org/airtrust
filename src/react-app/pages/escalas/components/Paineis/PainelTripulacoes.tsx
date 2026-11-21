@@ -30,7 +30,7 @@ export default function PainelTripulacoes({
   return (
     <div className="p-4 space-y-4">
       <div className="flex items-center justify-between">
-        <h3 className="font-semibold text-slate-900">👥 Tripulações</h3>
+        <h3 className="font-semibold text-slate-900"><span aria-hidden="true">👥</span> Tripulações</h3>
         <button onClick={onClose} className="text-slate-400 hover:text-slate-600 text-sm">
           ✕
         </button>
@@ -90,7 +90,7 @@ export default function PainelTripulacoes({
               <div className="text-xs text-slate-500 border-t border-slate-100 pt-2 space-y-0.5">
                 {t.padrao_nome && (
                   <div>
-                    📅 Padrão: <span className="font-medium text-slate-700">{t.padrao_nome}</span>
+                    <span aria-hidden="true">📅</span> Padrão: <span className="font-medium text-slate-700">{t.padrao_nome}</span>
                   </div>
                 )}
                 <div>
@@ -104,7 +104,7 @@ export default function PainelTripulacoes({
                 </div>
                 {t.base && (
                   <div>
-                    📍 Base: <span className="font-medium text-slate-700">{t.base}</span>
+                    <span aria-hidden="true">📍</span> Base: <span className="font-medium text-slate-700">{t.base}</span>
                   </div>
                 )}
               </div>

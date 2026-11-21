@@ -501,7 +501,7 @@ export function ModalAtribuirQualificacao({
                 </select>
                 {!loadingFuncionarios && funcionariosData.length === 0 && (
                   <p className="text-xs text-red-500 mt-1">
-                    ⚠️ Nenhum funcionário encontrado. Verifique se há funcionários ativos.
+                    <span aria-hidden="true">⚠️</span> Nenhum funcionário encontrado. Verifique se há funcionários ativos.
                   </p>
                 )}
               </div>
@@ -533,10 +533,10 @@ export function ModalAtribuirQualificacao({
                   ))}
                 </select>
                 {errorCategorias && (
-                  <p className="mt-1 text-xs text-red-600">⚠️ Não foi possível carregar as categorias canônicas. O salvamento está bloqueado.</p>
+                  <p className="mt-1 text-xs text-red-600"><span aria-hidden="true">⚠️</span> Não foi possível carregar as categorias canônicas. O salvamento está bloqueado.</p>
                 )}
                 {isLegacyEditing && (
-                  <p className="mt-1 text-xs text-amber-600">⚠️ Categoria legada: preserve o modelo para salvar sem reclassificar, ou selecione uma categoria canônica.</p>
+                  <p className="mt-1 text-xs text-amber-600"><span aria-hidden="true">⚠️</span> Categoria legada: preserve o modelo para salvar sem reclassificar, ou selecione uma categoria canônica.</p>
                 )}
                 {!form.funcionario_id && (
                   <p className="mt-1 text-xs text-gray-500">ℹ️ Selecione um funcionário primeiro</p>
@@ -585,7 +585,7 @@ export function ModalAtribuirQualificacao({
                 )}
                 {form.categoria && tiposFiltrados.length === 0 && !loadingTipos && !errorTipos && (
                   <p className="mt-1 text-xs text-amber-600">
-                    ⚠️ Nenhum tipo de qualificação encontrado para esta categoria
+                    <span aria-hidden="true">⚠️</span> Nenhum tipo de qualificação encontrado para esta categoria
                   </p>
                 )}
                 {validadeMeses && (
@@ -728,7 +728,7 @@ export function ModalAtribuirQualificacao({
                 )}
                 {!validadeMeses && form.qualificacao_codigo && !isG1SemSelected && (
                   <p className="mt-1 text-xs text-amber-600">
-                    ⚠️ Este tipo não tem validade definida. Informe manualmente se necessário.
+                    <span aria-hidden="true">⚠️</span> Este tipo não tem validade definida. Informe manualmente se necessário.
                   </p>
                 )}
               </div>

@@ -397,7 +397,7 @@ export default function FrmsFormJornada({
                     );
                   })}
                   {preview.alertas.length === 0 && preview.violacoes.length === 0 && (
-                    <p className="text-xs text-emerald-600">✓ Dentro dos limites operacionais</p>
+                    <p className="text-xs text-emerald-600"><span aria-hidden="true">✓</span> Dentro dos limites operacionais</p>
                   )}
                 </>
               )}

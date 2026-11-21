@@ -91,14 +91,14 @@ export function RequestMonitor() {
             {/* Alertas */}
             {stats.percentDay >= 90 && (
               <div className="bg-red-50 border border-red-200 rounded p-2 text-red-800">
-                <p className="font-semibold">⚠️ Limite crítico!</p>
+                <p className="font-semibold"><span aria-hidden="true">⚠️</span> Limite crítico!</p>
                 <p className="mt-1">Evite fazer mais requests até amanhã.</p>
               </div>
             )}
 
             {stats.percentDay >= 70 && stats.percentDay < 90 && (
               <div className="bg-yellow-50 border border-yellow-200 rounded p-2 text-yellow-800">
-                <p className="font-semibold">⚡ Uso elevado</p>
+                <p className="font-semibold"><span aria-hidden="true">⚡</span> Uso elevado</p>
                 <p className="mt-1">Reduza navegação intensiva.</p>
               </div>
             )}

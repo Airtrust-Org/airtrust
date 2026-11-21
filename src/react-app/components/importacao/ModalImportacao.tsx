@@ -237,7 +237,7 @@ export function ModalImportacao({ entidade, onClose, onSucesso }: ModalImportaca
               {entidade === 'qualificacoes_historico' && (
                 <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-4">
                   <h4 className="font-semibold text-emerald-900 mb-2">
-                    📋 Campos do Histórico (Simplificado)
+                    <span aria-hidden="true">📋</span> Campos do Histórico (Simplificado)
                   </h4>
                   <div className="text-sm text-emerald-800 space-y-2">
                     <p className="font-medium">Apenas 3 campos obrigatórios:</p>
@@ -255,7 +255,7 @@ export function ModalImportacao({ entidade, onClose, onSucesso }: ModalImportaca
                       </li>
                     </ul>
                     <div className="mt-3 pt-3 border-t border-emerald-300">
-                      <p className="font-medium text-emerald-900">✨ Cálculo Automático:</p>
+                      <p className="font-medium text-emerald-900"><span aria-hidden="true">✨</span> Cálculo Automático:</p>
                       <ul className="ml-4 mt-1 space-y-1">
                         <li>• Nome do funcionário (via CPF)</li>
                         <li>• Nome da qualificação (via código)</li>
@@ -265,7 +265,7 @@ export function ModalImportacao({ entidade, onClose, onSucesso }: ModalImportaca
                       </ul>
                     </div>
                     <div className="mt-3 pt-3 border-t border-emerald-300">
-                      <p className="font-medium text-emerald-900">🔗 Integração Ativa:</p>
+                      <p className="font-medium text-emerald-900"><span aria-hidden="true">🔗</span> Integração Ativa:</p>
                       <p className="mt-1">
                         Quando funcionários ou tipos de qualificação são atualizados, os dados do
                         histórico refletem as mudanças automaticamente!

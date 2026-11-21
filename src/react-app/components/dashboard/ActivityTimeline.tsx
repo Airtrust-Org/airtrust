@@ -25,7 +25,7 @@ export function ActivityTimeline({
   if (activities.length === 0) {
     return (
       <div className="bg-white border border-gray-200 rounded-xl p-6">
-        <h3 className="text-lg font-bold text-gray-900 mb-2">🔔 Atividades Recentes</h3>
+        <h3 className="text-lg font-bold text-gray-900 mb-2"><span aria-hidden="true">🔔</span> Atividades Recentes</h3>
         <p className="text-sm text-gray-500">Nenhuma atividade recente</p>
       </div>
     );
@@ -34,7 +34,7 @@ export function ActivityTimeline({
   return (
     <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
       <div className="px-6 py-4 border-b border-gray-100">
-        <h3 className="text-lg font-bold text-gray-900">🔔 Atividades Recentes</h3>
+        <h3 className="text-lg font-bold text-gray-900"><span aria-hidden="true">🔔</span> Atividades Recentes</h3>
         <p className="text-sm text-gray-500 mt-1">Últimas 4 horas</p>
       </div>
 

@@ -62,7 +62,7 @@ export function AlocadoBadge({ inSession, aeronave }: { inSession?: boolean; aer
   if (inSession) {
     return (
       <span className="ml-1 inline-flex items-center rounded bg-amber-100 px-1.5 py-px text-xs font-semibold text-amber-700">
-        🔒 esta sessão
+        <span aria-hidden="true">🔒</span> esta sessão
       </span>
     );
   }

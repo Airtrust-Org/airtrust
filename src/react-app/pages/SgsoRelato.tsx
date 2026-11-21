@@ -1353,7 +1353,7 @@ export default function SgsoRelato() {
         <div className="space-y-3">
           <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
             <p className="text-xs text-amber-700 font-medium">
-              🔒 Notas internas — visíveis apenas para GSO e administradores. Não mostradas ao
+              <span aria-hidden="true">🔒</span> Notas internas — visíveis apenas para GSO e administradores. Não mostradas ao
               relator.
             </p>
           </div>

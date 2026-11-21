@@ -409,7 +409,7 @@ const BackupRestorePage = () => {
                 Gerando...
               </>
             ) : (
-              <>📦 Gerar Backup Completo</>
+              <><span aria-hidden="true">📦</span> Gerar Backup Completo</>
             )}
           </Button>
 
@@ -512,7 +512,7 @@ const BackupRestorePage = () => {
                     Importando...
                   </>
                 ) : (
-                  <>✅ Importar Dados</>
+                  <><span aria-hidden="true">✅</span> Importar Dados</>
                 )}
               </Button>
 

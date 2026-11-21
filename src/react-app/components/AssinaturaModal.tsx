@@ -226,7 +226,7 @@ export default function AssinaturaModal({
                 onClick={limpar}
                 className="text-xs text-blue-600 hover:text-blue-800 font-medium"
               >
-                🗑️ Limpar Assinatura
+                <span aria-hidden="true">🗑️</span> Limpar Assinatura
               </button>
             </div>
           </div>
@@ -262,7 +262,7 @@ export default function AssinaturaModal({
           {papel === 'INSTRUTOR' && (
             <div className="bg-amber-50 border-2 border-amber-300 rounded-lg p-5 mb-6">
               <label className="block text-sm font-bold text-amber-900 mb-3">
-                ⚠️ Aprovação da Sessão *
+                <span aria-hidden="true">⚠️</span> Aprovação da Sessão *
               </label>
               <p className="text-xs text-amber-700 mb-4">
                 Como instrutor, você deve indicar se a sessão foi APROVADA ou NÃO APROVADA.
@@ -277,7 +277,7 @@ export default function AssinaturaModal({
                       : 'bg-white text-green-700 border-green-300 hover:bg-green-50'
                   }`}
                 >
-                  ✓ APROVADO
+                  <span aria-hidden="true">✓</span> APROVADO
                 </button>
                 <button
                   type="button"
@@ -288,7 +288,7 @@ export default function AssinaturaModal({
                       : 'bg-white text-red-700 border-red-300 hover:bg-red-50'
                   }`}
                 >
-                  ✗ NÃO APROVADO
+                  <span aria-hidden="true">✗</span> NÃO APROVADO
                 </button>
               </div>
             </div>
@@ -313,7 +313,7 @@ export default function AssinaturaModal({
               disabled={!assinado || !concordo || (papel === 'INSTRUTOR' && aprovado === null)}
               className="px-6 py-2 text-sm font-semibold text-white bg-green-600 rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition"
             >
-              ✓ Confirmar Assinatura
+              <span aria-hidden="true">✓</span> Confirmar Assinatura
             </button>
           </div>
         </div>

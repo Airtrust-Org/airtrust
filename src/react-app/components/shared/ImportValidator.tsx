@@ -107,7 +107,7 @@ export function ImportValidator({ dados, onValidationComplete, validationRules, 
 
         {resumo.erros === 0 && resumo.avisos === 0 && (
           <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-4">
-            <p className="text-green-800 font-medium">✓ Todos os registros estão válidos!</p>
+            <p className="text-green-800 font-medium"><span aria-hidden="true">✓</span> Todos os registros estão válidos!</p>
             <p className="text-green-600 text-sm">{resumo.sucesso} registro(s) pronto(s) para importação</p>
           </div>
         )}

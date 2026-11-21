@@ -1915,7 +1915,7 @@ export default function ModalNovaSessao({
                     : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-50'
                 }`}
               >
-                🖥️ Simulador
+                <span aria-hidden="true">🖥️</span> Simulador
               </button>
               <button
                 type="button"
@@ -1927,7 +1927,7 @@ export default function ModalNovaSessao({
                     : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-50'
                 }`}
               >
-                ✈️ Aeronave Real
+                <span aria-hidden="true">✈️</span> Aeronave Real
               </button>
             </div>
             {modoCompartilhado && (
@@ -2017,7 +2017,7 @@ export default function ModalNovaSessao({
               </select>
               {aeronaveId && aeronavesReaisFiltradas.length === 0 && (
                 <p className="text-xs text-amber-600 mt-1">
-                  ⚠️ Nenhuma aeronave cadastrada para este modelo
+                  <span aria-hidden="true">⚠️</span> Nenhuma aeronave cadastrada para este modelo
                 </p>
               )}
             </div>
@@ -2103,7 +2103,7 @@ export default function ModalNovaSessao({
                   data-testid="tema-sessao-legado-input"
                 />
                 <p className="text-xs text-amber-600">
-                  ⚠️ Tema preservado da sessão. Modelo original não encontrado nos cadastros atuais — verifique
+                  <span aria-hidden="true">⚠️</span> Tema preservado da sessão. Modelo original não encontrado nos cadastros atuais — verifique
                   em <strong>Gestão → Modelos de Sessão</strong>.
                 </p>
               </div>
@@ -2145,7 +2145,7 @@ export default function ModalNovaSessao({
                 }`}
                 disabled={loading}
               />
-              {dataInvalida && <p className="text-xs text-red-600 mt-1">⚠️ Data não existente</p>}
+              {dataInvalida && <p className="text-xs text-red-600 mt-1"><span aria-hidden="true">⚠️</span> Data não existente</p>}
             </div>
 
             <div>
@@ -2202,7 +2202,7 @@ export default function ModalNovaSessao({
             </select>
             {instrutores.length === 0 && (
               <p className="text-xs text-amber-600 mt-1">
-                ⚠️ Nenhum instrutor encontrado. Configure instrutores em Configurações.
+                <span aria-hidden="true">⚠️</span> Nenhum instrutor encontrado. Configure instrutores em Configurações.
               </p>
             )}
           </div>
@@ -2286,7 +2286,7 @@ export default function ModalNovaSessao({
               </div>
               {examinadorId && checksSelecionados.length === 0 && (
                 <p className="text-xs text-amber-700 mt-1">
-                  ⚠️ Se há examinador, selecione ao menos 1 check.
+                  <span aria-hidden="true">⚠️</span> Se há examinador, selecione ao menos 1 check.
                 </p>
               )}
             </div>

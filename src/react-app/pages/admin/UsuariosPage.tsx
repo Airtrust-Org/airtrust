@@ -2339,7 +2339,7 @@ function ModalResetSenha({
             {erroConfirmacao && <p className="text-xs text-red-500 mt-1">{erroConfirmacao}</p>}
           </div>
           <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg p-3">
-            ⚠️ O usuário precisará usar a nova senha no próximo acesso. Esta ação é registrada em
+            <span aria-hidden="true">⚠️</span> O usuário precisará usar a nova senha no próximo acesso. Esta ação é registrada em
             auditoria.
           </p>
           <div className="flex justify-end gap-2 pt-2">

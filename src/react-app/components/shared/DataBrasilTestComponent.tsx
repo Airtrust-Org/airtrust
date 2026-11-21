@@ -201,12 +201,12 @@ export const DataBrasilTestComponent: React.FC = () => {
           <div className="flex items-start gap-3">
             <AlertTriangle className="h-5 w-5 text-yellow-600 mt-0.5" />
             <div>
-              <h3 className="font-medium text-yellow-800">⚠️ PADRÃO OBRIGATÓRIO</h3>
+              <h3 className="font-medium text-yellow-800"><span aria-hidden="true">⚠️</span> PADRÃO OBRIGATÓRIO</h3>
               <ul className="text-sm text-yellow-700 mt-2 space-y-1">
-                <li>✅ Datas: SEMPRE dd/mm/aaaa (nunca mm/dd/yyyy ou yyyy-mm-dd)</li>
-                <li>✅ Placeholders: SEMPRE "dd/mm/aaaa"</li>
-                <li>✅ Máscaras: SEMPRE ##/##/####</li>
-                <li>✅ Cultura: SEMPRE pt-BR</li>
+                <li><span aria-hidden="true">✅</span> Datas: SEMPRE dd/mm/aaaa (nunca mm/dd/yyyy ou yyyy-mm-dd)</li>
+                <li><span aria-hidden="true">✅</span> Placeholders: SEMPRE "dd/mm/aaaa"</li>
+                <li><span aria-hidden="true">✅</span> Máscaras: SEMPRE ##/##/####</li>
+                <li><span aria-hidden="true">✅</span> Cultura: SEMPRE pt-BR</li>
               </ul>
             </div>
           </div>
@@ -223,12 +223,12 @@ export const DataBrasilTestComponent: React.FC = () => {
           </Button>
           
           <Button variant="secondary" onClick={limparTestes} disabled={loading}>
-            🗑️ Limpar Resultados
+            <span aria-hidden="true">🗑️</span> Limpar Resultados
           </Button>
           
           {testes.length > 0 && (
             <Button variant="secondary" onClick={exportarRelatorio}>
-              📄 Exportar Relatório
+              <span aria-hidden="true">📄</span> Exportar Relatório
             </Button>
           )}
         </div>
@@ -239,7 +239,7 @@ export const DataBrasilTestComponent: React.FC = () => {
           <Card className="p-6">
             <h3 className="text-lg font-medium mb-4 flex items-center gap-2">
               <Check className="h-5 w-5 text-green-600" />
-              📊 Resumo dos Resultados
+              <span aria-hidden="true">📊</span> Resumo dos Resultados
             </h3>
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
               <div className="text-center p-4 bg-primary/10 rounded-lg">
@@ -262,7 +262,7 @@ export const DataBrasilTestComponent: React.FC = () => {
           </Card>
 
           <Card className="p-6">
-            <h3 className="text-lg font-medium mb-4">📋 Detalhes dos Testes</h3>
+            <h3 className="text-lg font-medium mb-4"><span aria-hidden="true">📋</span> Detalhes dos Testes</h3>
             <div className="space-y-3 max-h-96 overflow-y-auto">
               {testes.map((teste, index) => (
                 <div key={index} className={`p-4 border rounded-lg ${

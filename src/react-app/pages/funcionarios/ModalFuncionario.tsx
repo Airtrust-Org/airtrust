@@ -1106,7 +1106,7 @@ export default function ModalFuncionario({
                     className="w-full px-3 py-2 border border-slate-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-950 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-primary"
                     required
                   >
-                    <option value="">✓ Selecione a função</option>
+                    <option value=""><span aria-hidden="true">✓</span> Selecione a função</option>
                     {funcoesList
                       .filter(
                         (it) =>
@@ -1150,7 +1150,7 @@ export default function ModalFuncionario({
                     className="w-full px-3 py-2 border border-slate-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-950 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-primary"
                     required
                   >
-                    <option value="">✓ Selecione o setor</option>
+                    <option value=""><span aria-hidden="true">✓</span> Selecione o setor</option>
                     {setoresList
                       .filter(
                         (it) => it.deleted_at == null && (it.ativo === undefined || it.ativo === 1),
@@ -1179,7 +1179,7 @@ export default function ModalFuncionario({
                     Equipamentos
                   </label>
                   {modelosAeronave.length === 0 ? (
-                    <p className="text-xs text-orange-600">⚠️ Carregando equipamentos...</p>
+                    <p className="text-xs text-orange-600"><span aria-hidden="true">⚠️</span> Carregando equipamentos...</p>
                   ) : (
                     <div className="max-h-40 overflow-y-auto border border-slate-200 dark:border-slate-800 rounded-lg p-2 bg-slate-50 dark:bg-slate-950/60">
                       <div className="grid grid-cols-2 gap-2">
@@ -1536,7 +1536,7 @@ export default function ModalFuncionario({
                 {/* Qualificações Especiais */}
                 <div className="mt-6 p-4 bg-primary/10 rounded-lg border border-blue-200 dark:border-blue-900/60">
                   <h3 className="text-sm font-semibold text-blue-900 dark:text-blue-200 mb-3">
-                    ✈️ Qualificações Especiais
+                    <span aria-hidden="true">✈️</span> Qualificações Especiais
                   </h3>
                   <div className="space-y-3">
                     {/* Checkbox Instrutor */}

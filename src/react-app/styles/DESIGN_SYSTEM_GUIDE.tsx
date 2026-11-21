@@ -128,9 +128,9 @@ function Tabs() {
 function StatusBadges() {
   return (
     <div className="flex gap-2">
-      <span className={DesignSystemGlobal.badges.valid}>✓ Válido</span>
-      <span className={DesignSystemGlobal.badges.expiring}>⚠ Vencendo</span>
-      <span className={DesignSystemGlobal.badges.expired}>✕ Vencida</span>
+      <span className={DesignSystemGlobal.badges.valid}><span aria-hidden="true">✓</span> Válido</span>
+      <span className={DesignSystemGlobal.badges.expiring}><span aria-hidden="true">⚠</span> Vencendo</span>
+      <span className={DesignSystemGlobal.badges.expired}><span aria-hidden="true">✕</span> Vencida</span>
       <span className={DesignSystemGlobal.badges.pending}>◯ Pendente</span>
     </div>
   );

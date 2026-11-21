@@ -100,7 +100,7 @@ export default function VerificarCertificado() {
             </button>
           </div>
           <p className="text-sm text-gray-500 mt-3">
-            💡 O código está impresso no certificado no campo "VERIFICAÇÃO → HASH"
+            <span aria-hidden="true">💡</span> O código está impresso no certificado no campo "VERIFICAÇÃO → HASH"
           </p>
         </div>
 

@@ -14,7 +14,7 @@ export function UpcomingActionsPanel({ actions, onMarkComplete }: UpcomingAction
   if (actions.length === 0) {
     return (
       <div className="bg-white border border-gray-200 rounded-xl p-6">
-        <h3 className="text-lg font-bold text-gray-900 mb-2">📅 Próximas Ações</h3>
+        <h3 className="text-lg font-bold text-gray-900 mb-2"><span aria-hidden="true">📅</span> Próximas Ações</h3>
         <p className="text-sm text-gray-500">Nenhuma ação pendente no momento</p>
       </div>
     );
@@ -23,7 +23,7 @@ export function UpcomingActionsPanel({ actions, onMarkComplete }: UpcomingAction
   return (
     <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
       <div className="px-6 py-4 border-b border-gray-100">
-        <h3 className="text-lg font-bold text-gray-900">📅 Próximas Ações</h3>
+        <h3 className="text-lg font-bold text-gray-900"><span aria-hidden="true">📅</span> Próximas Ações</h3>
         <p className="text-sm text-gray-500 mt-1">
           {actions.length} {actions.length === 1 ? 'ação pendente' : 'ações pendentes'}
         </p>

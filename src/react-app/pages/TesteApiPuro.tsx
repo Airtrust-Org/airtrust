@@ -46,7 +46,7 @@ export function TesteApiPuro() {
 
   return (
     <div style={{ padding: '20px', fontFamily: 'Arial, sans-serif' }}>
-      <h1>🧪 Teste API (React Puro)</h1>
+      <h1><span aria-hidden="true">🧪</span> Teste API (React Puro)</h1>
 
       <div
         style={{

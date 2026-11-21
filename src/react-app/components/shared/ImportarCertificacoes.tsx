@@ -348,7 +348,7 @@ export default function ImportarCertificacoes({
               : 'text-gray-500 hover:text-gray-700'
           }`}
         >
-          📁 Upload de Arquivo
+          <span aria-hidden="true">📁</span> Upload de Arquivo
         </button>
         <button
           onClick={() => setInputMode('text')}
@@ -358,7 +358,7 @@ export default function ImportarCertificacoes({
               : 'text-gray-500 hover:text-gray-700'
           }`}
         >
-          📄 Colar CSV
+          <span aria-hidden="true">📄</span> Colar CSV
         </button>
       </div>
 
@@ -445,13 +445,13 @@ export default function ImportarCertificacoes({
           </div>
         </div>
         <p className="text-xs text-primary mt-2">
-          ✅ Templates totalmente editáveis - sem senha, sem proteção, sem restrições
+          <span aria-hidden="true">✅</span> Templates totalmente editáveis - sem senha, sem proteção, sem restrições
         </p>
       </div>
 
       {/* Formato Esperado */}
       <div className="bg-gray-50 rounded-lg p-4 w-full">
-        <h4 className="font-medium text-gray-900 mb-3">📋 Formato CSV Esperado</h4>
+        <h4 className="font-medium text-gray-900 mb-3"><span aria-hidden="true">📋</span> Formato CSV Esperado</h4>
 
         <div className="bg-white rounded-lg border overflow-hidden w-full">
           {/* Header */}
@@ -503,7 +503,7 @@ export default function ImportarCertificacoes({
                 </li>
               </ul>
               <div className="mt-3 p-2 bg-primary/10 rounded-md border-l-4 border-blue-400">
-                <p className="font-bold text-primary">📅 Formato de Data: DD/MM/AAAA</p>
+                <p className="font-bold text-primary"><span aria-hidden="true">📅</span> Formato de Data: DD/MM/AAAA</p>
                 <p className="text-blue-700">
                   Padrão brasileiro obrigatório. Exemplos: 20/08/2025, 17/09/2026
                 </p>
@@ -738,7 +738,7 @@ export default function ImportarCertificacoes({
               </ul>
             </div>
             <p className="text-xs text-purple-600 mt-2">
-              💡 Funcionários foram criados com dados mínimos. Importe dados completos para
+              <span aria-hidden="true">💡</span> Funcionários foram criados com dados mínimos. Importe dados completos para
               atualizar.
             </p>
           </div>
@@ -764,7 +764,7 @@ export default function ImportarCertificacoes({
               </ul>
             </div>
             <p className="text-xs text-primary mt-2">
-              💡 Treinamentos foram criados com dados mínimos. Importe catálogo completo para
+              <span aria-hidden="true">💡</span> Treinamentos foram criados com dados mínimos. Importe catálogo completo para
               atualizar.
             </p>
           </div>

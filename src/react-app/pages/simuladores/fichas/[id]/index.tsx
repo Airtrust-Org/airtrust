@@ -2332,7 +2332,7 @@ export default function FichaDetalhe() {
                               className="h-full w-full object-contain"
                             />
                           ) : (
-                            <span className="text-xs text-slate-500">✓ Assinado digitalmente</span>
+                            <span className="text-xs text-slate-500"><span aria-hidden="true">✓</span> Assinado digitalmente</span>
                           )}
                         </div>
                         <p className="text-xs text-slate-600">
@@ -2390,7 +2390,7 @@ export default function FichaDetalhe() {
                               className="h-full w-full object-contain"
                             />
                           ) : (
-                            <span className="text-xs text-slate-500">✓ Assinado digitalmente</span>
+                            <span className="text-xs text-slate-500"><span aria-hidden="true">✓</span> Assinado digitalmente</span>
                           )}
                         </div>
                         <p className="text-xs text-slate-600">
@@ -2534,7 +2534,7 @@ export default function FichaDetalhe() {
                             onChange={() => setAprovadoInline(true)}
                             className="w-4 h-4 text-green-600 border-slate-300 focus:ring-green-500"
                           />
-                          <span className="text-sm font-medium text-green-700">✓ APROVADA</span>
+                          <span className="text-sm font-medium text-green-700"><span aria-hidden="true">✓</span> APROVADA</span>
                         </label>
                         <label className="flex items-center gap-2 cursor-pointer">
                           <input
@@ -2544,7 +2544,7 @@ export default function FichaDetalhe() {
                             onChange={() => setAprovadoInline(false)}
                             className="w-4 h-4 text-red-600 border-slate-300 focus:ring-red-500"
                           />
-                          <span className="text-sm font-medium text-red-700">✗ NÃO APROVADA</span>
+                          <span className="text-sm font-medium text-red-700"><span aria-hidden="true">✗</span> NÃO APROVADA</span>
                         </label>
                       </div>
                     </div>
@@ -2596,7 +2596,7 @@ export default function FichaDetalhe() {
                                   className="w-4 h-4 text-green-600 border-slate-300 focus:ring-green-500"
                                 />
                                 <span className="text-sm font-medium text-green-700">
-                                  ✓ Aprovado
+                                  <span aria-hidden="true">✓</span> Aprovado
                                 </span>
                               </label>
 
@@ -2617,7 +2617,7 @@ export default function FichaDetalhe() {
                                   className="w-4 h-4 text-red-600 border-slate-300 focus:ring-red-500"
                                 />
                                 <span className="text-sm font-medium text-red-700">
-                                  ✗ Reprovado
+                                  <span aria-hidden="true">✗</span> Reprovado
                                 </span>
                               </label>
                             </div>
@@ -3123,7 +3123,7 @@ export default function FichaDetalhe() {
                           }}
                           className="w-4 h-4 text-green-600 border-slate-300 focus:ring-green-500"
                         />
-                        <span className="text-sm font-medium text-green-700">✓ Aprovado</span>
+                        <span className="text-sm font-medium text-green-700"><span aria-hidden="true">✓</span> Aprovado</span>
                       </label>
 
                       <label className="flex items-center gap-2 cursor-pointer">
@@ -3143,7 +3143,7 @@ export default function FichaDetalhe() {
                           }}
                           className="w-4 h-4 text-red-600 border-slate-300 focus:ring-red-500"
                         />
-                        <span className="text-sm font-medium text-red-700">✗ Reprovado</span>
+                        <span className="text-sm font-medium text-red-700"><span aria-hidden="true">✗</span> Reprovado</span>
                       </label>
                     </div>
 

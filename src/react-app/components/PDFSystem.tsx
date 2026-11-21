@@ -329,9 +329,9 @@ export default function PDFSystem({ fichaData, onPrint }: PDFSystemProps) {
       
       <div className="mt-3 text-sm text-gray-600">
         <div className="flex items-center space-x-4">
-          <span>✅ Formato A4 nativo</span>
-          <span>✅ QR Code integrado</span>
-          <span>✅ Zero dependências pesadas</span>
+          <span><span aria-hidden="true">✅</span> Formato A4 nativo</span>
+          <span><span aria-hidden="true">✅</span> QR Code integrado</span>
+          <span><span aria-hidden="true">✅</span> Zero dependências pesadas</span>
         </div>
       </div>
     </div>

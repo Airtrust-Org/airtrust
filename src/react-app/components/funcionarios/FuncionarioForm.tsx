@@ -251,7 +251,7 @@ const FuncionarioForm: React.FC<FuncionarioFormProps> = ({ funcionario, onSubmit
 
         {/* Qualificações Especiais */}
         <div className="mt-6 p-4 bg-primary/10 rounded-lg border border-blue-200">
-          <h3 className="text-sm font-semibold text-blue-900 mb-3">✈️ Qualificações Especiais</h3>
+          <h3 className="text-sm font-semibold text-blue-900 mb-3"><span aria-hidden="true">✈️</span> Qualificações Especiais</h3>
           <div className="space-y-3">
             {/* Checkbox Instrutor */}
             <div className="flex items-start">

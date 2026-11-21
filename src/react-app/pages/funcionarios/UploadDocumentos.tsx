@@ -127,7 +127,7 @@ export default function UploadDocumentos({
 
   return (
     <div className="space-y-4">
-      <h3 className="text-lg font-semibold">📤 Enviar Documento</h3>
+      <h3 className="text-lg font-semibold"><span aria-hidden="true">📤</span> Enviar Documento</h3>
 
       {/* Info Box */}
       <div className="bg-primary/10 border border-blue-200 rounded-lg p-3 flex gap-3">

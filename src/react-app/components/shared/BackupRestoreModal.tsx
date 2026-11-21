@@ -223,7 +223,7 @@ const BackupRestoreModal: React.FC<BackupRestoreModalProps> = ({ isOpen, onClose
         )}
 
         <div className="bg-primary/10 border border-blue-200 rounded-lg p-4">
-          <h4 className="font-medium text-blue-900 mb-2">💡 Dicas importantes:</h4>
+          <h4 className="font-medium text-blue-900 mb-2"><span aria-hidden="true">💡</span> Dicas importantes:</h4>
           <ul className="text-sm text-primary space-y-1">
             <li>• Exporte dados regularmente para ter backups atualizados</li>
             <li>• Arquivos de certificados são preservados via URLs do Cloudflare R2</li>

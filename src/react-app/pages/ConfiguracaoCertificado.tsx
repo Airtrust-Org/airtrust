@@ -121,7 +121,7 @@ export default function ConfiguracaoCertificado() {
 
         {/* Header */}
         <div className={styles.header}>
-          <h1>🎓 Configuração de Certificados</h1>
+          <h1><span aria-hidden="true">🎓</span> Configuração de Certificados</h1>
           <p className={styles.subtitle}>
             Personalize templates e cores de certificados por empresa
           </p>
@@ -129,7 +129,7 @@ export default function ConfiguracaoCertificado() {
 
         {/* Seletor de Empresa */}
         <div className={styles.card}>
-          <h2 className={styles.cardTitle}>📋 Selecione a Empresa</h2>
+          <h2 className={styles.cardTitle}><span aria-hidden="true">📋</span> Selecione a Empresa</h2>
 
           <div className={styles.formGroup}>
             <label htmlFor="configuracaocertificado-empresa">Empresa</label>
@@ -151,7 +151,7 @@ export default function ConfiguracaoCertificado() {
         {/* Informações da Empresa */}
         {empresaSelecionada && (
           <div className={styles.card}>
-            <h2 className={styles.cardTitle}>🏢 Informações da Empresa</h2>
+            <h2 className={styles.cardTitle}><span aria-hidden="true">🏢</span> Informações da Empresa</h2>
 
             {empresaSelecionada.logo_url && (
               <div className={styles.logoPreview}>
@@ -165,7 +165,7 @@ export default function ConfiguracaoCertificado() {
         {/* Template de Certificado */}
         {selectedEmpresa && (
           <div className={styles.card}>
-            <h2 className={styles.cardTitle}>🎨 Template de Certificado</h2>
+            <h2 className={styles.cardTitle}><span aria-hidden="true">🎨</span> Template de Certificado</h2>
 
             <div className={styles.templateControls}>
               <button onClick={() => setShowModal(true)} className={styles.btnEdit}>
@@ -221,7 +221,7 @@ export default function ConfiguracaoCertificado() {
 
               <div className={styles.modalActions}>
                 <button onClick={() => setShowModal(false)} className={styles.btnCancel}>
-                  ✕ Cancelar
+                  <span aria-hidden="true">✕</span> Cancelar
                 </button>
 
                 <button

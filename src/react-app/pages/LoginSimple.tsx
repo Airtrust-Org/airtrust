@@ -313,7 +313,7 @@ export default function LoginPage() {
               {IS_DEV && (
                 <div className="mt-5 pt-5 border-t border-slate-100">
                   <p className="text-xs text-slate-400 text-center mb-2.5">
-                    ⚡ Acesso rápido (modo dev.)
+                    <span aria-hidden="true">⚡</span> Acesso rápido (modo dev.)
                   </p>
                   <div className="grid grid-cols-4 gap-1.5">
                     {DEV_PROFILES.map((p) => (
