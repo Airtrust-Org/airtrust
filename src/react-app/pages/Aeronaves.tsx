@@ -346,7 +346,7 @@ export default function Aeronaves() {
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <label className="block text-sm font-medium text-neutral-700 mb-1">Modelo *</label>
-            <input
+            <input aria-label="Modelo"
               type="text"
               required
               value={formData.modelo}
@@ -358,7 +358,7 @@ export default function Aeronaves() {
 
           <div>
             <label className="block text-sm font-medium text-neutral-700 mb-1">Prefixo</label>
-            <input
+            <input aria-label="Prefixo"
               type="text"
               value={formData.prefixo || ''}
               onChange={(e) => setFormData({ ...formData, prefixo: e.target.value.toUpperCase() })}
@@ -372,7 +372,7 @@ export default function Aeronaves() {
               <label className="block text-sm font-medium text-neutral-700 mb-1">
                 Peso vazio *
               </label>
-              <input
+              <input aria-label="Peso vazio"
                 type="number"
                 min="0.01"
                 step="0.01"
@@ -389,7 +389,7 @@ export default function Aeronaves() {
             </div>
             <div>
               <label className="block text-sm font-medium text-neutral-700 mb-1">Unidade *</label>
-              <select
+              <select aria-label="Unidade"
                 required
                 value={formData.unidade_peso || 'LB'}
                 onChange={(e) => setFormData({ ...formData, unidade_peso: e.target.value })}
@@ -421,7 +421,7 @@ export default function Aeronaves() {
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <label className="block text-sm font-medium text-neutral-700 mb-1">Modelo *</label>
-            <input
+            <input aria-label="Modelo"
               type="text"
               required
               value={formData.modelo}
@@ -432,7 +432,7 @@ export default function Aeronaves() {
 
           <div>
             <label className="block text-sm font-medium text-neutral-700 mb-1">Prefixo</label>
-            <input
+            <input aria-label="Prefixo"
               type="text"
               value={formData.prefixo || ''}
               onChange={(e) => setFormData({ ...formData, prefixo: e.target.value.toUpperCase() })}
@@ -445,7 +445,7 @@ export default function Aeronaves() {
               <label className="block text-sm font-medium text-neutral-700 mb-1">
                 Peso vazio *
               </label>
-              <input
+              <input aria-label="Peso vazio"
                 type="number"
                 min="0.01"
                 step="0.01"
@@ -462,7 +462,7 @@ export default function Aeronaves() {
             </div>
             <div>
               <label className="block text-sm font-medium text-neutral-700 mb-1">Unidade *</label>
-              <select
+              <select aria-label="Unidade"
                 required
                 value={formData.unidade_peso || 'LB'}
                 onChange={(e) => setFormData({ ...formData, unidade_peso: e.target.value })}

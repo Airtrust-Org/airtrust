@@ -339,7 +339,7 @@ export default function FuncoesManagement() {
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">Nome *</label>
-            <input
+            <input aria-label="Nome"
               type="text"
               name="nome"
               value={formData.nome}
@@ -352,7 +352,7 @@ export default function FuncoesManagement() {
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">Categoria</label>
-            <select
+            <select aria-label="Categoria"
               name="categoria"
               value={formData.categoria}
               onChange={handleInputChange}
@@ -368,7 +368,7 @@ export default function FuncoesManagement() {
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">Descrição</label>
-            <textarea
+            <textarea aria-label="Descrição"
               name="descricao"
               value={formData.descricao}
               onChange={handleInputChange}
@@ -400,7 +400,7 @@ export default function FuncoesManagement() {
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">Nome *</label>
-            <input
+            <input aria-label="Nome"
               type="text"
               name="nome"
               value={formData.nome}
@@ -413,7 +413,7 @@ export default function FuncoesManagement() {
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">Categoria</label>
-            <select
+            <select aria-label="Categoria"
               name="categoria"
               value={formData.categoria}
               onChange={handleInputChange}
@@ -429,7 +429,7 @@ export default function FuncoesManagement() {
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">Descrição</label>
-            <textarea
+            <textarea aria-label="Descrição"
               name="descricao"
               value={formData.descricao}
               onChange={handleInputChange}

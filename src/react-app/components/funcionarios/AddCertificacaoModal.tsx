@@ -262,7 +262,7 @@ export default function AddCertificacaoModal({
             <Calendar className="w-4 h-4 inline mr-2" />
             Data de Vencimento
           </label>
-          <input
+          <input aria-label="Data de Vencimento"
             type="date"
             name="data_vencimento"
             value={formData.data_vencimento}
@@ -297,7 +297,7 @@ export default function AddCertificacaoModal({
         {/* Observações */}
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-2">Observações</label>
-          <textarea
+          <textarea aria-label="Observações"
             name="observacoes"
             value={formData.observacoes}
             onChange={handleInputChange}
@@ -312,7 +312,7 @@ export default function AddCertificacaoModal({
           <label className="block text-sm font-medium text-gray-700 mb-2">
             Anexar Certificado (PDF/JPG)
           </label>
-          <input
+          <input aria-label="Anexar Certificado (PDF/JPG)"
             type="file"
             accept=".pdf,.jpg,.jpeg,.png"
             onChange={handleFileSelect}

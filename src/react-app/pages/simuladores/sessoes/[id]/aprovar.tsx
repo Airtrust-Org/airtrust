@@ -217,7 +217,7 @@ export default function AprovarSessao() {
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Observações Gerais
               </label>
-              <textarea
+              <textarea aria-label="Observações Gerais"
                 value={observacoes}
                 onChange={(e) => setObservacoes(e.target.value)}
                 rows={3}
@@ -230,7 +230,7 @@ export default function AprovarSessao() {
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Motivo da Reprovação (se aplicável)
               </label>
-              <textarea
+              <textarea aria-label="Motivo da Reprovação (se aplicável)"
                 value={motivo}
                 onChange={(e) => setMotivo(e.target.value)}
                 rows={3}

@@ -146,7 +146,7 @@ const TemplateForm: React.FC<TemplateFormProps> = ({ template, onSubmit, onCance
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Nome do Modelo *
               </label>
-              <input
+              <input aria-label="Nome do Modelo"
                 type="text"
                 value={formData.nome}
                 onChange={(e) => setFormData({ ...formData, nome: e.target.value })}
@@ -158,7 +158,7 @@ const TemplateForm: React.FC<TemplateFormProps> = ({ template, onSubmit, onCance
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Categoria *</label>
-              <select
+              <select aria-label="Categoria"
                 value={formData.categoria}
                 onChange={(e) => setFormData({ ...formData, categoria: e.target.value })}
                 className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-primary"
@@ -176,7 +176,7 @@ const TemplateForm: React.FC<TemplateFormProps> = ({ template, onSubmit, onCance
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Duração (minutos)
               </label>
-              <input
+              <input aria-label="Duração (minutos)"
                 type="number"
                 value={formData.duracao_minutos}
                 onChange={(e) =>
@@ -190,7 +190,7 @@ const TemplateForm: React.FC<TemplateFormProps> = ({ template, onSubmit, onCance
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Nota Mínima</label>
-              <input
+              <input aria-label="Nota Mínima"
                 type="number"
                 step="0.1"
                 value={formData.nota_minima}
@@ -207,7 +207,7 @@ const TemplateForm: React.FC<TemplateFormProps> = ({ template, onSubmit, onCance
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Equipamento Aplicável
               </label>
-              <input
+              <input aria-label="Equipamento Aplicável"
                 type="text"
                 value={formData.aeronave_aplicavel}
                 onChange={(e) => setFormData({ ...formData, aeronave_aplicavel: e.target.value })}
@@ -220,7 +220,7 @@ const TemplateForm: React.FC<TemplateFormProps> = ({ template, onSubmit, onCance
           {/* Descrição */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">Descrição</label>
-            <textarea
+            <textarea aria-label="Descrição"
               value={formData.descricao}
               onChange={(e) => setFormData({ ...formData, descricao: e.target.value })}
               rows={3}

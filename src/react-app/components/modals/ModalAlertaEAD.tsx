@@ -357,7 +357,7 @@ Por favor, providencie a renovação quando aplicável.`;
           <label className="mb-2 block text-sm font-medium text-slate-700">
             Mensagem do Alerta
           </label>
-          <textarea
+          <textarea aria-label="Mensagem do Alerta"
             value={mensagem}
             onChange={(e) => setMensagem(e.target.value)}
             rows={8}

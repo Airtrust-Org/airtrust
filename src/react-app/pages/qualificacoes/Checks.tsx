@@ -103,7 +103,7 @@ const Checks = () => {
           <div className="flex-1 max-w-md">
             <div className="relative">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
-              <input
+              <input aria-label="Buscar checks..."
                 type="text"
                 placeholder="Buscar checks..."
                 value={filtro}

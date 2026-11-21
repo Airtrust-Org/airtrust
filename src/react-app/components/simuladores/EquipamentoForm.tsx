@@ -149,7 +149,7 @@ const EquipamentoForm: React.FC<EquipamentoFormProps> = ({ equipamento, onSalvar
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Nome do Simulador *
               </label>
-              <input
+              <input aria-label="Nome do Simulador"
                 type="text"
                 value={dados.nome}
                 onChange={(e) => handleInputChange('nome', e.target.value)}
@@ -170,7 +170,7 @@ const EquipamentoForm: React.FC<EquipamentoFormProps> = ({ equipamento, onSalvar
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Código de Identificação *
               </label>
-              <input
+              <input aria-label="Código de Identificação"
                 type="text"
                 value={dados.codigo_identificacao}
                 onChange={(e) => handleInputChange('codigo_identificacao', e.target.value)}
@@ -191,7 +191,7 @@ const EquipamentoForm: React.FC<EquipamentoFormProps> = ({ equipamento, onSalvar
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Tipo de Simulador *
               </label>
-              <select
+              <select aria-label="Tipo de Simulador"
                 value={dados.tipo_simulador}
                 onChange={(e) => handleInputChange('tipo_simulador', e.target.value)}
                 className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary focus:border-primary ${
@@ -216,7 +216,7 @@ const EquipamentoForm: React.FC<EquipamentoFormProps> = ({ equipamento, onSalvar
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Equipamento Base *
               </label>
-              <input
+              <input aria-label="Equipamento Base"
                 type="text"
                 value={dados.aeronave_base}
                 onChange={(e) => handleInputChange('aeronave_base', e.target.value)}
@@ -235,7 +235,7 @@ const EquipamentoForm: React.FC<EquipamentoFormProps> = ({ equipamento, onSalvar
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Empresa/Local</label>
-              <input
+              <input aria-label="Empresa/Local"
                 type="text"
                 value={dados.empresa_local}
                 onChange={(e) => handleInputChange('empresa_local', e.target.value)}
@@ -246,7 +246,7 @@ const EquipamentoForm: React.FC<EquipamentoFormProps> = ({ equipamento, onSalvar
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Fabricante</label>
-              <input
+              <input aria-label="Fabricante"
                 type="text"
                 value={dados.fabricante}
                 onChange={(e) => handleInputChange('fabricante', e.target.value)}
@@ -257,7 +257,7 @@ const EquipamentoForm: React.FC<EquipamentoFormProps> = ({ equipamento, onSalvar
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Modelo</label>
-              <input
+              <input aria-label="Modelo"
                 type="text"
                 value={dados.modelo}
                 onChange={(e) => handleInputChange('modelo', e.target.value)}
@@ -268,7 +268,7 @@ const EquipamentoForm: React.FC<EquipamentoFormProps> = ({ equipamento, onSalvar
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Status</label>
-              <select
+              <select aria-label="Status"
                 value={dados.status}
                 onChange={(e) => handleInputChange('status', e.target.value)}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-primary"
@@ -290,7 +290,7 @@ const EquipamentoForm: React.FC<EquipamentoFormProps> = ({ equipamento, onSalvar
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Sistema Visual
                 </label>
-                <input
+                <input aria-label="Sistema Visual"
                   type="text"
                   value={dados.configuracao_tecnica.visual_system}
                   onChange={(e) => handleConfigChange('visual_system', e.target.value)}
@@ -303,7 +303,7 @@ const EquipamentoForm: React.FC<EquipamentoFormProps> = ({ equipamento, onSalvar
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Sistema de Movimento
                 </label>
-                <input
+                <input aria-label="Sistema de Movimento"
                   type="text"
                   value={dados.configuracao_tecnica.motion_system}
                   onChange={(e) => handleConfigChange('motion_system', e.target.value)}
@@ -316,7 +316,7 @@ const EquipamentoForm: React.FC<EquipamentoFormProps> = ({ equipamento, onSalvar
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Sistema de Som
                 </label>
-                <input
+                <input aria-label="Sistema de Som"
                   type="text"
                   value={dados.configuracao_tecnica.sound_system}
                   onChange={(e) => handleConfigChange('sound_system', e.target.value)}

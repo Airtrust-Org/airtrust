@@ -2096,7 +2096,7 @@ export default function FichaDetalhe() {
               {/* Observações Gerais */}
               <h3 className="text-lg font-bold text-slate-900 mb-3">Observações Gerais</h3>
               {isEditMode ? (
-                <textarea
+                <textarea aria-label="Adicione observações sobre a sessão de simulador..."
                   value={ficha.observacoes_gerais || ''}
                   onChange={(e) => setFicha({ ...ficha, observacoes_gerais: e.target.value })}
                   rows={4}
@@ -2256,7 +2256,7 @@ export default function FichaDetalhe() {
 
                             {usuarioGestor && pendente && (
                               <div className="mt-4 border-t border-slate-200 pt-4">
-                                <textarea
+                                <textarea aria-label="Observações da decisão (opcional)"
                                   value={decisaoEdicao[edicao.id] || ''}
                                   onChange={(event) =>
                                     setDecisaoEdicao((prev) => ({
@@ -2622,7 +2622,7 @@ export default function FichaDetalhe() {
                               </label>
                             </div>
 
-                            <textarea
+                            <textarea aria-label="Observações sobre este check (opcional)"
                               value={checksResultados[check.id]?.observacoes ?? ''}
                               onChange={(e) =>
                                 setChecksResultados((prev) => ({
@@ -2982,7 +2982,7 @@ export default function FichaDetalhe() {
                   <label className="mb-2 block text-sm font-semibold text-slate-900">
                     Motivo da solicitação
                   </label>
-                  <textarea
+                  <textarea aria-label="Motivo da solicitação"
                     value={motivoEdicao}
                     onChange={(event) => setMotivoEdicao(event.target.value)}
                     rows={3}
@@ -2995,7 +2995,7 @@ export default function FichaDetalhe() {
                   <label className="mb-2 block text-sm font-semibold text-slate-900">
                     Observações gerais
                   </label>
-                  <textarea
+                  <textarea aria-label="Observações gerais"
                     value={observacoesGeraisEdicao}
                     onChange={(event) => setObservacoesGeraisEdicao(event.target.value)}
                     rows={4}
@@ -3023,7 +3023,7 @@ export default function FichaDetalhe() {
                             {manobra.tripulante || 'AB'}
                           </span>
                         </div>
-                        <textarea
+                        <textarea aria-label="Observações desta manobra"
                           value={observacoesManobrasEdicao[manobra.id] || ''}
                           onChange={(event) =>
                             setObservacoesManobrasEdicao((prev) => ({
@@ -3148,7 +3148,7 @@ export default function FichaDetalhe() {
                     </div>
 
                     {/* Campo de Observações */}
-                    <textarea
+                    <textarea aria-label="Observações sobre este check (opcional)"
                       value={checksResultados[check.id]?.observacoes ?? ''}
                       onChange={(e) =>
                         setChecksResultados((prev) => ({

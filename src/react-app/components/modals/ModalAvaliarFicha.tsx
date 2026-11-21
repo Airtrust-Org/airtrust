@@ -408,7 +408,7 @@ export default function ModalAvaliarFicha({
         </div>
 
         {/* Observações */}
-        <textarea
+        <textarea aria-label="Observações desta manobra (opcional)"
           value={man.observacoes}
           onChange={(e) => handleObservacaoChange(man.ordem, e.target.value)}
           placeholder="Observações desta manobra (opcional)"
@@ -614,7 +614,7 @@ export default function ModalAvaliarFicha({
               <label className="block text-sm font-semibold text-gray-900 mb-3">
                 Observações Gerais da Sessão
               </label>
-              <textarea
+              <textarea aria-label="Observações Gerais da Sessão"
                 value={observacoesGerais}
                 onChange={(e) => setObservacoesGerais(e.target.value)}
                 placeholder="Adicione observações gerais sobre o desempenho na sessão..."

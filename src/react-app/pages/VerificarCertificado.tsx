@@ -80,7 +80,7 @@ export default function VerificarCertificado() {
             Código de Verificação (16 caracteres)
           </label>
           <div className="flex gap-3">
-            <input
+            <input aria-label="Código de Verificação (16 caracteres)"
               type="text"
               value={hash}
               onChange={(e) => setHash(e.target.value.toUpperCase())}

@@ -203,7 +203,7 @@ export default function ModalPublicarEscala({
               <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-slate-500">
                 Observação sobre esta revisão (opcional)
               </label>
-              <textarea
+              <textarea aria-label="Observação sobre esta revisão (opcional)"
                 value={justificativa}
                 onChange={(e) => setJustificativa(e.target.value)}
                 rows={2}
@@ -319,7 +319,7 @@ export default function ModalPublicarEscala({
               <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-slate-500">
                 Observação (opcional)
               </label>
-              <textarea
+              <textarea aria-label="Observação (opcional)"
                 value={justificativa}
                 onChange={(e) => setJustificativa(e.target.value)}
                 rows={2}

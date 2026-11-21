@@ -148,7 +148,7 @@ function EscalaFormModal({ tripulanteId, escala, onClose, onSaved }: FormModalPr
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="block text-xs text-gray-500 mb-1">Início</label>
-                <input
+                <input aria-label="Início"
                   type="date"
                   value={dataInicioEmb}
                   onChange={(e) => setDataInicioEmb(e.target.value)}
@@ -158,7 +158,7 @@ function EscalaFormModal({ tripulanteId, escala, onClose, onSaved }: FormModalPr
               </div>
               <div>
                 <label className="block text-xs text-gray-500 mb-1">Fim</label>
-                <input
+                <input aria-label="Fim"
                   type="date"
                   value={dataFimEmb}
                   onChange={(e) => setDataFimEmb(e.target.value)}
@@ -180,7 +180,7 @@ function EscalaFormModal({ tripulanteId, escala, onClose, onSaved }: FormModalPr
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="block text-xs text-gray-500 mb-1">Início</label>
-                <input
+                <input aria-label="Início"
                   type="date"
                   value={dataInicioFolga}
                   onChange={(e) => setDataInicioFolga(e.target.value)}
@@ -190,7 +190,7 @@ function EscalaFormModal({ tripulanteId, escala, onClose, onSaved }: FormModalPr
               </div>
               <div>
                 <label className="block text-xs text-gray-500 mb-1">Fim</label>
-                <input
+                <input aria-label="Fim"
                   type="date"
                   value={dataFimFolga}
                   onChange={(e) => setDataFimFolga(e.target.value)}
@@ -211,7 +211,7 @@ function EscalaFormModal({ tripulanteId, escala, onClose, onSaved }: FormModalPr
                 Status do Ciclo
               </label>
               <div className="relative">
-                <select
+                <select aria-label="Status do Ciclo"
                   value={statusCiclo}
                   onChange={(e) => setStatusCiclo(e.target.value)}
                   className="w-full appearance-none rounded-lg border border-gray-200 pl-3 pr-8 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-primary/30 cursor-pointer"
@@ -228,7 +228,7 @@ function EscalaFormModal({ tripulanteId, escala, onClose, onSaved }: FormModalPr
           {/* Observação */}
           <div>
             <label className="block text-xs font-medium text-gray-500 mb-1">Observação</label>
-            <textarea
+            <textarea aria-label="Observação"
               value={obs}
               onChange={(e) => setObs(e.target.value)}
               rows={2}
@@ -332,7 +332,7 @@ export default function FrmsEscalas() {
             Selecionar Tripulante
           </label>
           <div className="relative max-w-sm">
-            <select
+            <select aria-label="Selecionar Tripulante"
               value={tripulanteId}
               onChange={(e) => setTripulanteId(e.target.value)}
               className="w-full appearance-none rounded-lg border border-gray-200 bg-white pl-3 pr-8 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 cursor-pointer"

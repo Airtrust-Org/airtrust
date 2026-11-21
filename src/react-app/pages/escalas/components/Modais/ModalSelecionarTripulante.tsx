@@ -105,7 +105,7 @@ export default function ModalSelecionarTripulante({ tripulantes, onSelect, onClo
       }
     >
       <div className="space-y-4">
-        <input
+        <input aria-label="Buscar tripulante..."
           type="text"
           value={busca}
           onChange={(event) => setBusca(event.target.value)}

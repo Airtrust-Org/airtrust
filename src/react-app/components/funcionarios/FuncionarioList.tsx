@@ -120,7 +120,7 @@ export default function FuncionarioList({
 
         {/* Search */}
         <div className="mt-4">
-          <input
+          <input aria-label="Buscar por nome, função ou matrícula..."
             type="text"
             placeholder="Buscar por nome, função ou matrícula..."
             value={searchTerm}

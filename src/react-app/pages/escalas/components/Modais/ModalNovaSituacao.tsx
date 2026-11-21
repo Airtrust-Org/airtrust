@@ -628,7 +628,7 @@ export default function ModalNovaSituacao({
               <label className="mb-2 block text-xs font-semibold uppercase tracking-wide text-slate-500">
                 Observação
               </label>
-              <textarea
+              <textarea aria-label="Observação"
                 value={observacoes}
                 onChange={(event) => setObservacoes(event.target.value)}
                 rows={4}
@@ -698,7 +698,7 @@ export default function ModalNovaSituacao({
               </label>
               {mostrarSeletorTripulante && (
                 <>
-                  <input
+                  <input aria-label="Busca por nome ou matrícula..."
                     type="text"
                     value={busca}
                     onChange={(event) => setBusca(event.target.value)}

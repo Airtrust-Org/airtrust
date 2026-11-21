@@ -148,7 +148,7 @@ const BackupRestoreModal: React.FC<BackupRestoreModalProps> = ({ isOpen, onClose
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Arquivo de Backup (JSON)
               </label>
-              <input
+              <input aria-label="Arquivo de Backup (JSON)"
                 type="file"
                 name="backup_file"
                 accept=".json"

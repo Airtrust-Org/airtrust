@@ -42,7 +42,7 @@ export default function TabelaFuncionarios({
       <div className="flex items-center justify-between">
         <div className="relative w-72">
           <Search className="absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
-          <input
+          <input aria-label="Buscar funcionário..."
             type="text"
             placeholder="Buscar funcionário..."
             onChange={(e) => onSearchChange?.(e.target.value)}

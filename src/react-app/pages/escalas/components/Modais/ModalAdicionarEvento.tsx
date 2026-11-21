@@ -158,7 +158,7 @@ export default function ModalAdicionarEvento({
             <label className="block text-xs font-semibold text-slate-700 mb-1.5">
               Data Início *
             </label>
-            <input
+            <input aria-label="Data Início"
               type="date"
               value={dataInicio}
               onChange={(e) => {
@@ -170,7 +170,7 @@ export default function ModalAdicionarEvento({
           </div>
           <div>
             <label className="block text-xs font-semibold text-slate-700 mb-1.5">Data Fim *</label>
-            <input
+            <input aria-label="Data Fim"
               type="date"
               value={dataFim}
               onChange={(e) => setDataFim(e.target.value)}
@@ -208,7 +208,7 @@ export default function ModalAdicionarEvento({
             <label className="block text-xs font-semibold text-slate-700 mb-1.5">
               Local (opcional)
             </label>
-            <input
+            <input aria-label="Local (opcional)"
               type="text"
               value={local}
               onChange={(e) => setLocal(e.target.value)}
@@ -219,7 +219,7 @@ export default function ModalAdicionarEvento({
             <label className="block text-xs font-semibold text-slate-700 mb-1.5">
               Aeronave (opcional)
             </label>
-            <input
+            <input aria-label="Aeronave (opcional)"
               type="text"
               value={aeronave}
               onChange={(e) => setAeronave(e.target.value)}
@@ -232,7 +232,7 @@ export default function ModalAdicionarEvento({
         {tipoEvento === 'treinamento_simulador' && simuladores.length > 0 && (
           <div>
             <label className="block text-xs font-semibold text-slate-700 mb-1.5">Simulador</label>
-            <select
+            <select aria-label="Simulador"
               value={simuladorId}
               onChange={(e) => setSimuladorId(e.target.value)}
               className={INP}
@@ -252,7 +252,7 @@ export default function ModalAdicionarEvento({
           <label className="block text-xs font-semibold text-slate-700 mb-1.5">
             Observações (opcional)
           </label>
-          <textarea
+          <textarea aria-label="Observações (opcional)"
             value={observacoes}
             onChange={(e) => setObservacoes(e.target.value)}
             rows={2}

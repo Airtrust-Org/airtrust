@@ -692,7 +692,7 @@ export default function ModelosSessaoPage({ embedded = false, onBack }: ModelosS
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">Dispositivo</label>
-            <select
+            <select aria-label="Dispositivo"
               value={filtroTipoDispositivo || ''}
               onChange={(e) => setFiltroTipoDispositivo((e.target.value as TipoDispositivo) || null)}
               className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md text-sm bg-white dark:bg-slate-800 text-gray-900 dark:text-slate-100"
@@ -705,7 +705,7 @@ export default function ModelosSessaoPage({ embedded = false, onBack }: ModelosS
 
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">Filtrar por Tipo</label>
-            <select
+            <select aria-label="Filtrar por Tipo"
               value={filtroTipoSessao || ''}
               onChange={(e) => setFiltroTipoSessao(e.target.value ? Number(e.target.value) : null)}
               className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md text-sm bg-white dark:bg-slate-800 text-gray-900 dark:text-slate-100"
@@ -723,7 +723,7 @@ export default function ModelosSessaoPage({ embedded = false, onBack }: ModelosS
             <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">
               Filtrar por Equipamento
             </label>
-            <select
+            <select aria-label="Filtrar por Equipamento"
               value={filtroModeloAeronave || ''}
               onChange={(e) => setFiltroModeloAeronave(e.target.value || null)}
               className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md text-sm bg-white dark:bg-slate-800 text-gray-900 dark:text-slate-100"
@@ -918,7 +918,7 @@ export default function ModelosSessaoPage({ embedded = false, onBack }: ModelosS
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">Código <span className="text-red-500">*</span></label>
-                  <Input
+                  <Input aria-label="Código"
                     value={codigo}
                     onChange={(e) => setCodigo(e.target.value.toUpperCase())}
                     maxLength={20}
@@ -934,7 +934,7 @@ export default function ModelosSessaoPage({ embedded = false, onBack }: ModelosS
                   <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">
                     Duração (min) <span className="text-red-500">*</span>
                   </label>
-                  <Input
+                  <Input aria-label="Duração (min)"
                     type="number"
                     value={duracaoEstimada}
                     onChange={(e) => setDuracaoEstimada(Number(e.target.value))}
@@ -944,7 +944,7 @@ export default function ModelosSessaoPage({ embedded = false, onBack }: ModelosS
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">Nome <span className="text-red-500">*</span></label>
-                <Input value={nome} onChange={(e) => setNome(e.target.value)} maxLength={200} />
+                <Input aria-label="Nome" value={nome} onChange={(e) => setNome(e.target.value)} maxLength={200} />
               </div>
 
               {/* Tipo de dispositivo: Simulador ou Aeronave */}
@@ -977,7 +977,7 @@ export default function ModelosSessaoPage({ embedded = false, onBack }: ModelosS
                   <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">
                     Tipo de Sessão <span className="text-red-500">*</span>
                   </label>
-                  <select
+                  <select aria-label="Tipo de Sessão"
                     className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md bg-white dark:bg-slate-800 text-gray-900 dark:text-slate-100"
                     value={tipoSessaoId || ''}
                     onChange={(e) => setTipoSessaoId(Number(e.target.value))}
@@ -995,7 +995,7 @@ export default function ModelosSessaoPage({ embedded = false, onBack }: ModelosS
                   <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">
                     Equipamento
                   </label>
-                  <select
+                  <select aria-label="Equipamento"
                     className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md bg-white dark:bg-slate-800 text-gray-900 dark:text-slate-100"
                     value={tipoAeronave || ''}
                     onChange={(e) => setTipoAeronave(e.target.value || null)}
@@ -1012,7 +1012,7 @@ export default function ModelosSessaoPage({ embedded = false, onBack }: ModelosS
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">Descrição</label>
-                <textarea
+                <textarea aria-label="Descrição"
                   className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md bg-white dark:bg-slate-800 text-gray-900 dark:text-slate-100"
                   value={descricao}
                   onChange={(e) => setDescricao(e.target.value)}
@@ -1046,7 +1046,7 @@ export default function ModelosSessaoPage({ embedded = false, onBack }: ModelosS
                     <label className="block text-sm font-semibold text-green-900 dark:text-green-300 mb-1">
                       Qualificação de Voo Gerada
                     </label>
-                    <select
+                    <select aria-label="Qualificação de Voo Gerada"
                       className="w-full px-3 py-2 border border-green-300 dark:border-green-500/30 rounded-md text-sm bg-white dark:bg-slate-800 text-gray-900 dark:text-slate-100"
                       value={qualificacaoTipoId || ''}
                       onChange={(e) =>

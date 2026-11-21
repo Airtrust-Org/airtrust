@@ -156,7 +156,7 @@ export const HistoricoTab: React.FC<HistoricoTabProps> = ({
             <label className="block text-sm font-medium text-slate-700 mb-2">Funcionário</label>
             <div className="relative">
               <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
-              <input
+              <input aria-label="Funcionário"
                 type="text"
                 placeholder="Buscar funcionário..."
                 value={filtroFuncionario}
@@ -169,7 +169,7 @@ export const HistoricoTab: React.FC<HistoricoTabProps> = ({
           {/* Filtro: Status */}
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-2">Status</label>
-            <select
+            <select aria-label="Status"
               value={filtroStatus}
               onChange={(e) => setFiltroStatus(e.target.value)}
               className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/50 bg-white"

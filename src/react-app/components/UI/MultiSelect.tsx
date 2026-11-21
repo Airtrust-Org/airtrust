@@ -125,7 +125,7 @@ export function MultiSelect({
           {/* Search */}
           <div className="flex items-center border-b border-slate-200 px-3 py-2 dark:border-slate-700">
             <Search className="w-3.5 h-3.5 text-slate-400 mr-2 shrink-0" />
-            <input
+            <input aria-label="Buscar..."
               ref={inputRef}
               type="text"
               placeholder="Buscar..."

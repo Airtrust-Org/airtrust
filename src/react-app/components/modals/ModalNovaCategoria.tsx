@@ -77,7 +77,7 @@ export function ModalNovaCategoria({ isOpen, onClose, onSave, categoria }: Props
         <form onSubmit={handleSubmit} className="p-6 space-y-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Nome *</label>
-            <input
+            <input aria-label="Nome"
               type="text"
               value={form.nome}
               onChange={(e) => setForm({ ...form, nome: e.target.value })}
@@ -88,7 +88,7 @@ export function ModalNovaCategoria({ isOpen, onClose, onSave, categoria }: Props
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Código *</label>
-            <input
+            <input aria-label="Código"
               type="text"
               value={form.codigo}
               onChange={(e) => setForm({ ...form, codigo: e.target.value })}
@@ -99,7 +99,7 @@ export function ModalNovaCategoria({ isOpen, onClose, onSave, categoria }: Props
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Descrição</label>
-            <textarea
+            <textarea aria-label="Descrição"
               value={form.descricao}
               onChange={(e) => setForm({ ...form, descricao: e.target.value })}
               rows={3}
@@ -110,7 +110,7 @@ export function ModalNovaCategoria({ isOpen, onClose, onSave, categoria }: Props
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Cor</label>
             <div className="flex gap-2">
-              <input
+              <input aria-label="Cor"
                 type="color"
                 value={form.cor}
                 onChange={(e) => setForm({ ...form, cor: e.target.value })}

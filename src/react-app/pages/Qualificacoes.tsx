@@ -3866,7 +3866,7 @@ export default function Qualificacoes() {
               </span>
             </div>
             <div className="mt-3 flex flex-wrap items-center gap-2">
-              <input
+              <input aria-label="Buscar por nome ou matricula"
                 type="text"
                 value={buscaParticipanteTurmaPlanejada}
                 onChange={(e) => setBuscaParticipanteTurmaPlanejada(e.target.value)}

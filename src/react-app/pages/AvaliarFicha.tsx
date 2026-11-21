@@ -371,7 +371,7 @@ const AvaliarFicha: React.FC = () => {
                       Pontuação (0-10)
                     </label>
                     <div className="flex items-center gap-3">
-                      <input
+                      <input aria-label="Pontuação (0-10)"
                         type="range"
                         min="0"
                         max="10"
@@ -411,7 +411,7 @@ const AvaliarFicha: React.FC = () => {
                     <label className="block text-xs md:text-sm font-medium text-gray-700 mb-2">
                       Observações
                     </label>
-                    <textarea
+                    <textarea aria-label="Observações"
                       value={manobra.observacoes || ''}
                       onChange={(e) => atualizarObservacaoManobra(manobra.id, e.target.value)}
                       disabled={salvando}
@@ -430,7 +430,7 @@ const AvaliarFicha: React.FC = () => {
       <PageSection>
         <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
           <h2 className="text-lg font-semibold text-gray-900 mb-4">Observações Gerais</h2>
-          <textarea
+          <textarea aria-label="Adicione comentários sobre o desempenho geral do participante..."
             value={observacoesGerais}
             onChange={(e) => setObservacoesGerais(e.target.value)}
             disabled={salvando}

@@ -65,7 +65,7 @@ export const TableTemplate: React.FC<TableTemplateProps> = ({
       {/* Filter Row */}
       <div className={styles.filterRow}>
         {searchable && (
-          <input
+          <input aria-label="Search..."
             type="text"
             placeholder="Search..."
             value={searchTerm}

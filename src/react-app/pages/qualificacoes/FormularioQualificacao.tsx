@@ -233,7 +233,7 @@ const FormularioQualificacao = ({
       {/* Tipo */}
       <div>
         <label className="block text-sm font-medium text-gray-700 mb-2">Tipo *</label>
-        <select
+        <select aria-label="Tipo"
           name="tipo"
           value={formData.tipo}
           onChange={handleChange}
@@ -257,7 +257,7 @@ const FormularioQualificacao = ({
 
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">Categoria *</label>
-          <select
+          <select aria-label="Categoria"
             name="categoria"
             value={formData.categoria}
             onChange={handleChange}
@@ -275,7 +275,7 @@ const FormularioQualificacao = ({
 
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">Data Conclusão *</label>
-          <input
+          <input aria-label="Data Conclusão"
             type="date"
             name="data_conclusao"
             value={formData.data_conclusao}
@@ -292,7 +292,7 @@ const FormularioQualificacao = ({
           <label className="block text-sm font-medium text-gray-700 mb-1">
             Data Vencimento (automática)
           </label>
-          <input
+          <input aria-label="Data Vencimento (automática)"
             type="date"
             name="data_vencimento"
             value={formData.data_vencimento}
@@ -305,7 +305,7 @@ const FormularioQualificacao = ({
         </div>
 
         <div className="mt-6">
-          <label className="block text-sm font-medium text-gray-700 mb-2">Anexar Certificado</label>
+          <label htmlFor="certificado-upload" className="block text-sm font-medium text-gray-700 mb-2">Anexar Certificado</label>
 
           <div
             className={`border-2 border-dashed rounded-lg p-6 text-center transition-colors ${
@@ -406,7 +406,7 @@ const FormularioQualificacao = ({
 
         <div className="col-span-2">
           <label className="block text-sm font-medium text-gray-700 mb-1">Observações</label>
-          <textarea
+          <textarea aria-label="Observações"
             name="observacoes"
             value={formData.observacoes}
             onChange={handleChange}

@@ -75,7 +75,7 @@ export const CategoriasTab: React.FC<CategoriasTabProps> = ({
         {/* Filtro inline: Nome */}
         <div className="relative min-w-[200px] flex-1 sm:max-w-xs">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-          <input
+          <input aria-label="Buscar categoria..."
             type="text"
             placeholder="Buscar categoria..."
             value={filtroNome}

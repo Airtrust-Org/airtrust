@@ -265,7 +265,7 @@ export default function FrmsFormJornada({
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-xs font-medium text-gray-500 mb-1">Data</label>
-              <input
+              <input aria-label="Data"
                 type="date"
                 value={data}
                 onChange={(e) => setData(e.target.value)}
@@ -276,7 +276,7 @@ export default function FrmsFormJornada({
             <div>
               <label className="block text-xs font-medium text-gray-500 mb-1">Status</label>
               <div className="relative">
-                <select
+                <select aria-label="Status"
                   value={status}
                   onChange={(e) => setStatus(e.target.value)}
                   className="w-full appearance-none rounded-lg border border-gray-200 pl-3 pr-8 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-primary/40 cursor-pointer"
@@ -323,7 +323,7 @@ export default function FrmsFormJornada({
                   <label className="block text-xs font-medium text-gray-500 mb-1">
                     Horas de Voo
                   </label>
-                  <input
+                  <input aria-label="Horas de Voo"
                     type="text"
                     inputMode="numeric"
                     value={horasVoo}
@@ -341,7 +341,7 @@ export default function FrmsFormJornada({
           {/* Observação */}
           <div>
             <label className="block text-xs font-medium text-gray-500 mb-1">Observação</label>
-            <textarea
+            <textarea aria-label="Observação"
               value={observacao}
               onChange={(e) => setObservacao(e.target.value)}
               rows={2}

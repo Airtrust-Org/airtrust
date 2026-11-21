@@ -168,7 +168,7 @@ export default function FrmsFadigaHistorico() {
               Tripulante
               <div className="relative mt-1">
                 <Search className="pointer-events-none absolute left-2 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                <input
+                <input aria-label="Buscar por nome ou identificador"
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                   placeholder="Buscar por nome ou identificador"

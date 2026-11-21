@@ -589,7 +589,7 @@ export default function CrudModelos({ onBack }: Props = {}) {
                   <label className="mb-1 block text-sm font-medium text-slate-700">
                     Codigo <span className="text-red-500">*</span>
                   </label>
-                  <input
+                  <input aria-label="Codigo"
                     type="text"
                     value={formData.codigo || ''}
                     onChange={(e) => setFormData({ ...formData, codigo: e.target.value })}
@@ -600,7 +600,7 @@ export default function CrudModelos({ onBack }: Props = {}) {
 
                 <div>
                   <label className="mb-1 block text-sm font-medium text-slate-700">Tipo</label>
-                  <select
+                  <select aria-label="Tipo"
                     value={formData.tipo || 'INICIAL'}
                     onChange={(e) =>
                       setFormData({
@@ -620,7 +620,7 @@ export default function CrudModelos({ onBack }: Props = {}) {
                 <label className="mb-1 block text-sm font-medium text-slate-700">
                   Nome <span className="text-red-500">*</span>
                 </label>
-                <input
+                <input aria-label="Nome"
                   type="text"
                   value={formData.nome || ''}
                   onChange={(e) => setFormData({ ...formData, nome: e.target.value })}
@@ -633,7 +633,7 @@ export default function CrudModelos({ onBack }: Props = {}) {
                 <label className="mb-1 block text-sm font-medium text-slate-700">
                   Duracao (minutos) <span className="text-red-500">*</span>
                 </label>
-                <input
+                <input aria-label="Duracao (minutos)"
                   type="number"
                   value={formData.duracao_minutos || 120}
                   onChange={(e) =>
@@ -645,7 +645,7 @@ export default function CrudModelos({ onBack }: Props = {}) {
 
               <div>
                 <label className="mb-1 block text-sm font-medium text-slate-700">Descricao</label>
-                <textarea
+                <textarea aria-label="Descricao"
                   value={formData.descricao || ''}
                   onChange={(e) => setFormData({ ...formData, descricao: e.target.value })}
                   rows={3}
@@ -796,7 +796,7 @@ export default function CrudModelos({ onBack }: Props = {}) {
                   <label className="mb-2 block text-sm font-medium text-slate-700">
                     Manobra <span className="text-red-500">*</span>
                   </label>
-                  <select
+                  <select aria-label="Manobra"
                     value={manobraSelecionada || ''}
                     onChange={(e) => setManobraSelecionada(Number(e.target.value))}
                     className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"

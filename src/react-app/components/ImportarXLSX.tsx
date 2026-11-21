@@ -184,7 +184,7 @@ export function ImportarXLSX({ isOpen, onClose, tipo, onSuccess }: ImportarXLSXP
         <div className="space-y-2">
           <label className="block text-sm font-medium text-slate-700">Arquivo Excel (.xlsx)</label>
           <div className="flex items-center gap-3">
-            <input
+            <input aria-label="Arquivo Excel (.xlsx)"
               ref={fileInputRef}
               type="file"
               accept=".xlsx,.xls"

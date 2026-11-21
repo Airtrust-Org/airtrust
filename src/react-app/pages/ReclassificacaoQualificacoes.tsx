@@ -238,7 +238,7 @@ export default function ReclassificacaoQualificacoes() {
           <label className="text-xs font-medium text-gray-600">Buscar Funcionário</label>
           <div className="relative">
             <Search className="absolute left-3 top-2.5 w-4 h-4 text-gray-400" />
-            <input
+            <input aria-label="Buscar Funcionário"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               onKeyDown={(e) => {
@@ -251,7 +251,7 @@ export default function ReclassificacaoQualificacoes() {
         </div>
         <div className="flex flex-col gap-2">
           <label className="text-xs font-medium text-gray-600">Filtrar Tipos</label>
-          <input
+          <input aria-label="Filtrar Tipos"
             value={tipoFilter}
             onChange={(e) => setTipoFilter(e.target.value)}
             placeholder="Buscar tipo (nome/código/categoria)"
@@ -345,7 +345,7 @@ export default function ReclassificacaoQualificacoes() {
                       </td>
                       <td className="px-4 py-2">
                         <div className="flex flex-col gap-1">
-                          <input
+                          <input aria-label="Código ou nome"
                             list={`tipos-${historicoId}`}
                             placeholder="Código ou nome"
                             value={selectedTipoId ? selectedTipo?.codigo || selectedTipoId : ''}

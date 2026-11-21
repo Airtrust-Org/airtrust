@@ -102,7 +102,7 @@ export function FuncionarioForm({
           <label className="block text-sm font-medium text-slate-700 mb-2">
             Cargo <span className="text-red-500 ml-1">*</span>
           </label>
-          <select
+          <select aria-label="Cargo"
             {...form.register('cargo')}
             className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30"
             disabled={isLoading || submitting}

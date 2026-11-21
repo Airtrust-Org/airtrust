@@ -290,7 +290,7 @@ export default function Empresas() {
               {`{{codigo_qualificacao}}`}, {`{{data_conclusao}}`}, {`{{data_atual}}`}, ...
             </div>
 
-            <textarea
+            <textarea aria-label="Cole seu HTML aqui..."
               value={templateHtml}
               onChange={(e) => setTemplateHtml(e.target.value)}
               className="w-full h-64 border rounded p-3 font-mono text-sm mb-4"

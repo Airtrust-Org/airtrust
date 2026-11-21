@@ -955,7 +955,7 @@ export default function ControleVoosRdvDetalhe() {
                       <span className="text-xs font-medium text-slate-500">
                         Divergências do planejado
                       </span>
-                      <textarea
+                      <textarea aria-label="Alterações de rota, horário, destinos…"
                         value={form.divergencias}
                         disabled={!editable}
                         onChange={(e) => updateField('divergencias', e.target.value)}

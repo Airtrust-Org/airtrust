@@ -454,7 +454,7 @@ export default function SgsoFratPage() {
                   className="w-full rounded-2xl border border-slate-200 px-4 py-3 outline-none transition focus:border-rose-400"
                 />
 
-                <textarea
+                <textarea aria-label="Contexto da missão, janela operacional e observações do gestor."
                   value={form.justificativa}
                   onChange={(event) =>
                     setForm((current) => ({ ...current, justificativa: event.target.value }))

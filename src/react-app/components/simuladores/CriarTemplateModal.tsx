@@ -187,7 +187,7 @@ export const CriarTemplateModal: React.FC<CriarTemplateModalProps> = ({
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Nome do Modelo *
                 </label>
-                <input
+                <input aria-label="Nome do Modelo"
                   type="text"
                   value={formData.nome}
                   onChange={(e) => setFormData((prev) => ({ ...prev, nome: e.target.value }))}
@@ -202,7 +202,7 @@ export const CriarTemplateModal: React.FC<CriarTemplateModalProps> = ({
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     Duração (horas)
                   </label>
-                  <input
+                  <input aria-label="Duração (horas)"
                     type="number"
                     min="1"
                     max="8"
@@ -219,7 +219,7 @@ export const CriarTemplateModal: React.FC<CriarTemplateModalProps> = ({
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">Tipo</label>
-                  <select
+                  <select aria-label="Tipo"
                     value={formData.tipo}
                     onChange={(e) =>
                       setFormData((prev) => ({ ...prev, tipo: e.target.value as any }))
@@ -236,7 +236,7 @@ export const CriarTemplateModal: React.FC<CriarTemplateModalProps> = ({
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Descrição</label>
-                <textarea
+                <textarea aria-label="Descrição"
                   value={formData.descricao}
                   onChange={(e) => setFormData((prev) => ({ ...prev, descricao: e.target.value }))}
                   placeholder="Descreva o objetivo desta sessão..."

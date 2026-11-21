@@ -297,7 +297,7 @@ export default function UploadDocumentoModal({
             <label className="mb-2 block text-sm font-medium text-slate-700 dark:text-slate-200">
               Categoria <span className="text-red-500">*</span>
             </label>
-            <select
+            <select aria-label="Categoria"
               value={tipoDocumento}
               onChange={(e) => {
                 setTipoDocumento(e.target.value as TipoDocumento);
@@ -384,7 +384,7 @@ export default function UploadDocumentoModal({
               onClick={() => fileInputRef.current?.click()}
               className={`cursor-pointer rounded-lg border-2 border-dashed p-5 text-center transition ${file ? 'border-green-500 bg-green-50 dark:bg-green-950/20' : 'border-slate-300 hover:border-primary hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800'}`}
             >
-              <input
+              <input aria-label="Arquivo PDF"
                 ref={fileInputRef}
                 type="file"
                 accept="application/pdf,.pdf"
@@ -428,7 +428,7 @@ export default function UploadDocumentoModal({
             <label className="mb-2 block text-sm font-medium text-slate-700 dark:text-slate-200">
               Descrição <span className="font-normal text-slate-400">(opcional)</span>
             </label>
-            <textarea
+            <textarea aria-label="Descrição (opcional)"
               value={descricao}
               onChange={(e) => setDescricao(e.target.value)}
               placeholder="Observação objetiva que ajude a identificar o documento..."

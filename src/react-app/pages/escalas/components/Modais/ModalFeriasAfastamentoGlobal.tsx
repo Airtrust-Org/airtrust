@@ -188,7 +188,7 @@ export default function ModalFeriasAfastamentoGlobal({ onClose, onSaved }: Props
             </label>
             <div className="relative mb-3">
               <Search className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
-              <input
+              <input aria-label="Funcionário"
                 type="text"
                 value={busca}
                 onChange={(event) => setBusca(event.target.value)}
@@ -270,7 +270,7 @@ export default function ModalFeriasAfastamentoGlobal({ onClose, onSaved }: Props
               </label>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <input
+                  <input aria-label="Período"
                     type="date"
                     value={dataInicio}
                     onChange={(event) => {
@@ -322,7 +322,7 @@ export default function ModalFeriasAfastamentoGlobal({ onClose, onSaved }: Props
               <label className="mb-2 block text-xs font-semibold uppercase tracking-wide text-slate-500">
                 Observações
               </label>
-              <textarea
+              <textarea aria-label="Observações"
                 rows={5}
                 value={observacoes}
                 onChange={(event) => setObservacoes(event.target.value)}

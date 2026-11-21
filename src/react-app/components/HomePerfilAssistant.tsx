@@ -463,7 +463,7 @@ export default function HomePerfilAssistant() {
             }}
             className="mt-4 flex flex-col gap-3 sm:flex-row"
           >
-            <input
+            <input aria-label="Pergunte sobre operação, compliance, alertas, treinamento ou fichas"
               value={input}
               onChange={(event) => setInput(event.target.value)}
               placeholder="Pergunte sobre operação, compliance, alertas, treinamento ou fichas"

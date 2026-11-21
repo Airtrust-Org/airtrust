@@ -151,7 +151,7 @@ export default function ModalExportarEscalaPdf({
               </div>
             </div>
 
-            <input
+            <input aria-label="Buscar equipamento por modelo ou prefixo"
               type="text"
               value={busca}
               onChange={(event) => setBusca(event.target.value)}

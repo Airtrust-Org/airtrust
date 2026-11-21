@@ -598,7 +598,7 @@ export default function SgsoRelato() {
 
         {novoStatus && (
           <div className="mt-3">
-            <input
+            <input aria-label="Motivo da mudança de status (opcional)"
               type="text"
               placeholder="Motivo da mudança de status (opcional)"
               value={motivoStatus}
@@ -912,7 +912,7 @@ export default function SgsoRelato() {
               <div className="grid grid-cols-3 gap-4 mb-4">
                 <div>
                   <label className="block text-xs font-medium text-slate-700 mb-1">Tipo</label>
-                  <select
+                  <select aria-label="Tipo"
                     value={formRisco.tipo_avaliacao}
                     onChange={(e) => setFormRisco({ ...formRisco, tipo_avaliacao: e.target.value })}
                     className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm"
@@ -925,7 +925,7 @@ export default function SgsoRelato() {
                   <label className="block text-xs font-medium text-slate-700 mb-1">
                     Probabilidade
                   </label>
-                  <select
+                  <select aria-label="Probabilidade"
                     value={formRisco.probabilidade}
                     onChange={(e) => setFormRisco({ ...formRisco, probabilidade: e.target.value })}
                     className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm"
@@ -941,7 +941,7 @@ export default function SgsoRelato() {
                   <label className="block text-xs font-medium text-slate-700 mb-1">
                     Severidade
                   </label>
-                  <select
+                  <select aria-label="Severidade"
                     value={formRisco.severidade}
                     onChange={(e) =>
                       setFormRisco({ ...formRisco, severidade: parseInt(e.target.value) })
@@ -960,7 +960,7 @@ export default function SgsoRelato() {
                 <label className="block text-xs font-medium text-slate-700 mb-1">
                   Justificativa (opcional)
                 </label>
-                <textarea
+                <textarea aria-label="Justificativa (opcional)"
                   rows={2}
                   value={formRisco.justificativa}
                   onChange={(e) => setFormRisco({ ...formRisco, justificativa: e.target.value })}
@@ -1060,7 +1060,7 @@ export default function SgsoRelato() {
                   <label className="block text-xs font-medium text-slate-700 mb-1">
                     Nível HFACS
                   </label>
-                  <select
+                  <select aria-label="Nível HFACS"
                     value={formHfacs.nivel_hfacs}
                     onChange={(e) =>
                       setFormHfacs({ ...formHfacs, nivel_hfacs: e.target.value, categoria: '' })
@@ -1076,7 +1076,7 @@ export default function SgsoRelato() {
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-slate-700 mb-1">Categoria</label>
-                  <select
+                  <select aria-label="Categoria"
                     value={formHfacs.categoria}
                     onChange={(e) => setFormHfacs({ ...formHfacs, categoria: e.target.value })}
                     className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm"
@@ -1092,7 +1092,7 @@ export default function SgsoRelato() {
               </div>
               <div className="mb-3">
                 <label className="block text-xs font-medium text-slate-700 mb-1">Observação</label>
-                <textarea
+                <textarea aria-label="Observação"
                   rows={2}
                   value={formHfacs.descricao}
                   onChange={(e) => setFormHfacs({ ...formHfacs, descricao: e.target.value })}
@@ -1225,7 +1225,7 @@ export default function SgsoRelato() {
               <div className="grid grid-cols-2 gap-4 mb-3">
                 <div>
                   <label className="block text-xs font-medium text-slate-700 mb-1">Tipo</label>
-                  <select
+                  <select aria-label="Tipo"
                     value={formAcao.tipo}
                     onChange={(e) => setFormAcao({ ...formAcao, tipo: e.target.value })}
                     className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm"
@@ -1236,7 +1236,7 @@ export default function SgsoRelato() {
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-slate-700 mb-1">Categoria</label>
-                  <select
+                  <select aria-label="Categoria"
                     value={formAcao.categoria}
                     onChange={(e) => setFormAcao({ ...formAcao, categoria: e.target.value })}
                     className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm"
@@ -1253,7 +1253,7 @@ export default function SgsoRelato() {
               </div>
               <div className="mb-3">
                 <label className="block text-xs font-medium text-slate-700 mb-1">Descrição *</label>
-                <textarea
+                <textarea aria-label="Descrição"
                   rows={2}
                   value={formAcao.descricao}
                   onChange={(e) => setFormAcao({ ...formAcao, descricao: e.target.value })}
@@ -1266,7 +1266,7 @@ export default function SgsoRelato() {
                   <label className="block text-xs font-medium text-slate-700 mb-1">
                     Responsável *
                   </label>
-                  <select
+                  <select aria-label="Responsável"
                     value={formAcao.responsavel_id}
                     onChange={(e) => setFormAcao({ ...formAcao, responsavel_id: e.target.value })}
                     className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm"
@@ -1281,7 +1281,7 @@ export default function SgsoRelato() {
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-slate-700 mb-1">Prazo *</label>
-                  <input
+                  <input aria-label="Prazo"
                     type="date"
                     value={formAcao.prazo}
                     onChange={(e) => setFormAcao({ ...formAcao, prazo: e.target.value })}
@@ -1358,7 +1358,7 @@ export default function SgsoRelato() {
             </p>
           </div>
           <div className="bg-white border border-slate-200 rounded-xl p-4">
-            <textarea
+            <textarea aria-label="Adicionar nota interna ao relato..."
               rows={3}
               value={comentario}
               onChange={(e) => setComentario(e.target.value)}

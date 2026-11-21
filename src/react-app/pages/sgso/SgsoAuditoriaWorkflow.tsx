@@ -299,7 +299,7 @@ export default function SgsoAuditoriaWorkflow({ auditoriaId, onClose, onChanged 
                     Adicionar item de checklist
                   </h3>
                   <div className="grid gap-3 sm:grid-cols-[100px_1fr]">
-                    <input
+                    <input aria-label="Nº"
                       type="number"
                       min="1"
                       value={newItem.numero_item}
@@ -309,7 +309,7 @@ export default function SgsoAuditoriaWorkflow({ auditoriaId, onClose, onChanged 
                       placeholder="Nº"
                       className="rounded-lg border border-blue-200 bg-white px-3 py-2 text-sm"
                     />
-                    <input
+                    <input aria-label="Descrição do requisito"
                       value={newItem.descricao}
                       onChange={(event) =>
                         setNewItem((value) => ({ ...value, descricao: event.target.value }))
@@ -317,7 +317,7 @@ export default function SgsoAuditoriaWorkflow({ auditoriaId, onClose, onChanged 
                       placeholder="Descrição do requisito"
                       className="rounded-lg border border-blue-200 bg-white px-3 py-2 text-sm"
                     />
-                    <input
+                    <input aria-label="Referência RBAC / procedimento"
                       value={newItem.referencia}
                       onChange={(event) =>
                         setNewItem((value) => ({ ...value, referencia: event.target.value }))
@@ -326,7 +326,7 @@ export default function SgsoAuditoriaWorkflow({ auditoriaId, onClose, onChanged 
                       className="rounded-lg border border-blue-200 bg-white px-3 py-2 text-sm sm:col-start-2"
                     />
                     <div className="flex gap-2 sm:col-start-2">
-                      <input
+                      <input aria-label="Critério de aceitação"
                         value={newItem.criterio}
                         onChange={(event) =>
                           setNewItem((value) => ({ ...value, criterio: event.target.value }))
@@ -389,7 +389,7 @@ export default function SgsoAuditoriaWorkflow({ auditoriaId, onClose, onChanged 
                           ))}
                         </select>
                       </div>
-                      <textarea
+                      <textarea aria-label="Evidência objetiva, documento, entrevista ou observação"
                         key={`${item.id}:${item.updated_at}`}
                         defaultValue={item.evidencia || ''}
                         disabled={!writable || savingItemId !== null}
@@ -409,7 +409,7 @@ export default function SgsoAuditoriaWorkflow({ auditoriaId, onClose, onChanged 
 
               <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
                 <label className="text-sm font-semibold text-slate-800">Observações gerais</label>
-                <textarea
+                <textarea aria-label="Observações gerais"
                   value={generalNotes}
                   onChange={(event) => setGeneralNotes(event.target.value)}
                   disabled={!writable}

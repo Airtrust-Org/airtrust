@@ -133,7 +133,7 @@ export default function ConfiguracaoCertificado() {
 
           <div className={styles.formGroup}>
             <label>Empresa</label>
-            <select
+            <select aria-label="Empresa"
               value={selectedEmpresa || ''}
               onChange={(e) => setSelectedEmpresa(Number(e.target.value))}
               className={styles.select}
@@ -212,7 +212,7 @@ export default function ConfiguracaoCertificado() {
                 </code>
               </div>
 
-              <textarea
+              <textarea aria-label="Cole seu HTML aqui..."
                 value={templateHtml}
                 onChange={(e) => setTemplateHtml(e.target.value)}
                 className={styles.textarea}

@@ -80,7 +80,7 @@ export default function ModalCriarEscala({ onClose, onSuccess }: Props) {
         <div className="grid grid-cols-2 gap-4">
           <div>
             <label className="block text-xs font-semibold text-slate-700 mb-1.5">Mês *</label>
-            <select
+            <select aria-label="Mês"
               value={mes}
               onChange={(e) => setMes(Number(e.target.value))}
               className={INPUT_CLASS}
@@ -94,7 +94,7 @@ export default function ModalCriarEscala({ onClose, onSuccess }: Props) {
           </div>
           <div>
             <label className="block text-xs font-semibold text-slate-700 mb-1.5">Ano *</label>
-            <select
+            <select aria-label="Ano"
               value={ano}
               onChange={(e) => setAno(Number(e.target.value))}
               className={INPUT_CLASS}
@@ -116,7 +116,7 @@ export default function ModalCriarEscala({ onClose, onSuccess }: Props) {
           <label className="block text-xs font-semibold text-slate-700 mb-1.5">
             Título <span className="text-slate-400 font-normal">(opcional)</span>
           </label>
-          <input
+          <input aria-label="Título (opcional)"
             type="text"
             value={titulo}
             onChange={(e) => setTitulo(e.target.value)}
@@ -130,7 +130,7 @@ export default function ModalCriarEscala({ onClose, onSuccess }: Props) {
           <label className="block text-xs font-semibold text-slate-700 mb-1.5">
             Observações <span className="text-slate-400 font-normal">(opcional)</span>
           </label>
-          <textarea
+          <textarea aria-label="Observações (opcional)"
             value={observacoes}
             onChange={(e) => setObservacoes(e.target.value)}
             rows={3}

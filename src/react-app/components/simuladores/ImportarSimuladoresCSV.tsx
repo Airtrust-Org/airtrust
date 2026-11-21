@@ -302,7 +302,7 @@ Emergência Completa,4,AVANCADO,Treinamento situações de emergência,MAN-005|M
         <label className="block text-sm font-medium text-gray-700 mb-2">
           Conteúdo CSV
         </label>
-        <textarea
+        <textarea aria-label="Conteúdo CSV"
           value={csvContent}
           onChange={(e) => {
             setCsvContent(e.target.value);

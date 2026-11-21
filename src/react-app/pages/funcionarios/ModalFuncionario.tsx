@@ -907,7 +907,7 @@ export default function ModalFuncionario({
                   <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
                     Nome Completo <span className="text-red-600">*</span>
                   </label>
-                  <input
+                  <input aria-label="Nome Completo"
                     type="text"
                     name="nome"
                     value={formData.nome}
@@ -922,7 +922,7 @@ export default function ModalFuncionario({
                   <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
                     Nome de Guerra
                   </label>
-                  <input
+                  <input aria-label="Nome de Guerra"
                     type="text"
                     name="guerra"
                     value={formData.guerra}
@@ -937,7 +937,7 @@ export default function ModalFuncionario({
                   <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
                     CPF <span className="text-red-600">*</span>
                   </label>
-                  <input
+                  <input aria-label="CPF"
                     type="text"
                     name="cpf"
                     value={formData.cpf}
@@ -953,7 +953,7 @@ export default function ModalFuncionario({
                   <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
                     RG
                   </label>
-                  <input
+                  <input aria-label="RG"
                     type="text"
                     name="rg"
                     value={formData.rg}
@@ -968,7 +968,7 @@ export default function ModalFuncionario({
                   <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
                     Data de Nascimento
                   </label>
-                  <input
+                  <input aria-label="Data de Nascimento"
                     type="date"
                     name="nascimento"
                     value={formData.nascimento}
@@ -982,7 +982,7 @@ export default function ModalFuncionario({
                   <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
                     Sexo
                   </label>
-                  <select
+                  <select aria-label="Sexo"
                     name="sexo"
                     value={formData.sexo}
                     onChange={handleChange}
@@ -1000,7 +1000,7 @@ export default function ModalFuncionario({
                   <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
                     Nacionalidade
                   </label>
-                  <input
+                  <input aria-label="Nacionalidade"
                     type="text"
                     name="nacionalidade"
                     value={formData.nacionalidade}
@@ -1015,7 +1015,7 @@ export default function ModalFuncionario({
                   <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
                     E-mail
                   </label>
-                  <input
+                  <input aria-label="E-mail"
                     type="email"
                     name="email"
                     value={formData.email}
@@ -1031,7 +1031,7 @@ export default function ModalFuncionario({
                     <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
                       Telefone
                     </label>
-                    <input
+                    <input aria-label="Telefone"
                       type="tel"
                       name="telefone"
                       value={formData.telefone}
@@ -1046,7 +1046,7 @@ export default function ModalFuncionario({
                     <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
                       Telefone Emergência
                     </label>
-                    <input
+                    <input aria-label="Telefone Emergência"
                       type="tel"
                       name="telefone_emergencia"
                       value={formData.telefone_emergencia}
@@ -1061,7 +1061,7 @@ export default function ModalFuncionario({
                     <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
                       Contato Emergência
                     </label>
-                    <input
+                    <input aria-label="Contato Emergência"
                       type="text"
                       name="contato_emergencia_nome"
                       value={formData.contato_emergencia_nome}
@@ -1077,7 +1077,7 @@ export default function ModalFuncionario({
                   <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
                     Foto (URL)
                   </label>
-                  <input
+                  <input aria-label="Foto (URL)"
                     type="url"
                     name="foto_url"
                     value={formData.foto_url}
@@ -1099,7 +1099,7 @@ export default function ModalFuncionario({
                   <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
                     Função <span className="text-red-600">*</span>
                   </label>
-                  <select
+                  <select aria-label="Função"
                     name="funcao_id"
                     value={formData.funcao_id}
                     onChange={handleChange}
@@ -1143,7 +1143,7 @@ export default function ModalFuncionario({
                   <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
                     Setor <span className="text-red-600">*</span>
                   </label>
-                  <select
+                  <select aria-label="Setor"
                     name="setor_id"
                     value={formData.setor_id}
                     onChange={handleChange}
@@ -1241,7 +1241,7 @@ export default function ModalFuncionario({
                   <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
                     Base
                   </label>
-                  <input
+                  <input aria-label="Base"
                     type="text"
                     name="base"
                     value={formData.base}
@@ -1261,7 +1261,7 @@ export default function ModalFuncionario({
                   <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
                     Matrícula <span className="text-red-600">*</span>
                   </label>
-                  <input
+                  <input aria-label="Matrícula"
                     type="text"
                     name="matricula"
                     value={formData.matricula}
@@ -1301,7 +1301,7 @@ export default function ModalFuncionario({
                   <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
                     Data de Admissão
                   </label>
-                  <input
+                  <input aria-label="Data de Admissão"
                     type="date"
                     name="admissao"
                     value={formData.admissao}
@@ -1315,7 +1315,7 @@ export default function ModalFuncionario({
                   <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
                     Código ANAC
                   </label>
-                  <input
+                  <input aria-label="Código ANAC"
                     type="text"
                     name="codigo_anac"
                     value={formData.codigo_anac}
@@ -1360,7 +1360,7 @@ export default function ModalFuncionario({
                     <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
                       Nível ICAO
                     </label>
-                    <select
+                    <select aria-label="Nível ICAO"
                       name="nivel_icao"
                       value={formData.nivel_icao}
                       onChange={handleChange}
@@ -1379,7 +1379,7 @@ export default function ModalFuncionario({
                     <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
                       Data de Realização ICAO
                     </label>
-                    <input
+                    <input aria-label="Data de Realização ICAO"
                       type="date"
                       name="data_realizacao_icao"
                       value={formData.data_realizacao_icao}
@@ -1406,7 +1406,7 @@ export default function ModalFuncionario({
                     <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
                       Número CMA
                     </label>
-                    <input
+                    <input aria-label="Número CMA"
                       type="text"
                       name="cma"
                       value={formData.cma}
@@ -1420,7 +1420,7 @@ export default function ModalFuncionario({
                     <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
                       Data de Realização CMA
                     </label>
-                    <input
+                    <input aria-label="Data de Realização CMA"
                       type="date"
                       name="data_realizacao_cma"
                       value={formData.data_realizacao_cma}
@@ -1447,7 +1447,7 @@ export default function ModalFuncionario({
                     <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
                       Número ASO
                     </label>
-                    <input
+                    <input aria-label="Número ASO"
                       type="text"
                       name="aso"
                       value={formData.aso}
@@ -1461,7 +1461,7 @@ export default function ModalFuncionario({
                     <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
                       Data de Realização ASO
                     </label>
-                    <input
+                    <input aria-label="Data de Realização ASO"
                       type="date"
                       name="data_realizacao_aso"
                       value={formData.data_realizacao_aso}
@@ -1474,7 +1474,7 @@ export default function ModalFuncionario({
                     <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
                       Vencimento ASO (12 meses)
                     </label>
-                    <input
+                    <input aria-label="Vencimento ASO (12 meses)"
                       type="date"
                       name="validade_aso"
                       value={formData.validade_aso}
@@ -1488,7 +1488,7 @@ export default function ModalFuncionario({
                     <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
                       Código SISPAT
                     </label>
-                    <input
+                    <input aria-label="Código SISPAT"
                       type="text"
                       name="sispat"
                       value={formData.sispat}
@@ -1503,7 +1503,7 @@ export default function ModalFuncionario({
                     <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
                       Código PrestServ
                     </label>
-                    <input
+                    <input aria-label="Código PrestServ"
                       type="text"
                       name="prestserv"
                       value={formData.prestserv}
@@ -1518,7 +1518,7 @@ export default function ModalFuncionario({
                     <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
                       Status
                     </label>
-                    <select
+                    <select aria-label="Status"
                       name="status"
                       value={formData.status}
                       onChange={handleChange}
@@ -1606,7 +1606,7 @@ export default function ModalFuncionario({
                       <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
                         CEP
                       </label>
-                      <input
+                      <input aria-label="CEP"
                         type="text"
                         name="cep"
                         value={formData.cep}
@@ -1622,7 +1622,7 @@ export default function ModalFuncionario({
                       <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
                         Logradouro
                       </label>
-                      <input
+                      <input aria-label="Logradouro"
                         type="text"
                         name="logradouro"
                         value={formData.logradouro}
@@ -1637,7 +1637,7 @@ export default function ModalFuncionario({
                       <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
                         Número
                       </label>
-                      <input
+                      <input aria-label="Número"
                         type="text"
                         name="numero"
                         value={formData.numero}
@@ -1652,7 +1652,7 @@ export default function ModalFuncionario({
                       <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
                         Complemento
                       </label>
-                      <input
+                      <input aria-label="Complemento"
                         type="text"
                         name="complemento"
                         value={formData.complemento}
@@ -1667,7 +1667,7 @@ export default function ModalFuncionario({
                       <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
                         Bairro
                       </label>
-                      <input
+                      <input aria-label="Bairro"
                         type="text"
                         name="bairro"
                         value={formData.bairro}
@@ -1682,7 +1682,7 @@ export default function ModalFuncionario({
                       <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
                         Cidade
                       </label>
-                      <input
+                      <input aria-label="Cidade"
                         type="text"
                         name="cidade"
                         value={formData.cidade}
@@ -1697,7 +1697,7 @@ export default function ModalFuncionario({
                       <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
                         Estado (UF)
                       </label>
-                      <select
+                      <select aria-label="Estado (UF)"
                         name="estado"
                         value={formData.estado}
                         onChange={handleChange}
@@ -1761,7 +1761,7 @@ export default function ModalFuncionario({
                   <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
                     Observações adicionais
                   </label>
-                  <textarea
+                  <textarea aria-label="Observações adicionais"
                     name="observacoes"
                     value={formData.observacoes}
                     onChange={handleChange}

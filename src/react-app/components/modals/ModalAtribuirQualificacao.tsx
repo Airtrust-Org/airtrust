@@ -475,7 +475,7 @@ export function ModalAtribuirQualificacao({
                   <User className="inline w-4 h-4 mr-1" />
                   Funcionário <span className="text-red-500">*</span>
                 </label>
-                <select
+                <select aria-label="Funcionário"
                   value={form.funcionario_id}
                   onChange={(e) => {
                     console.debug(
@@ -512,7 +512,7 @@ export function ModalAtribuirQualificacao({
                   <Tag className="inline w-4 h-4 mr-1" />
                   Categoria <span className="text-red-500">*</span>
                 </label>
-                <select
+                <select aria-label="Categoria"
                   value={form.categoria}
                   onChange={(e) => {
                     console.debug(
@@ -549,7 +549,7 @@ export function ModalAtribuirQualificacao({
                   <FileText className="inline w-4 h-4 mr-1" />
                   Modelo <span className="text-red-500">*</span>
                 </label>
-                <select
+                <select aria-label="Modelo"
                   value={form.qualificacao_codigo}
                   onChange={(e) => {
                     const codigo = e.target.value;
@@ -680,7 +680,7 @@ export function ModalAtribuirQualificacao({
                   <Calendar className="inline w-4 h-4 mr-1" />
                   Data de Realização <span className="text-red-500">*</span>
                 </label>
-                <input
+                <input aria-label="Data de Realização"
                   type="date"
                   value={form.data_realizacao}
                   onChange={(e) => {
@@ -701,7 +701,7 @@ export function ModalAtribuirQualificacao({
                   <Calendar className="inline w-4 h-4 mr-1" />
                   Data de Vencimento <span className="text-red-500">*</span>
                 </label>
-                <input
+                <input aria-label="Data de Vencimento"
                   type="date"
                   value={form.data_vencimento}
                   onChange={(e) => {
@@ -739,7 +739,7 @@ export function ModalAtribuirQualificacao({
                   <User className="inline w-4 h-4 mr-1" />
                   Instrutor (opcional)
                 </label>
-                <select
+                <select aria-label="Instrutor (opcional)"
                   value={form.instrutor_id}
                   onChange={(e) => setForm({ ...form, instrutor_id: e.target.value })}
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary/30 focus:border-transparent"
@@ -760,7 +760,7 @@ export function ModalAtribuirQualificacao({
               {/* 7. Observações */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Observações</label>
-                <textarea
+                <textarea aria-label="Observações"
                   value={form.observacoes}
                   onChange={(e) => setForm({ ...form, observacoes: e.target.value })}
                   placeholder="Observações adicionais..."

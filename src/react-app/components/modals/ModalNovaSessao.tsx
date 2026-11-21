@@ -1942,7 +1942,7 @@ export default function ModalNovaSessao({
             <label className="block text-sm font-medium text-slate-700 mb-2">
               1. Equipamento <span className="text-red-500">*</span>
             </label>
-            <select
+            <select aria-label="1. Equipamento"
               value={aeronaveId || ''}
               onChange={(e) => {
                 const id = Number(e.target.value);
@@ -1967,7 +1967,7 @@ export default function ModalNovaSessao({
               <label className="block text-sm font-medium text-slate-700 mb-2">
                 2. Simulador <span className="text-red-500">*</span>
               </label>
-              <select
+              <select aria-label="2. Simulador"
                 value={simuladorId || ''}
                 onChange={(e) => handleSimuladorChange(Number(e.target.value))}
                 className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary"
@@ -2000,7 +2000,7 @@ export default function ModalNovaSessao({
               <label className="block text-sm font-medium text-slate-700 mb-2">
                 2. Aeronave <span className="text-red-500">*</span>
               </label>
-              <select
+              <select aria-label="2. Aeronave"
                 value={aeronaveRealId || ''}
                 onChange={(e) => handleAeronaveRealChange(Number(e.target.value))}
                 className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary"
@@ -2032,7 +2032,7 @@ export default function ModalNovaSessao({
             <label className="block text-sm font-medium text-slate-700 mb-2">
               3. Tipo de Sessão <span className="text-red-500">*</span>
             </label>
-            <select
+            <select aria-label="3. Tipo de Sessão"
               value={tipoSessaoId || ''}
               onChange={(e) => handleTipoSessaoChange(Number(e.target.value))}
               className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary"
@@ -2093,7 +2093,7 @@ export default function ModalNovaSessao({
               // Show an editable text input so the user can see/change the theme
               // without a false "no models" error blocking the form.
               <div className="space-y-1.5">
-                <input
+                <input aria-label="Tema da sessão"
                   type="text"
                   value={temaSessao}
                   onChange={(e) => setTemaSessao(e.target.value)}
@@ -2128,7 +2128,7 @@ export default function ModalNovaSessao({
               <label className="block text-sm font-medium text-slate-700 mb-2">
                 Data <span className="text-red-500">*</span>
               </label>
-              <input
+              <input aria-label="Data"
                 type="date"
                 value={data}
                 onChange={(e) => {
@@ -2187,7 +2187,7 @@ export default function ModalNovaSessao({
             <label className="block text-sm font-medium text-slate-700 mb-2">
               Instrutor <span className="text-red-500">*</span>
             </label>
-            <select
+            <select aria-label="Instrutor"
               value={instrutorId || ''}
               onChange={(e) => setInstrutorId(Number(e.target.value))}
               className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary"
@@ -2217,7 +2217,7 @@ export default function ModalNovaSessao({
               <label className="block text-sm font-medium text-slate-700 mb-2">
                 Examinador (opcional)
               </label>
-              <select
+              <select aria-label="Examinador (opcional)"
                 value={examinadorId || ''}
                 onChange={(e) => {
                   const v = e.target.value ? Number(e.target.value) : null;
@@ -2412,7 +2412,7 @@ export default function ModalNovaSessao({
             <label className="block text-sm font-medium text-slate-700 mb-2">
               Observações (opcional)
             </label>
-            <textarea
+            <textarea aria-label="Observações (opcional)"
               value={observacoes}
               onChange={(e) => setObservacoes(e.target.value)}
               placeholder="Informações adicionais sobre a sessão..."

@@ -1981,7 +1981,7 @@ export default function TreinamentosPlanejadosPage({
               </option>
             ))}
           </select>
-          <input
+          <input aria-label="Buscar..."
             type="search"
             value={busca}
             onChange={(event) => setBusca(event.target.value)}
@@ -2943,7 +2943,7 @@ export default function TreinamentosPlanejadosPage({
                     </p>
                   ) : null}
                 </div>
-                <input
+                <input aria-label="Buscar por nome, guerra, matricula"
                   type="search"
                   value={buscaConvocados}
                   onChange={(event) => setBuscaConvocados(event.target.value)}
@@ -3642,7 +3642,7 @@ export default function TreinamentosPlanejadosPage({
                                         <label className="block text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
                                           Data de conclusão
                                         </label>
-                                        <input
+                                        <input aria-label="Data de conclusão"
                                           type="date"
                                           value={draft.data_conclusao_efetiva || ''}
                                           max={today}

@@ -384,7 +384,7 @@ export default function ControleVoosTabelas() {
 
             {activeCatalog === 'pontos' && !loading && (
               <div className="border-b border-slate-200 px-4 py-3 dark:border-slate-700">
-                <input
+                <input aria-label="Buscar por código, código ICAO, local ou tipo"
                   value={pontoSearch}
                   onChange={(event) => setPontoSearch(event.target.value)}
                   placeholder="Buscar por código, código ICAO, local ou tipo"
@@ -405,7 +405,7 @@ export default function ControleVoosTabelas() {
             )}
             {activeCatalog === 'justificativas' && !loading && (
               <div className="border-b border-slate-200 px-4 py-3 dark:border-slate-700">
-                <input
+                <input aria-label="Buscar por código, motivo, categoria ou palavra da descrição"
                   type="search"
                   value={justificationSearch}
                   onChange={(event) => setJustificationSearch(event.target.value)}

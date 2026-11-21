@@ -252,7 +252,7 @@ export default function CrudInstrutores() {
                 <label className="block text-sm font-medium text-slate-700 mb-1">
                   Funcionário <span className="text-red-500">*</span>
                 </label>
-                <select
+                <select aria-label="Funcionário"
                   value={formData.funcionario_id}
                   onChange={(e) => setFormData({ ...formData, funcionario_id: e.target.value })}
                   className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
@@ -270,7 +270,7 @@ export default function CrudInstrutores() {
                 <label className="block text-sm font-medium text-slate-700 mb-1">
                   Habilitações
                 </label>
-                <input
+                <input aria-label="Habilitações"
                   type="text"
                   value={formData.habilitacoes}
                   onChange={(e) => setFormData({ ...formData, habilitacoes: e.target.value })}
@@ -281,7 +281,7 @@ export default function CrudInstrutores() {
 
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">Observações</label>
-                <textarea
+                <textarea aria-label="Observações"
                   value={formData.observacoes}
                   onChange={(e) => setFormData({ ...formData, observacoes: e.target.value })}
                   className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"

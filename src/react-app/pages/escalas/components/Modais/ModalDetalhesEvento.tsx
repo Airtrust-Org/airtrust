@@ -281,7 +281,7 @@ export default function ModalDetalhesEvento({
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="block text-xs text-slate-500 mb-1">Data início</label>
-              <input
+              <input aria-label="Data início"
                 type="date"
                 value={dataInicio}
                 onChange={(e) => setDataInicio(e.target.value)}
@@ -290,7 +290,7 @@ export default function ModalDetalhesEvento({
             </div>
             <div>
               <label className="block text-xs text-slate-500 mb-1">Data fim</label>
-              <input
+              <input aria-label="Data fim"
                 type="date"
                 value={dataFim}
                 min={dataInicio}
@@ -303,7 +303,7 @@ export default function ModalDetalhesEvento({
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="block text-xs text-slate-500 mb-1">Turno</label>
-              <select value={turno} onChange={(e) => setTurno(e.target.value)} className={INP}>
+              <select aria-label="Turno" value={turno} onChange={(e) => setTurno(e.target.value)} className={INP}>
                 {TURNOS.map((t) => (
                   <option key={t.value} value={t.value}>
                     {t.label}
@@ -313,7 +313,7 @@ export default function ModalDetalhesEvento({
             </div>
             <div>
               <label className="block text-xs text-slate-500 mb-1">Status</label>
-              <select value={status} onChange={(e) => setStatus(e.target.value)} className={INP}>
+              <select aria-label="Status" value={status} onChange={(e) => setStatus(e.target.value)} className={INP}>
                 {Object.entries(STATUS_EVENTO).map(([k, v]) => (
                   <option key={k} value={k}>
                     {v.label}
@@ -324,7 +324,7 @@ export default function ModalDetalhesEvento({
           </div>
           <div>
             <label className="block text-xs text-slate-500 mb-1">Local</label>
-            <input
+            <input aria-label="Local"
               type="text"
               value={local}
               onChange={(e) => setLocal(e.target.value)}
@@ -334,7 +334,7 @@ export default function ModalDetalhesEvento({
           </div>
           <div>
             <label className="block text-xs text-slate-500 mb-1">Observações</label>
-            <textarea
+            <textarea aria-label="Observações"
               value={obs}
               onChange={(e) => setObs(e.target.value)}
               rows={2}

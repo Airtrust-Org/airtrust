@@ -1081,7 +1081,7 @@ export default function EscalasDetalheView() {
                         </span>
                       </div>
                       <label className="block text-xs text-slate-500 dark:text-slate-400">Início</label>
-                      <input
+                      <input aria-label="Início"
                         type="date"
                         value={di}
                         onChange={(e) =>
@@ -1093,7 +1093,7 @@ export default function EscalasDetalheView() {
                         className="mb-1 w-full rounded border border-slate-200 px-1 py-0.5 text-xs focus:outline-none focus:ring-1 focus:ring-indigo-400 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
                       />
                       <label className="block text-xs text-slate-500 dark:text-slate-400">Fim</label>
-                      <input
+                      <input aria-label="Fim"
                         type="date"
                         value={df}
                         onChange={(e) =>
@@ -1153,7 +1153,7 @@ export default function EscalasDetalheView() {
 
                     <div className="relative flex-1 min-w-[140px] max-w-xs">
                       <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
-                      <input
+                      <input aria-label="Filtrar tripulante..."
                         type="text"
                         placeholder="Filtrar tripulante..."
                         value={filtroNome}

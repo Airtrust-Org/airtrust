@@ -957,7 +957,7 @@ function CourseDrawer({
                     <div className="grid gap-4 lg:grid-cols-[1.4fr_0.8fr]">
                       <div className="space-y-2">
                         <FieldLabel label="Título" required />
-                        <input
+                        <input aria-label="Ex.: CRM, Fatores Humanos"
                           value={form.titulo}
                           onChange={(e) => setForm((c) => ({ ...c, titulo: e.target.value }))}
                           className={fieldCls}
@@ -992,7 +992,7 @@ function CourseDrawer({
                     </div>
                     <div className="space-y-2">
                       <FieldLabel label="Descrição" />
-                      <textarea
+                      <textarea aria-label="Objetivo, público-alvo e o que será aprendido."
                         rows={4}
                         value={form.descricao ?? ''}
                         onChange={(e) => setForm((c) => ({ ...c, descricao: e.target.value }))}
@@ -1082,7 +1082,7 @@ function CourseDrawer({
                         )}
                         <div>
                           <label className="mb-1 block text-xs font-medium text-slate-500">Versão SCORM</label>
-                          <select
+                          <select aria-label="Versão SCORM"
                             value={form.scorm_versao ?? '1.2'}
                             onChange={(e) =>
                               setForm((c) => ({
@@ -1256,7 +1256,7 @@ function CourseDrawer({
                       </div>
                       <div className="space-y-2 lg:col-span-2">
                         <FieldLabel label="Referências" />
-                        <textarea
+                        <textarea aria-label="Normas, regulamentos, manuais, programas e procedimentos aplicáveis — uma referência por linha."
                           rows={4}
                           value={form.referencias ?? ''}
                           onChange={(e) => setForm((c) => ({ ...c, referencias: e.target.value }))}

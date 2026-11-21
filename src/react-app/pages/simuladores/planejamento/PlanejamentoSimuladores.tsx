@@ -1491,7 +1491,7 @@ export default function PlanejamentoSimuladores() {
                               Aprovar
                             </button>
                             <div className="flex flex-col gap-1">
-                              <input
+                              <input aria-label="Motivo devolução"
                                 type="text"
                                 placeholder="Motivo devolução"
                                 className="w-full rounded-md border-0 py-1.5 px-2 text-slate-900 shadow-sm ring-1 ring-inset ring-slate-300 placeholder:text-slate-400 focus:ring-2 focus:ring-inset focus:ring-primary sm:text-sm sm:leading-6 dark:bg-slate-900 dark:text-slate-100 dark:ring-slate-700 text-xs"

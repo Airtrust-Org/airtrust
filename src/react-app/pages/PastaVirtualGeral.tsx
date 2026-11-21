@@ -196,7 +196,7 @@ export default function PastaVirtualGeral() {
             className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400"
             size={20}
           />
-          <input
+          <input aria-label="Buscar arquivos..."
             type="text"
             placeholder="Buscar arquivos..."
             value={filtro}

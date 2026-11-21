@@ -36,7 +36,7 @@ export default function PainelTripulacoes({
         </button>
       </div>
 
-      <input
+      <input aria-label="Buscar tripulante..."
         type="text"
         placeholder="Buscar tripulante..."
         value={busca}

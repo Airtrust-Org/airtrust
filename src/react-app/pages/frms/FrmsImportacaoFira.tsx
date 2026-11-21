@@ -208,7 +208,7 @@ function TripulanteSelector({ onSelect }: { onSelect: (id: number, nome: string)
         <User className="h-4 w-4" />
         Tripulante não encontrado pelo CANAC — selecione manualmente:
       </p>
-      <input
+      <input aria-label="Buscar por nome ou CANAC…"
         type="text"
         placeholder="Buscar por nome ou CANAC…"
         value={busca}
@@ -1279,7 +1279,7 @@ export default function FrmsImportacaoFira() {
                 <label className="mb-1.5 block text-sm font-medium text-gray-700">
                   Observação (opcional)
                 </label>
-                <textarea
+                <textarea aria-label="Observação (opcional)"
                   value={observacao}
                   onChange={(e) => setObservacao(e.target.value)}
                   rows={2}

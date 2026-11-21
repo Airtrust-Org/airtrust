@@ -80,7 +80,7 @@ export default function TrocarSenhaPage() {
           <form onSubmit={handleSubmit} className="space-y-5">
             <div className="space-y-2">
               <label className="block text-sm font-medium text-slate-700">Senha atual</label>
-              <input
+              <input aria-label="Senha atual"
                 type="password"
                 value={senhaAtual}
                 onChange={(event) => setSenhaAtual(event.target.value)}
@@ -91,7 +91,7 @@ export default function TrocarSenhaPage() {
 
             <div className="space-y-2">
               <label className="block text-sm font-medium text-slate-700">Nova senha</label>
-              <input
+              <input aria-label="Nova senha"
                 type="password"
                 value={novaSenha}
                 onChange={(event) => setNovaSenha(event.target.value)}
@@ -104,7 +104,7 @@ export default function TrocarSenhaPage() {
               <label className="block text-sm font-medium text-slate-700">
                 Confirmar nova senha
               </label>
-              <input
+              <input aria-label="Confirmar nova senha"
                 type="password"
                 value={confirmarSenha}
                 onChange={(event) => setConfirmarSenha(event.target.value)}

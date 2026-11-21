@@ -89,7 +89,7 @@ const FuncionarioListDetailed: React.FC<FuncionarioListDetailedProps> = ({
         {/* Filtros */}
         <div className="mt-4 flex space-x-4">
           <div className="flex-1">
-            <input
+            <input aria-label="Buscar por nome, matrícula ou email..."
               type="text"
               placeholder="Buscar por nome, matrícula ou email..."
               value={searchTerm}

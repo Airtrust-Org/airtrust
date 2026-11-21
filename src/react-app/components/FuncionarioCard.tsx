@@ -49,7 +49,7 @@ export function FuncionarioCard({ id }: { id: number }) {
             {funcionario.nome}
             {editingNome && (
               <div className="flex gap-2 ml-4">
-                <input
+                <input aria-label="Novo nome"
                   className="border px-2 py-1 text-sm"
                   value={novoNome}
                   onChange={(e) => setNovoNome(e.target.value)}

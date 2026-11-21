@@ -242,7 +242,7 @@ export default function FormularioAgendamento({
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 Simulador <span className="text-red-500">*</span>
               </label>
-              <select
+              <select aria-label="Simulador"
                 value={dadosGerais.simulador_id}
                 onChange={(e) => setDadosGerais({ ...dadosGerais, simulador_id: e.target.value })}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
@@ -262,7 +262,7 @@ export default function FormularioAgendamento({
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 Instrutor <span className="text-red-500">*</span>
               </label>
-              <select
+              <select aria-label="Instrutor"
                 value={dadosGerais.instrutor_id}
                 onChange={(e) => setDadosGerais({ ...dadosGerais, instrutor_id: e.target.value })}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
@@ -282,7 +282,7 @@ export default function FormularioAgendamento({
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 Data <span className="text-red-500">*</span>
               </label>
-              <input
+              <input aria-label="Data"
                 type="date"
                 value={dadosGerais.data_inicio}
                 onChange={(e) => setDadosGerais({ ...dadosGerais, data_inicio: e.target.value })}
@@ -294,7 +294,7 @@ export default function FormularioAgendamento({
             {/* Tipo de Sessão */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Tipo de Sessão</label>
-              <select
+              <select aria-label="Tipo de Sessão"
                 value={dadosGerais.tipo_sessao}
                 onChange={(e) => setDadosGerais({ ...dadosGerais, tipo_sessao: e.target.value })}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
@@ -350,7 +350,7 @@ export default function FormularioAgendamento({
                     <label className="block text-sm font-medium text-gray-700 mb-1">
                       Tripulante <span className="text-red-500">*</span>
                     </label>
-                    <select
+                    <select aria-label="Tripulante"
                       value={p.colaborador_id}
                       onChange={(e) => {
                         const novos = [...participantes];
@@ -374,7 +374,7 @@ export default function FormularioAgendamento({
                     <label className="block text-sm font-medium text-gray-700 mb-1">
                       Função <span className="text-red-500">*</span>
                     </label>
-                    <select
+                    <select aria-label="Função"
                       value={p.funcao_na_sessao}
                       onChange={(e) => {
                         const novos = [...participantes];
@@ -395,7 +395,7 @@ export default function FormularioAgendamento({
                     <label className="block text-sm font-medium text-gray-700 mb-1">
                       Template <span className="text-red-500">*</span>
                     </label>
-                    <select
+                    <select aria-label="Template"
                       value={p.template_id}
                       onChange={(e) => {
                         const novos = [...participantes];
@@ -422,7 +422,7 @@ export default function FormularioAgendamento({
         {/* Observações */}
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">Observações</label>
-          <textarea
+          <textarea aria-label="Observações"
             value={dadosGerais.observacoes}
             onChange={(e) => setDadosGerais({ ...dadosGerais, observacoes: e.target.value })}
             placeholder="Observações gerais sobre a sessão..."

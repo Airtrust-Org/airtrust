@@ -1003,7 +1003,7 @@ export function ModalCertificado({
                     <label className="block text-sm font-medium text-gray-700 mb-2">
                       Descrição (opcional)
                     </label>
-                    <input
+                    <input aria-label="Descrição (opcional)"
                       type="text"
                       value={descricao}
                       onChange={(e) => setDescricao(e.target.value)}

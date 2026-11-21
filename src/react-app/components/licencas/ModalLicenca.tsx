@@ -230,7 +230,7 @@ export default function ModalLicenca({
           ) : (
             <div>
               <label className="mb-1 block text-sm font-medium text-gray-700">Funcionário *</label>
-              <select
+              <select aria-label="Funcionário"
                 value={formData.funcionario_id}
                 onChange={(e) =>
                   setFormData((prev) => ({ ...prev, funcionario_id: e.target.value }))
@@ -252,7 +252,7 @@ export default function ModalLicenca({
           <div className="grid gap-4 md:grid-cols-2">
             <div>
               <label className="mb-1 block text-sm font-medium text-gray-700">Tipo *</label>
-              <select
+              <select aria-label="Tipo"
                 value={formData.tipo}
                 onChange={(e) => setFormData((prev) => ({ ...prev, tipo: e.target.value }))}
                 required
@@ -269,7 +269,7 @@ export default function ModalLicenca({
 
             <div>
               <label className="mb-1 block text-sm font-medium text-gray-700">Número *</label>
-              <input
+              <input aria-label="Número"
                 type="text"
                 value={formData.numero}
                 onChange={(e) => setFormData((prev) => ({ ...prev, numero: e.target.value }))}
@@ -286,7 +286,7 @@ export default function ModalLicenca({
               <label className="mb-1 block text-sm font-medium text-gray-700">
                 Data de emissão *
               </label>
-              <input
+              <input aria-label="Data de emissão"
                 type="date"
                 value={formData.data_emissao}
                 onChange={(e) => setFormData((prev) => ({ ...prev, data_emissao: e.target.value }))}
@@ -299,7 +299,7 @@ export default function ModalLicenca({
               <label className="mb-1 block text-sm font-medium text-gray-700">
                 Data de vencimento *
               </label>
-              <input
+              <input aria-label="Data de vencimento"
                 type="date"
                 value={formData.data_vencimento}
                 onChange={(e) =>
@@ -314,7 +314,7 @@ export default function ModalLicenca({
           {/* Observações */}
           <div>
             <label className="mb-1 block text-sm font-medium text-gray-700">Observações</label>
-            <textarea
+            <textarea aria-label="Observações"
               value={formData.observacoes}
               onChange={(e) => setFormData((prev) => ({ ...prev, observacoes: e.target.value }))}
               className="w-full min-h-[80px] rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-200"

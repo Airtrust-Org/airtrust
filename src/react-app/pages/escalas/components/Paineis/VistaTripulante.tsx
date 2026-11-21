@@ -151,7 +151,7 @@ export default function VistaTripulante({
         {/* Pilot selector */}
         <div className="px-6 py-3 border-b border-gray-50 flex items-center gap-3">
           <label className="text-xs text-gray-500">Tripulante:</label>
-          <select
+          <select aria-label="Tripulante"
             value={selectedPilot}
             onChange={(e) => setSelectedPilot(e.target.value)}
             className="text-sm border border-gray-200 rounded-lg px-3 py-1.5 bg-white focus:ring-2 focus:ring-primary/30 focus:border-blue-500"

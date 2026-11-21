@@ -539,7 +539,7 @@ export function UsuariosAdminContent({ embedded = false }: { embedded?: boolean 
         {/* Filtro */}
         <div className="relative max-w-sm">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-          <input
+          <input aria-label="Buscar usuários..."
             type="text"
             placeholder="Buscar usuários..."
             value={filtro}
@@ -982,7 +982,7 @@ function ModalCriarUsuario({
           {/* Nome */}
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-1">Nome completo</label>
-            <input
+            <input aria-label="Nome completo"
               type="text"
               value={nome}
               onChange={(e) => setNome(e.target.value)}
@@ -995,7 +995,7 @@ function ModalCriarUsuario({
           {/* Email */}
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-1">E-mail</label>
-            <input
+            <input aria-label="E-mail"
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
@@ -1010,7 +1010,7 @@ function ModalCriarUsuario({
             <label className="block text-sm font-medium text-slate-700 mb-1">
               Perfil de acesso
             </label>
-            <select
+            <select aria-label="Perfil de acesso"
               value={perfil}
               onChange={(e) => setPerfil(e.target.value)}
               className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-primary/30 focus:border-primary bg-white"
@@ -1247,7 +1247,7 @@ function ModalEditarUsuario({
 
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-1">Nome</label>
-            <input
+            <input aria-label="Nome"
               type="text"
               value={nome}
               onChange={(e) => setNome(e.target.value)}
@@ -1260,7 +1260,7 @@ function ModalEditarUsuario({
             <label className="block text-sm font-medium text-slate-700 mb-1">
               Perfil de acesso
             </label>
-            <select
+            <select aria-label="Perfil de acesso"
               value={perfil}
               onChange={(e) => {
                 setPerfil(e.target.value);
@@ -1303,7 +1303,7 @@ function ModalEditarUsuario({
             <label className="block text-sm font-medium text-slate-700 mb-1">
               Funcionário vinculado <span className="text-slate-400 font-normal">(opcional)</span>
             </label>
-            <select
+            <select aria-label="Funcionário vinculado (opcional)"
               value={funcionarioId ?? ''}
               onChange={(e) => setFuncionarioId(Number(e.target.value) || null)}
               className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-primary/30 bg-white"
@@ -1946,7 +1946,7 @@ function ModalPerfis({ onClose }: { onClose: () => void }) {
                 <div className="border-t border-slate-200 p-2">
                   {showNovo ? (
                     <div className="space-y-1.5">
-                      <input
+                      <input aria-label="Nome do perfil"
                         type="text"
                         value={novoLabel}
                         onChange={(e) => setNovoLabel(e.target.value)}
@@ -2313,7 +2313,7 @@ function ModalResetSenha({
         <form onSubmit={handleSubmit} className="p-6 space-y-4">
           <div>
             <label className="block text-xs font-medium text-slate-700 mb-1">Nova Senha *</label>
-            <input
+            <input aria-label="Nova Senha"
               type="password"
               value={novaSenha}
               onChange={(e) => setNovaSenha(e.target.value)}
@@ -2328,7 +2328,7 @@ function ModalResetSenha({
             <label className="block text-xs font-medium text-slate-700 mb-1">
               Confirmar Nova Senha *
             </label>
-            <input
+            <input aria-label="Confirmar Nova Senha"
               type="password"
               value={confirmarSenha}
               onChange={(e) => setConfirmarSenha(e.target.value)}

@@ -216,7 +216,7 @@ Substituir esta edição já enviada
           {formative && evidenceOk && !approvalOk ? (
             <div className="space-y-2 rounded border p-2">
               <p className="text-xs font-medium">Aprovação administrativa (registrada com seu usuário, curso e SHA)</p>
-              <textarea
+              <textarea aria-label="Justificativa (mín. 10 caracteres): revisão editorial e jornada real conferidas…"
                 className="block w-full rounded border px-2 py-1 text-xs"
                 rows={2}
                 maxLength={500}
@@ -224,7 +224,7 @@ Substituir esta edição já enviada
                 value={note}
                 onChange={(event) => setNote(event.target.value)}
               />
-              <input
+              <input aria-label="Referência da revisão editorial independente (obrigatória)"
                 className="block w-full rounded border px-2 py-1 text-xs"
                 placeholder="Referência da revisão editorial independente (obrigatória)"
                 maxLength={200}

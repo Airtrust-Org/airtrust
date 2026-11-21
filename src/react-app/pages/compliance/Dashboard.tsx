@@ -169,14 +169,14 @@ export default function ComplianceDashboard() {
                 )}
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <input
+                <input aria-label="Filtrar por Setor (ex: Operações)"
                   type="text"
                   placeholder="Filtrar por Setor (ex: Operações)"
                   value={filtros.setor}
                   onChange={(e) => setFiltros({ ...filtros, setor: e.target.value })}
                   className="h-9 px-3 text-sm border border-slate-200 rounded-lg focus:ring-2 focus:ring-primary focus:border-primary outline-none transition-colors"
                 />
-                <input
+                <input aria-label="Filtrar por Função"
                   type="text"
                   placeholder="Filtrar por Função"
                   value={filtros.funcao}

@@ -164,7 +164,7 @@ function CriarModal({ onClose, selfId, canAdmin }: CriarModalProps) {
           {canAdmin && (
             <div>
               <label className="mb-1 block text-sm font-medium text-slate-700">Solicitante</label>
-              <select
+              <select aria-label="Solicitante"
                 value={solicitanteId}
                 onChange={(e) => setSolicitanteId(Number(e.target.value))}
                 className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -183,7 +183,7 @@ function CriarModal({ onClose, selfId, canAdmin }: CriarModalProps) {
 
           <div>
             <label className="mb-1 block text-sm font-medium text-slate-700">Qualificação</label>
-            <select
+            <select aria-label="Qualificação"
               value={qualificacaoId}
               onChange={(e) => {
                 const nextId = e.target.value;
@@ -213,7 +213,7 @@ function CriarModal({ onClose, selfId, canAdmin }: CriarModalProps) {
             <label className="mb-1 block text-sm font-medium text-slate-700">
               Tipo de treinamento
             </label>
-            <select
+            <select aria-label="Tipo de treinamento"
               value={tipo}
               onChange={(e) => setTipo(e.target.value as TipoTreinamentoType)}
               className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -237,7 +237,7 @@ function CriarModal({ onClose, selfId, canAdmin }: CriarModalProps) {
 
           <div>
             <label className="mb-1 block text-sm font-medium text-slate-700">Título *</label>
-            <input
+            <input aria-label="Título"
               value={titulo}
               onChange={(e) => setTitulo(e.target.value)}
               placeholder="Ex: Renovação CMA Classe 1"
@@ -250,7 +250,7 @@ function CriarModal({ onClose, selfId, canAdmin }: CriarModalProps) {
           <div className="grid gap-4 sm:grid-cols-2">
             <div>
               <label className="mb-1 block text-sm font-medium text-slate-700">Prioridade</label>
-              <select
+              <select aria-label="Prioridade"
                 value={prioridade}
                 onChange={(e) => setPrioridade(e.target.value as PrioridadeType)}
                 className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -265,7 +265,7 @@ function CriarModal({ onClose, selfId, canAdmin }: CriarModalProps) {
             </div>
             <div>
               <label className="mb-1 block text-sm font-medium text-slate-700">Data prevista</label>
-              <input
+              <input aria-label="Data prevista"
                 type="date"
                 value={dataPrevista}
                 onChange={(e) => setDataPrevista(e.target.value)}
@@ -277,7 +277,7 @@ function CriarModal({ onClose, selfId, canAdmin }: CriarModalProps) {
 
           <div>
             <label className="mb-1 block text-sm font-medium text-slate-700">Justificativa</label>
-            <textarea
+            <textarea aria-label="Justificativa"
               value={justificativa}
               onChange={(e) => setJustificativa(e.target.value)}
               rows={3}
@@ -456,7 +456,7 @@ function DetalheModal({ item, canAdmin, onClose }: DetalheModalProps) {
                 <label className="block text-sm font-medium text-slate-700">
                   Data do treinamento
                 </label>
-                <input
+                <input aria-label="Data do treinamento"
                   type="date"
                   value={dataAgendada}
                   onChange={(e) => setDataAgendada(e.target.value)}
@@ -502,7 +502,7 @@ function DetalheModal({ item, canAdmin, onClose }: DetalheModalProps) {
               <div className="space-y-2">
                 {confirmRejeitar ? (
                   <>
-                    <textarea
+                    <textarea aria-label="Motivo da rejeição (opcional)"
                       value={motivo}
                       onChange={(e) => setMotivo(e.target.value)}
                       placeholder="Motivo da rejeição (opcional)"

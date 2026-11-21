@@ -122,7 +122,7 @@ export default function ConfiguracaoEmpresa() {
           <h2>Informações Básicas</h2>
           <div className={styles.formGroup}>
             <label>Nome da Empresa *</label>
-            <input
+            <input aria-label="Nome da Empresa"
               type="text"
               value={config.nome}
               onChange={(e) => setConfig({ ...config, nome: e.target.value })}
@@ -149,7 +149,7 @@ export default function ConfiguracaoEmpresa() {
 
           <div className={styles.formGroup}>
             <label>URL da Logo</label>
-            <input
+            <input aria-label="URL da Logo"
               type="text"
               value={config.logo_url || ''}
               onChange={(e) => setConfig({ ...config, logo_url: e.target.value })}
@@ -170,7 +170,7 @@ export default function ConfiguracaoEmpresa() {
           <div className={styles.formGroup}>
             <label>Cor Primária *</label>
             <div className={styles.colorInput}>
-              <input
+              <input aria-label="Cor Primária"
                 type="color"
                 value={config.cor_primaria}
                 onChange={(e) => setConfig({ ...config, cor_primaria: e.target.value })}
@@ -182,7 +182,7 @@ export default function ConfiguracaoEmpresa() {
           <div className={styles.formGroup}>
             <label>Cor Secundária *</label>
             <div className={styles.colorInput}>
-              <input
+              <input aria-label="Cor Secundária"
                 type="color"
                 value={config.cor_secundaria}
                 onChange={(e) => setConfig({ ...config, cor_secundaria: e.target.value })}
@@ -202,7 +202,7 @@ export default function ConfiguracaoEmpresa() {
           <h2>Template do Certificado</h2>
           <div className={styles.formGroup}>
             <label>Conteúdo HTML</label>
-            <textarea
+            <textarea aria-label="Conteúdo HTML"
               value={config.template_certificado || ''}
               onChange={(e) => setConfig({ ...config, template_certificado: e.target.value })}
               placeholder="Cole aqui o template HTML do certificado..."

@@ -74,7 +74,7 @@ export default function FiltrosAvancados({ onFiltrar }: FiltrosAvancadosProps) {
 
       <div className="space-y-2">
         <label className="block text-sm font-medium text-gray-700">Função</label>
-        <select
+        <select aria-label="Função"
           value={funcaoSelecionada}
           onChange={(e) => setFuncaoSelecionada(e.target.value)}
           className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary"
@@ -90,7 +90,7 @@ export default function FiltrosAvancados({ onFiltrar }: FiltrosAvancadosProps) {
 
       <div className="space-y-2">
         <label className="block text-sm font-medium text-gray-700">Setor</label>
-        <select
+        <select aria-label="Setor"
           value={setorSelecionado}
           onChange={(e) => setSetorSelecionado(e.target.value)}
           className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary"
@@ -106,7 +106,7 @@ export default function FiltrosAvancados({ onFiltrar }: FiltrosAvancadosProps) {
 
       <div className="space-y-2">
         <label className="block text-sm font-medium text-gray-700">Status</label>
-        <select
+        <select aria-label="Status"
           value={statusSelecionado}
           onChange={(e) => setStatusSelecionado(e.target.value)}
           className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary"

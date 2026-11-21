@@ -169,7 +169,7 @@ export default function FrmsHistoricoFira() {
           <div>
             <label className="mb-1 block text-xs font-medium text-gray-500">Status</label>
             <div className="relative">
-              <select
+              <select aria-label="Status"
                 value={filtroStatus}
                 onChange={(e) => {
                   setFiltroStatus(e.target.value);
@@ -189,7 +189,7 @@ export default function FrmsHistoricoFira() {
           <div>
             <label className="mb-1 block text-xs font-medium text-gray-500">Ano</label>
             <div className="relative">
-              <select
+              <select aria-label="Ano"
                 value={filtroAno}
                 onChange={(e) => {
                   setFiltroAno(e.target.value);
@@ -210,7 +210,7 @@ export default function FrmsHistoricoFira() {
           <div>
             <label className="mb-1 block text-xs font-medium text-gray-500">Mês</label>
             <div className="relative">
-              <select
+              <select aria-label="Mês"
                 value={filtroMes}
                 onChange={(e) => {
                   setFiltroMes(e.target.value);

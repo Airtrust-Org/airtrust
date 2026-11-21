@@ -160,7 +160,7 @@ const CriarManobraModal: React.FC<CriarManobraModalProps> = ({
             <label className="block text-sm font-medium text-gray-700 mb-1">
               Código da Manobra *
             </label>
-            <input
+            <input aria-label="Código da Manobra"
               ref={codigoRef}
               type="text"
               value={formData.codigo}
@@ -193,7 +193,7 @@ const CriarManobraModal: React.FC<CriarManobraModalProps> = ({
             <label className="block text-sm font-medium text-gray-700 mb-1">
               Nome da Manobra *
             </label>
-            <input
+            <input aria-label="Nome da Manobra"
               type="text"
               value={formData.nome}
               onChange={(e) => handleInputChange('nome', e.target.value)}
@@ -220,7 +220,7 @@ const CriarManobraModal: React.FC<CriarManobraModalProps> = ({
             <label className="block text-sm font-medium text-gray-700 mb-1">
               Referência no QRH *
             </label>
-            <input
+            <input aria-label="Referência no QRH"
               type="text"
               value={formData.referencia_qrh}
               onChange={(e) => handleInputChange('referencia_qrh', e.target.value)}

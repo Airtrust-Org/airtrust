@@ -274,7 +274,7 @@ export function ModalHabilitacao({ isOpen, onClose, onSave, habilitacao }: Props
           {/* FUNCIONÁRIO */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Funcionário *</label>
-            <select
+            <select aria-label="Funcionário"
               value={form.funcionario_id}
               onChange={(e) => setForm({ ...form, funcionario_id: e.target.value })}
               required
@@ -293,7 +293,7 @@ export function ModalHabilitacao({ isOpen, onClose, onSave, habilitacao }: Props
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Qualificação *</label>
-              <select
+              <select aria-label="Qualificação"
                 value={form.qualificacao_id}
                 onChange={handleQualificacaoChange}
                 required
@@ -323,7 +323,7 @@ export function ModalHabilitacao({ isOpen, onClose, onSave, habilitacao }: Props
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 Data de Conclusão *
               </label>
-              <input
+              <input aria-label="Data de Conclusão"
                 type="date"
                 value={form.data_conclusao}
                 onChange={handleDataConclusaoChange}
@@ -353,7 +353,7 @@ export function ModalHabilitacao({ isOpen, onClose, onSave, habilitacao }: Props
           {/* RESULTADO */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Resultado</label>
-            <select
+            <select aria-label="Resultado"
               value={form.resultado}
               onChange={(e) => setForm({ ...form, resultado: e.target.value })}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary"
@@ -367,7 +367,7 @@ export function ModalHabilitacao({ isOpen, onClose, onSave, habilitacao }: Props
           {/* OBSERVAÇÕES */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Observações</label>
-            <textarea
+            <textarea aria-label="Observações"
               value={form.observacoes}
               onChange={(e) => setForm({ ...form, observacoes: e.target.value })}
               rows={3}
@@ -378,7 +378,7 @@ export function ModalHabilitacao({ isOpen, onClose, onSave, habilitacao }: Props
           {/* INSTRUTOR */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Instrutor</label>
-            <select
+            <select aria-label="Instrutor"
               value={form.instrutor}
               onChange={(e) => setForm({ ...form, instrutor: e.target.value })}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary"

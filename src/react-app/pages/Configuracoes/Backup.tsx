@@ -385,7 +385,7 @@ function CreateBackupModal({ onClose, onSuccess }: CreateModalProps) {
             <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
               Descrição <span className="text-slate-400 font-normal">(opcional)</span>
             </label>
-            <textarea
+            <textarea aria-label="Descrição (opcional)"
               value={descricao}
               onChange={(e) => setDescricao(e.target.value)}
               placeholder="Ex: Backup antes da migração de dados..."
@@ -731,7 +731,7 @@ function RestoreModal({ backup, onClose, onSuccess }: RestoreModalProps) {
               Digite <span className="font-mono font-bold text-red-600">CONFIRMAR</span> para
               prosseguir
             </label>
-            <input
+            <input aria-label="Digite CONFIRMAR para prosseguir"
               type="text"
               value={confirmText}
               onChange={(e) => setConfirmText(e.target.value)}
@@ -968,7 +968,7 @@ export default function BackupPage() {
         <div className="p-4 border-b border-slate-200 dark:border-slate-800 flex flex-col sm:flex-row gap-3">
           <div className="flex-1 relative">
             <Activity className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-            <input
+            <input aria-label="Buscar por UUID, descrição ou origem..."
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}

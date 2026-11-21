@@ -331,14 +331,14 @@ export default function CrudSimuladores({ embedded = false, onBack }: Props = {}
             <div className="p-6 space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">Nome <span className="text-red-500">*</span></label>
-                <Input
+                <Input aria-label="Nome"
                   value={formData.nome || ''}
                   onChange={(e) => setFormData({ ...formData, nome: e.target.value })}
                 />
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">Equipamento <span className="text-red-500">*</span></label>
-                <select
+                <select aria-label="Equipamento"
                   className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md bg-white dark:bg-slate-800 text-gray-900 dark:text-slate-100"
                   value={formData.tipo || ''}
                   onChange={(e) =>
@@ -358,14 +358,14 @@ export default function CrudSimuladores({ embedded = false, onBack }: Props = {}
                   <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">
                     Localização
                   </label>
-                  <Input
+                  <Input aria-label="Localização"
                     value={formData.localizacao || ''}
                     onChange={(e) => setFormData({ ...formData, localizacao: e.target.value })}
                   />
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">Empresa</label>
-                  <Input
+                  <Input aria-label="Empresa"
                     value={formData.fabricante || ''}
                     onChange={(e) => setFormData({ ...formData, fabricante: e.target.value })}
                   />
@@ -373,7 +373,7 @@ export default function CrudSimuladores({ embedded = false, onBack }: Props = {}
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">Status</label>
-                <select
+                <select aria-label="Status"
                   className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md bg-white dark:bg-slate-800 text-gray-900 dark:text-slate-100"
                   value={formData.status || 'ATIVO'}
                   onChange={(e) =>
@@ -387,7 +387,7 @@ export default function CrudSimuladores({ embedded = false, onBack }: Props = {}
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">Observações</label>
-                <textarea
+                <textarea aria-label="Observações"
                   className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md bg-white dark:bg-slate-800 text-gray-900 dark:text-slate-100"
                   value={formData.observacoes || ''}
                   onChange={(e) => setFormData({ ...formData, observacoes: e.target.value })}

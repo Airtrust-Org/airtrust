@@ -317,7 +317,7 @@ export function ComplianceSettings() {
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Escopo do Recálculo
               </label>
-              <select
+              <select aria-label="Escopo do Recálculo"
                 value={scope}
                 onChange={(e) => setScope(e.target.value as typeof scope)}
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary/30 focus:border-transparent transition-all"
@@ -557,7 +557,7 @@ export function ComplianceSettings() {
               <div className="space-y-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Função *</label>
-                  <input
+                  <input aria-label="Função"
                     type="text"
                     value={requisitoForm.funcao}
                     onChange={(e) => setRequisitoForm((f) => ({ ...f, funcao: e.target.value }))}
@@ -570,7 +570,7 @@ export function ComplianceSettings() {
                   <label className="block text-sm font-medium text-gray-700 mb-1">
                     Tipo de Recurso
                   </label>
-                  <select
+                  <select aria-label="Tipo de Recurso"
                     value={requisitoForm.tipo_recurso}
                     onChange={(e) =>
                       setRequisitoForm((f) => ({
@@ -610,7 +610,7 @@ export function ComplianceSettings() {
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Descrição</label>
-                  <input
+                  <input aria-label="Descrição"
                     type="text"
                     value={requisitoForm.descricao}
                     onChange={(e) => setRequisitoForm((f) => ({ ...f, descricao: e.target.value }))}

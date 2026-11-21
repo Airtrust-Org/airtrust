@@ -2532,7 +2532,7 @@ function EvdCreateForm({
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-[140px_1fr]">
               <div>
                 <label className="mb-1 block text-xs font-medium text-slate-500">Base</label>
-                <input
+                <input aria-label="Base"
                   type="text"
                   value={form.base}
                   onChange={(e) => setForm((prev) => ({ ...prev, base: e.target.value.toUpperCase() }))}
@@ -2542,7 +2542,7 @@ function EvdCreateForm({
               </div>
               <div>
                 <label className="mb-1 block text-xs font-medium text-slate-500">Observações</label>
-                <textarea
+                <textarea aria-label="Observações"
                   value={form.observacoes}
                   onChange={(e) => setForm((prev) => ({ ...prev, observacoes: e.target.value }))}
                   rows={2}
@@ -2635,7 +2635,7 @@ function EvdCreateForm({
                   • SIC {(sicSelecionado.nome_guerra || sicSelecionado.nome).trim()}: {getFrmsReasonLine(frmsSic, frmsReferenceDate)}
                 </p>
               )}
-              <textarea
+              <textarea aria-label="Descreva a decisão operacional sem incluir dados sensíveis do check-in (mín. 10 caracteres)."
                 value={form.justificativa_operacional}
                 onChange={(e) => setForm({ ...form, justificativa_operacional: e.target.value })}
                 rows={3}

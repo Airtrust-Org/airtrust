@@ -310,7 +310,7 @@ export default function ImportarFuncionariosCSVModal({
         </div>
 
         <div className="mb-6">
-          <label className="block text-sm font-medium text-gray-700 mb-2">
+          <label htmlFor="csv-upload-funcs" className="block text-sm font-medium text-gray-700 mb-2">
             Selecione o arquivo CSV
           </label>
           <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-primary transition-colors">

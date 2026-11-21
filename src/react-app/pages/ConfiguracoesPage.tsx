@@ -202,7 +202,7 @@ export default function ConfiguracoesPage() {
                         URL do Webhook
                       </label>
                       <div className="flex gap-2">
-                        <input
+                        <input aria-label="URL do Webhook"
                           type="text"
                           readOnly
                           value="https://api.airtrust.online/api/integracoes/edapp/webhook"

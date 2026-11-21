@@ -174,7 +174,7 @@ export const ListaTab: React.FC<ListaTabProps> = ({ funcionarios = [], loading =
                 className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
                 size={18}
               />
-              <input
+              <input aria-label="Buscar"
                 type="text"
                 placeholder="Nome, matrícula, email..."
                 value={busca}
@@ -187,7 +187,7 @@ export const ListaTab: React.FC<ListaTabProps> = ({ funcionarios = [], loading =
           {/* Filtro Status */}
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-2">Status</label>
-            <select
+            <select aria-label="Status"
               value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value)}
               className="px-3 py-2 border border-slate-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 bg-white"
@@ -203,7 +203,7 @@ export const ListaTab: React.FC<ListaTabProps> = ({ funcionarios = [], loading =
           {/* Filtro Cargo */}
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-2">Cargo</label>
-            <select
+            <select aria-label="Cargo"
               value={cargoFilter}
               onChange={(e) => setCargoFilter(e.target.value)}
               className="px-3 py-2 border border-slate-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 bg-white"

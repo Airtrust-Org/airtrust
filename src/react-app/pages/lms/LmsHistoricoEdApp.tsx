@@ -215,7 +215,7 @@ function LmsHistoricoEdAppContent({ canManage }: { canManage: boolean }) {
             <div className="flex flex-wrap items-center gap-3">
               <div className="relative min-w-[200px] max-w-sm flex-1">
                 <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
-                <input
+                <input aria-label="Buscar por funcionário ou curso..."
                   type="text"
                   value={q}
                   onChange={(e) => handleSearch(e.target.value)}

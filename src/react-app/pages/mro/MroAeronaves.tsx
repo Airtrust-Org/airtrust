@@ -33,7 +33,7 @@ export default function MroAeronaves() {
         />
         <div className="relative mb-6 max-w-md">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-          <input
+          <input aria-label="Buscar por matrícula, modelo ou base..."
             type="text"
             value={search}
             onChange={(e) => setSearch(e.target.value)}

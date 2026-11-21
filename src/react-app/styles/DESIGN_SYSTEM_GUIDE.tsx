@@ -142,13 +142,13 @@ function StatusBadges() {
 function Inputs() {
   return (
     <div className="space-y-4">
-      <input type="text" placeholder="Digite algo..." className={DesignSystemGlobal.inputs.base} />
-      <input
+      <input aria-label="Digite algo..." type="text" placeholder="Digite algo..." className={DesignSystemGlobal.inputs.base} />
+      <input aria-label="Pequeno"
         type="text"
         placeholder="Pequeno"
         className={`${DesignSystemGlobal.inputs.base} ${DesignSystemGlobal.inputs.small}`}
       />
-      <input
+      <input aria-label="Grande"
         type="text"
         placeholder="Grande"
         className={`${DesignSystemGlobal.inputs.base} ${DesignSystemGlobal.inputs.large}`}

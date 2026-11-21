@@ -192,7 +192,7 @@ export default function NovoAgendamento() {
                 <Calendar className="w-4 h-4 inline mr-1" />
                 Data *
               </label>
-              <input
+              <input aria-label="Data"
                 type="date"
                 required
                 value={formData.data_agendamento}
@@ -255,7 +255,7 @@ export default function NovoAgendamento() {
           {/* Observações */}
           <div className="mb-6">
             <label className="block text-sm font-semibold text-gray-700 mb-2">Observações</label>
-            <textarea
+            <textarea aria-label="Observações"
               rows={4}
               value={formData.observacoes}
               onChange={(e) => setFormData({ ...formData, observacoes: e.target.value })}

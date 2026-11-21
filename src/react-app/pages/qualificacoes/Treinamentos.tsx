@@ -116,7 +116,7 @@ const Treinamentos = () => {
           <div className="flex gap-3 flex-1 max-w-2xl">
             <div className="relative flex-1">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
-              <input
+              <input aria-label="Buscar treinamentos..."
                 type="text"
                 placeholder="Buscar treinamentos..."
                 value={filtro}
@@ -124,7 +124,7 @@ const Treinamentos = () => {
                 className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary"
               />
             </div>
-            <input
+            <input aria-label="Filtrar por funcionário..."
               type="text"
               placeholder="Filtrar por funcionário..."
               value={filtroFuncionario}

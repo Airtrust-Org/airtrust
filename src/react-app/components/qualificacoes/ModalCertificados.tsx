@@ -356,14 +356,14 @@ export function ModalCertificados({
                 className="block w-full text-xs text-slate-600 file:mr-2 file:rounded-md file:border-0 file:bg-primary-50 file:px-2 file:py-1 file:text-xs file:font-medium file:text-primary-700 hover:file:bg-primary-100"
               />
               <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-                <input
+                <input aria-label="Data de realização"
                   type="date"
                   placeholder="Data de realização"
                   value={uploadDataRealizacao}
                   onChange={(e) => setUploadDataRealizacao(e.target.value)}
                   className="w-full rounded-md border border-slate-300 px-2 py-1 text-xs focus:border-primary-600 focus:outline-none focus:ring-1 focus:ring-primary-600"
                 />
-                <input
+                <input aria-label="Descrição (opcional)"
                   type="text"
                   placeholder="Descrição (opcional)"
                   value={uploadDescricao}

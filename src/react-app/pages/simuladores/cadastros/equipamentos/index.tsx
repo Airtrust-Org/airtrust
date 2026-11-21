@@ -237,7 +237,7 @@ const Equipamentos: React.FC = () => {
         <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
           <div className="relative">
             <Search className="w-4 h-4 absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
-            <input
+            <input aria-label="Buscar simulador..."
               type="text"
               placeholder="Buscar simulador..."
               value={filtros.busca}

@@ -256,14 +256,14 @@ export default function CrudCategorias({ embedded = false, onBack }: Props = {})
             <div className="p-6 space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">Nome <span className="text-red-500">*</span></label>
-                <Input
+                <Input aria-label="Nome"
                   value={formData.nome}
                   onChange={(e) => setFormData({ ...formData, nome: e.target.value })}
                 />
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">Descrição</label>
-                <textarea
+                <textarea aria-label="Descrição"
                   className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md bg-white dark:bg-slate-800 text-gray-900 dark:text-slate-100"
                   value={formData.descricao}
                   onChange={(e) => setFormData({ ...formData, descricao: e.target.value })}
@@ -273,7 +273,7 @@ export default function CrudCategorias({ embedded = false, onBack }: Props = {})
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">Cor</label>
                 <div className="flex items-center gap-3">
-                  <input
+                  <input aria-label="Cor"
                     type="color"
                     value={formData.cor}
                     onChange={(e) => setFormData({ ...formData, cor: e.target.value })}

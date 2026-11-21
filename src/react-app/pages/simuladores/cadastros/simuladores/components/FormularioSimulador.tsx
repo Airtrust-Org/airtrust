@@ -116,7 +116,7 @@ export default function FormSimulador() {
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Nome do Simulador *
                 </label>
-                <input
+                <input aria-label="Nome do Simulador"
                   type="text"
                   value={dados.nome}
                   onChange={(e) => setDados({ ...dados, nome: e.target.value })}
@@ -129,7 +129,7 @@ export default function FormSimulador() {
               {/* Modelo */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Modelo *</label>
-                <input
+                <input aria-label="Modelo"
                   type="text"
                   value={dados.modelo}
                   onChange={(e) => setDados({ ...dados, modelo: e.target.value })}
@@ -142,7 +142,7 @@ export default function FormSimulador() {
               {/* Tipo */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Tipo *</label>
-                <select
+                <select aria-label="Tipo"
                   value={dados.tipo}
                   onChange={(e) => setDados({ ...dados, tipo: e.target.value })}
                   className="w-full  py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-primary"
@@ -156,7 +156,7 @@ export default function FormSimulador() {
               {/* Fabricante */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Fabricante</label>
-                <input
+                <input aria-label="Fabricante"
                   type="text"
                   value={dados.fabricante}
                   onChange={(e) => setDados({ ...dados, fabricante: e.target.value })}
@@ -170,7 +170,7 @@ export default function FormSimulador() {
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Localização *
                 </label>
-                <input
+                <input aria-label="Localização"
                   type="text"
                   value={dados.localizacao}
                   onChange={(e) => setDados({ ...dados, localizacao: e.target.value })}
@@ -185,7 +185,7 @@ export default function FormSimulador() {
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Capacidade (alunos) *
                 </label>
-                <input
+                <input aria-label="Capacidade (alunos)"
                   type="number"
                   min="1"
                   max="10"
@@ -201,7 +201,7 @@ export default function FormSimulador() {
               {/* Status */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Status</label>
-                <select
+                <select aria-label="Status"
                   value={dados.status}
                   onChange={(e) => setDados({ ...dados, status: e.target.value })}
                   className="w-full  py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-primary"
@@ -216,7 +216,7 @@ export default function FormSimulador() {
             {/* Observações */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Observações</label>
-              <textarea
+              <textarea aria-label="Observações"
                 value={dados.observacoes}
                 onChange={(e) => setDados({ ...dados, observacoes: e.target.value })}
                 rows={4}

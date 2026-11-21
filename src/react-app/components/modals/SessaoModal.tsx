@@ -262,7 +262,7 @@ export default function SessaoModal({ isOpen, onClose, onSalvar, sessaoId }: Ses
               <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
                 Simulador *
               </label>
-              <select
+              <select aria-label="Simulador"
                 value={formData.simulador_id}
                 onChange={(e) => setFormData({ ...formData, simulador_id: e.target.value })}
                 className="w-full rounded-md border border-slate-300 dark:border-slate-700 dark:bg-slate-800 dark:text-white px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
@@ -280,7 +280,7 @@ export default function SessaoModal({ isOpen, onClose, onSalvar, sessaoId }: Ses
               <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
                 Modelo de Sessão *
               </label>
-              <select
+              <select aria-label="Modelo de Sessão"
                 value={formData.modelo_id}
                 onChange={(e) => setFormData({ ...formData, modelo_id: e.target.value })}
                 className="w-full rounded-md border border-slate-300 dark:border-slate-700 dark:bg-slate-800 dark:text-white px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
@@ -301,7 +301,7 @@ export default function SessaoModal({ isOpen, onClose, onSalvar, sessaoId }: Ses
               <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
                 Data *
               </label>
-              <input
+              <input aria-label="Data"
                 type="date"
                 value={formData.data_inicio}
                 onChange={(e) => setFormData({ ...formData, data_inicio: e.target.value })}
@@ -324,7 +324,7 @@ export default function SessaoModal({ isOpen, onClose, onSalvar, sessaoId }: Ses
               <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
                 Duração (min)
               </label>
-              <input
+              <input aria-label="Duração (min)"
                 type="number"
                 value={formData.duracao_minutos}
                 onChange={(e) =>
@@ -340,7 +340,7 @@ export default function SessaoModal({ isOpen, onClose, onSalvar, sessaoId }: Ses
             <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
               Instrutor *
             </label>
-            <select
+            <select aria-label="Instrutor"
               value={formData.instrutor_id}
               onChange={(e) => setFormData({ ...formData, instrutor_id: e.target.value })}
               className="w-full rounded-md border border-slate-300 dark:border-slate-700 dark:bg-slate-800 dark:text-white px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"

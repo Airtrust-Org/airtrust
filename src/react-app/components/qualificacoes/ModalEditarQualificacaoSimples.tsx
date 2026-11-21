@@ -172,7 +172,7 @@ export default function ModalEditarQualificacaoSimples({
             <label className="block text-sm font-semibold text-gray-900 mb-2">
               Data de Realização *
             </label>
-            <input
+            <input aria-label="Data de Realização"
               type="date"
               value={dataRealizacao}
               onChange={(e) => setDataRealizacao(e.target.value)}
@@ -203,7 +203,7 @@ export default function ModalEditarQualificacaoSimples({
           {/* Observações */}
           <div>
             <label className="block text-sm font-semibold text-gray-900 mb-2">Observações</label>
-            <textarea
+            <textarea aria-label="Observações"
               value={observacoes}
               onChange={(e) => setObservacoes(e.target.value)}
               rows={4}

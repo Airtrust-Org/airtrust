@@ -50,7 +50,7 @@ export default function ConfiguracoesFuncoes() {
         <div className={styles.actionBar}>
           <div className={styles.searchBox}>
             <Search size={18} className={styles.searchIcon} />
-            <input
+            <input aria-label="🔍 Pesquisar funções..."
               type="text"
               placeholder="🔍 Pesquisar funções..."
               value={search}

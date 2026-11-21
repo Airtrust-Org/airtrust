@@ -232,7 +232,7 @@ export default function CrudTemplates() {
                 <label className="block text-sm font-medium text-slate-700 mb-1">
                   Nome <span className="text-red-500">*</span>
                 </label>
-                <input
+                <input aria-label="Nome"
                   type="text"
                   value={formData.nome}
                   onChange={(e) => setFormData({ ...formData, nome: e.target.value })}
@@ -242,7 +242,7 @@ export default function CrudTemplates() {
 
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">Tipo</label>
-                <select
+                <select aria-label="Tipo"
                   value={formData.tipo}
                   onChange={(e) =>
                     setFormData({
@@ -260,7 +260,7 @@ export default function CrudTemplates() {
 
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">Descrição</label>
-                <textarea
+                <textarea aria-label="Descrição"
                   value={formData.descricao}
                   onChange={(e) => setFormData({ ...formData, descricao: e.target.value })}
                   className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
@@ -272,7 +272,7 @@ export default function CrudTemplates() {
                 <label className="block text-sm font-medium text-slate-700 mb-1">
                   Conteúdo HTML
                 </label>
-                <textarea
+                <textarea aria-label="Conteúdo HTML"
                   value={formData.conteudo}
                   onChange={(e) => setFormData({ ...formData, conteudo: e.target.value })}
                   className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm font-mono"

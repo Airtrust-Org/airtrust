@@ -98,7 +98,7 @@ export default function Manobras() {
           <div className="mb-6">
             <div className="relative max-w-md">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-neutral-400 h-5 w-5" />
-              <input
+              <input aria-label="Buscar manobras..."
                 type="text"
                 placeholder="Buscar manobras..."
                 value={searchTerm}

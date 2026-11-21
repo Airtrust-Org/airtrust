@@ -396,7 +396,7 @@ export default function ImportarCertificacoes({
             <label className="block text-sm font-medium text-gray-700 mb-2">
               Cole seu conteúdo CSV aqui:
             </label>
-            <textarea
+            <textarea aria-label="Cole seu conteúdo CSV aqui"
               value={csvText}
               onChange={(e) => setCsvText(e.target.value)}
               placeholder={`Exemplo (Formato de Data: DD/MM/AAAA):\n${EXPECTED_FORMAT.headers.join(

@@ -723,7 +723,7 @@ function AbaTiposEvento() {
               >
                 {novoSigla || (normalizeCodigo(novoCodigo) || '?').slice(0, 2)}
               </div>
-              <input
+              <input aria-label="#000000"
                 type="text"
                 value={novoCor}
                 onChange={(e) => {
@@ -799,14 +799,14 @@ function AbaTiposEvento() {
                         {editSigla || row.sigla}
                       </div>
                       <div className="flex flex-1 items-center gap-3">
-                        <input
+                        <input aria-label="Nome do tipo"
                           value={editLabel}
                           onChange={(e) => setEditLabel(e.target.value)}
                           placeholder="Nome do tipo"
                           className="flex-1 rounded-lg border border-slate-200 px-3 py-2 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-blue-300"
                           autoFocus
                         />
-                        <input
+                        <input aria-label="Sigla"
                           value={editSigla}
                           onChange={(e) => setEditSigla(normalizeSigla(e.target.value))}
                           placeholder="Sigla"
@@ -828,7 +828,7 @@ function AbaTiposEvento() {
                           className="h-8 w-8 rounded-lg border border-slate-200 shadow-sm"
                           style={{ backgroundColor: /^#[0-9A-Fa-f]{6}$/.test(editCor || '') ? editCor : corAtual }}
                         />
-                        <input
+                        <input aria-label="#000000"
                           type="text"
                           value={editCor || corAtual}
                           onChange={(e) => {

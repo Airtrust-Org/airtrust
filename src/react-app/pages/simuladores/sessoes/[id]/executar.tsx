@@ -227,7 +227,7 @@ export default function ExecutarSessao() {
 
                   {manobra.executada && (
                     <div className="mt-3">
-                      <textarea
+                      <textarea aria-label="Observações sobre a execução..."
                         value={manobra.observacoes || ''}
                         onChange={(e) =>
                           atualizarManobra(manobra.manobra_id, 'observacoes', e.target.value)
