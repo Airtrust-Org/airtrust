@@ -6,9 +6,9 @@ export const colorTokens = {
   // Primary colors (AirTrust Green)
   primary: {
     50: '#e6f9f1',
-    500: '#10b77f',
-    600: '#0d9e6e',
-    700: '#0a7d57'
+    500: '#0a7a53',
+    600: '#086646',
+    700: '#075c41'
   },
 
   // Neutral colors
