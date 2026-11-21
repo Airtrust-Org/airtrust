@@ -13,6 +13,7 @@ import { toast } from 'sonner';
 import { emitirEventoModulo } from '@/react-app/lib/moduloBus';
 import TimeInput from '@/react-app/components/TimeInput';
 import { normalizeTimeInput } from '@/react-app/lib/time-input';
+import { ModalOverlay } from '@/react-app/components/modals/ModalOverlay';
 
 function getTodayLocalKey(): string {
   const now = new Date();
@@ -242,7 +243,7 @@ export default function FrmsFormJornada({
   };
 
   return (
-    <div className="fixed inset-0 z-modal flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
+    <ModalOverlay className="fixed inset-0 z-modal flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
       <div className="w-full max-w-lg rounded-2xl bg-white shadow-2xl max-h-[calc(100dvh-2rem)] overflow-y-auto">
         {/* Header */}
         <div className="flex items-center justify-between border-b border-gray-100 px-6 py-4">
@@ -462,6 +463,6 @@ export default function FrmsFormJornada({
           </div>
         </form>
       </div>
-    </div>
+    </ModalOverlay>
   );
 }

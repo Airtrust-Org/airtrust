@@ -5,6 +5,7 @@ import TimeInput from '@/react-app/components/TimeInput';
 import { normalizeTimeInput } from '@/react-app/lib/time-input';
 
 import { X, Save } from 'lucide-react';
+import { ModalOverlay } from '@/react-app/components/modals/ModalOverlay';
 
 const isValidTimeValue = (value: string | null): boolean => {
   if (!value) return false;
@@ -106,7 +107,7 @@ export default function FormSessao({ isOpen, onClose, onSuccess }: Props) {
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+    <ModalOverlay className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
         {/* Header */}
         <div className="flex items-center justify-between p-6 border-b border-gray-200">
@@ -297,6 +298,6 @@ export default function FormSessao({ isOpen, onClose, onSuccess }: Props) {
           </button>
         </div>
       </div>
-    </div>
+    </ModalOverlay>
   );
 }

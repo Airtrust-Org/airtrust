@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { API_BASE_URL, ensureValidAccessToken } from '../../config/api';
+import { ModalOverlay } from '@/react-app/components/modals/ModalOverlay';
 
 // Helper para resolver URL do logo (suporta data URLs e paths relativos /api/assets/...)
 function getLogoUrl(logoUrl: string | null | undefined): string | undefined {
@@ -940,7 +941,7 @@ export function EmpresaForm({
 
       {/* MODAL TEMPLATE - Expandido para tela cheia */}
       {showTemplateEditor && (
-        <div className="fixed inset-0 bg-black/70 z-[60] flex items-center justify-center p-2">
+        <ModalOverlay className="fixed inset-0 bg-black/70 z-[60] flex items-center justify-center p-2">
           <div className="bg-white rounded-xl shadow-2xl w-full h-full max-w-[98vw] max-h-[98vh] flex flex-col">
             <div className="p-4 border-b border-gray-100 flex justify-between items-center shrink-0">
               <div>
@@ -1073,7 +1074,7 @@ export function EmpresaForm({
               </button>
             </div>
           </div>
-        </div>
+        </ModalOverlay>
       )}
     </div>
   );

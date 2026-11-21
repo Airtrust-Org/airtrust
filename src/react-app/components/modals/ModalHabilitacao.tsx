@@ -4,6 +4,7 @@ import { toast } from 'sonner';
 import { API_BASE_URL } from '@/react-app/config/api';
 import { X } from 'lucide-react';
 import { tryAddCalendarMonthsClamped } from '@/shared/utils/validade-meses';
+import { ModalOverlay } from '@/react-app/components/modals/ModalOverlay';
 
 interface Props {
   isOpen: boolean;
@@ -258,7 +259,7 @@ export function ModalHabilitacao({ isOpen, onClose, onSave, habilitacao }: Props
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-modal">
+    <ModalOverlay className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-modal">
       <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
         <div className="flex justify-between items-center p-6 border-b">
           <h2 className="text-xl font-bold">
@@ -424,6 +425,6 @@ export function ModalHabilitacao({ isOpen, onClose, onSave, habilitacao }: Props
           </div>
         </form>
       </div>
-    </div>
+    </ModalOverlay>
   );
 }

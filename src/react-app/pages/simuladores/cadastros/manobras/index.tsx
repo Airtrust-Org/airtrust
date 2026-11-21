@@ -10,6 +10,7 @@ import { Input } from '@/react-app/components/UI/Input';
 import { ArrowLeft, Plus, Trash2, Upload, Inbox } from 'lucide-react';
 import { confirmDialog } from '@/react-app/utils/confirmDialog';
 import { RowActionsMenu } from '@/react-app/components/UI/RowActionsMenu';
+import { ModalOverlay } from '@/react-app/components/modals/ModalOverlay';
 
 interface Manobra {
   id: number;
@@ -435,7 +436,7 @@ export default function CrudManobras({ embedded = false, onBack }: Props = {}) {
 
       {/* Modal */}
       {showModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 animate-fade-in" onClick={fecharModal}>
+        <ModalOverlay className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 animate-fade-in" onClick={fecharModal}>
           <div className="bg-white dark:bg-slate-900 rounded-lg max-w-lg w-full animate-scale-in max-h-[calc(100dvh-2rem)] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
             <div className="p-6 border-b border-gray-200 dark:border-slate-700">
               <h3 className="text-lg font-semibold text-gray-900 dark:text-slate-100">{editando ? 'Editar' : 'Nova'} Manobra</h3>
@@ -526,7 +527,7 @@ export default function CrudManobras({ embedded = false, onBack }: Props = {}) {
               </Button>
             </div>
           </div>
-        </div>
+        </ModalOverlay>
       )}
     </div>
   );

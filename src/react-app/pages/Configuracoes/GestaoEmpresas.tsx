@@ -20,6 +20,7 @@ import { useLanguage } from '@/react-app/i18n/useLanguage';
 import { SettingsSectionIntro } from './components/SettingsSectionIntro';
 import { BombeirosFrmsDemo } from './BombeirosFrmsDemo';
 import { mayPreviewBombeirosFrmsDemo } from './bombeirosFrmsDemoData';
+import { ModalOverlay } from '@/react-app/components/modals/ModalOverlay';
 
 interface Empresa {
   id: number;
@@ -461,7 +462,7 @@ export function GestaoEmpresas() {
       )}
 
       {showModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4">
+        <ModalOverlay className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4">
           <div className="flex h-[90vh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl">
             <div className="flex items-center justify-between border-b border-slate-200 px-6 py-5">
               <div>
@@ -498,11 +499,11 @@ export function GestaoEmpresas() {
               />
             </div>
           </div>
-        </div>
+        </ModalOverlay>
       )}
 
       {confirmDelete && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4">
+        <ModalOverlay className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4">
           <div className="w-full max-w-sm rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl">
             <div className="text-center">
               <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-red-100">
@@ -535,7 +536,7 @@ export function GestaoEmpresas() {
               </button>
             </div>
           </div>
-        </div>
+        </ModalOverlay>
       )}
     </div>
   );

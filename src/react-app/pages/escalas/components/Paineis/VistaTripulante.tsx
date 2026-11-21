@@ -13,6 +13,7 @@ import type { EscalaEvento, EscalaTripulacao } from '../../hooks/queries/useEsca
 import { parseISO, eachDayOfInterval, format, differenceInDays } from 'date-fns';
 import { normalizeTipoCodigo } from '../../constants/tiposEvento';
 import { useTiposEventoResolvidos } from '../../hooks/useTiposEventoResolvidos';
+import { ModalOverlay } from '@/react-app/components/modals/ModalOverlay';
 
 interface VistaTripulanteProps {
   escalaId: string;
@@ -131,7 +132,7 @@ export default function VistaTripulante({
   };
 
   return (
-    <div className="fixed inset-0 z-modal bg-black/40 flex items-center justify-center p-4">
+    <ModalOverlay className="fixed inset-0 z-modal bg-black/40 flex items-center justify-center p-4">
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] flex flex-col overflow-hidden">
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
@@ -285,6 +286,6 @@ export default function VistaTripulante({
           )}
         </div>
       </div>
-    </div>
+    </ModalOverlay>
   );
 }

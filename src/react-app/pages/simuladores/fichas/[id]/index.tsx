@@ -61,6 +61,7 @@ import AssinaturaModal from '@/react-app/components/AssinaturaModal';
 import ModalNotechsReferencia from '../components/ModalNotechsReferencia';
 import { NOTECHS_ORDEM_BASE, splitManobrasNotechs } from '../../../../lib/simuladores/notechs';
 import { NOTECHS_SCORE_OPTIONS, notechsHistoryIdentity } from '@/shared/simuladores/notechs-scoring';
+import { ModalOverlay } from '@/react-app/components/modals/ModalOverlay';
 
 interface ManobraAvaliacao {
   id: number;
@@ -2948,7 +2949,7 @@ export default function FichaDetalhe() {
         )}
 
         {modalSolicitarEdicao && ficha && (
-          <div className="fixed inset-0 z-modal flex items-center justify-center bg-slate-900/50 p-4">
+          <ModalOverlay className="fixed inset-0 z-modal flex items-center justify-center bg-slate-900/50 p-4">
             <div className="max-h-[90vh] w-full max-w-5xl overflow-hidden rounded-2xl bg-white shadow-2xl">
               <div className="border-b border-slate-200 px-6 py-4">
                 <div className="flex items-start justify-between gap-4">
@@ -3058,7 +3059,7 @@ export default function FichaDetalhe() {
                 </button>
               </div>
             </div>
-          </div>
+          </ModalOverlay>
         )}
 
         {/* Modal de Assinatura */}

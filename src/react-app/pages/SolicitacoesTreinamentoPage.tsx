@@ -35,6 +35,7 @@ import {
   type TipoTreinamentoType,
   type PrioridadeType,
 } from '@/react-app/hooks/useSolicitacoesTreinamento';
+import { ModalOverlay } from '@/react-app/components/modals/ModalOverlay';
 
 // ── helpers de estilo ────────────────────────────────────────────────────────
 
@@ -151,7 +152,7 @@ function CriarModal({ onClose, selfId, canAdmin }: CriarModalProps) {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+    <ModalOverlay className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
       <div
         className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-xl max-h-[calc(100dvh-2rem)] overflow-y-auto"
         data-testid="solicitacao-criar-modal"
@@ -300,7 +301,7 @@ function CriarModal({ onClose, selfId, canAdmin }: CriarModalProps) {
           </div>
         </form>
       </div>
-    </div>
+    </ModalOverlay>
   );
 }
 
@@ -341,7 +342,7 @@ function DetalheModal({ item, canAdmin, onClose }: DetalheModalProps) {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+    <ModalOverlay className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
       <div
         className="w-full max-w-xl rounded-2xl bg-white p-6 shadow-xl max-h-[calc(100dvh-2rem)] overflow-y-auto"
         data-testid="solicitacao-detalhe-modal"
@@ -548,7 +549,7 @@ function DetalheModal({ item, canAdmin, onClose }: DetalheModalProps) {
           </Button>
         </div>
       </div>
-    </div>
+    </ModalOverlay>
   );
 }
 

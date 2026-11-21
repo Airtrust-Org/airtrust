@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { X } from 'lucide-react';
 import { fetchWithAuth } from '@/react-app/config/api';
+import { ModalOverlay } from '@/react-app/components/modals/ModalOverlay';
 
 export type RequirementComplianceStatus =
   | 'CONFORME'
@@ -99,7 +100,7 @@ export function TrainingComplianceRequirementDrilldown({
   });
 
   return (
-    <div className="fixed inset-0 z-[100] flex justify-end bg-slate-950/35">
+    <ModalOverlay className="fixed inset-0 z-[100] flex justify-end bg-slate-950/35">
       <button
         type="button"
         aria-label="Fechar detalhamento"
@@ -232,6 +233,6 @@ export function TrainingComplianceRequirementDrilldown({
           )}
         </div>
       </section>
-    </div>
+    </ModalOverlay>
   );
 }

@@ -3,6 +3,7 @@ import { X } from 'lucide-react';
 import { API_BASE_URL, getAccessToken } from '@/react-app/config/api';
 import { showToast } from '@/react-app/utils/toast';
 import { tryAddCalendarMonthsClamped } from '@/shared/utils/validade-meses';
+import { ModalOverlay } from '@/react-app/components/modals/ModalOverlay';
 
 type HistoricoQualificacao = {
   id: number;
@@ -129,7 +130,7 @@ export default function ModalEditarQualificacaoSimples({
   if (!aberto || !registro) return null;
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 backdrop-blur-sm">
+    <ModalOverlay className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 backdrop-blur-sm">
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl mx-4 max-h-[90vh] overflow-auto">
         {/* Header */}
         <div className="flex items-center justify-between p-6 border-b border-gray-200">
@@ -231,6 +232,6 @@ export default function ModalEditarQualificacaoSimples({
           </div>
         </form>
       </div>
-    </div>
+    </ModalOverlay>
   );
 }

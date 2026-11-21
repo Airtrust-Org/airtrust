@@ -25,6 +25,7 @@ import { sanitizePptxSlideHtml } from './pptxSanitization';
 import { observePptxSlideLayout } from './pptxViewport';
 import { PptxPdfCanvas, openPptxPdf, type PptxPdfDocument } from './PptxPdfCanvas';
 import { confirmDialog } from '@/react-app/utils/confirmDialog';
+import { ModalOverlay } from '@/react-app/components/modals/ModalOverlay';
 
 type PptxEvidence = {
   total_slides: number;
@@ -571,7 +572,7 @@ export default function LmsPlayerPptx() {
 
         {/* Office preview overlay (optional) */}
         {previewOpen && viewerSession && (
-          <div className="fixed inset-0 z-50 flex flex-col bg-slate-950">
+          <ModalOverlay className="fixed inset-0 z-50 flex flex-col bg-slate-950">
             <div className="flex items-center justify-between border-b border-white/10 bg-slate-900 px-4 py-3">
               <span className="text-sm text-white/80">
                 Visualização original (PowerPoint Online)
@@ -595,7 +596,7 @@ export default function LmsPlayerPptx() {
               allow="fullscreen"
               onLoad={() => setIframeLoaded(true)}
             />
-          </div>
+          </ModalOverlay>
         )}
 
         {!loadingPptx && !loadError && slides && slideHtml && (

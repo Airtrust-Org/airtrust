@@ -9,6 +9,7 @@ import { API_BASE_URL, getAccessToken } from '@/react-app/config/api';
 import { SimuladoresCard, EmptyState, Badge } from '../../components/SimuladoresLayout';
 import { Plus, FileText } from 'lucide-react';
 import { confirmDialog } from '@/react-app/utils/confirmDialog';
+import { ModalOverlay } from '@/react-app/components/modals/ModalOverlay';
 
 interface Template {
   id: number;
@@ -220,7 +221,7 @@ export default function CrudTemplates() {
 
       {/* Modal */}
       {modalAberto && (
-        <div className="fixed inset-0 z-modal flex items-center justify-center bg-black/50">
+        <ModalOverlay className="fixed inset-0 z-modal flex items-center justify-center bg-black/50">
           <div className="w-full max-w-2xl rounded-lg bg-white p-6 shadow-xl max-h-[calc(100dvh-2rem)] overflow-y-auto">
             <h3 className="text-lg font-bold text-slate-900 mb-4">
               {templateEditando ? 'Editar Template' : 'Novo Template'}
@@ -298,7 +299,7 @@ export default function CrudTemplates() {
               </button>
             </div>
           </div>
-        </div>
+        </ModalOverlay>
       )}
     </div>
   );

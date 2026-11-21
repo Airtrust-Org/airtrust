@@ -16,6 +16,7 @@ import {
   buildFichaAvaliacaoScaleHtml,
   getFichaAvaliacaoScaleCss,
 } from '@/react-app/lib/simuladores/avaliacaoScale';
+import { ModalOverlay } from '@/react-app/components/modals/ModalOverlay';
 
 interface PDFData {
   ficha: any;
@@ -567,7 +568,7 @@ export const PDFGeneratorNativo: React.FC<PDFGeneratorProps> = ({ fichaUuid, onP
       </div>
 
       {showPreview && pdfData && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+        <ModalOverlay className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg max-w-4xl max-h-[90vh] overflow-auto p-6">
             <div className="flex justify-between items-center mb-4">
               <h3 className="text-lg font-bold">Preview da Ficha</h3>
@@ -585,7 +586,7 @@ export const PDFGeneratorNativo: React.FC<PDFGeneratorProps> = ({ fichaUuid, onP
               style={{ transform: 'scale(0.8)', transformOrigin: 'top left' }}
             />
           </div>
-        </div>
+        </ModalOverlay>
       )}
     </div>
   );

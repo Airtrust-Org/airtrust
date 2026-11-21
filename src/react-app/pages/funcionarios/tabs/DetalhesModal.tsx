@@ -4,6 +4,7 @@ import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { Card, CardContent, CardHeader, CardTitle } from '@/react-app/components/UI';
 import Button from '@/react-app/components/Button';
+import { ModalOverlay } from '@/react-app/components/modals/ModalOverlay';
 
 interface Funcionario {
   id: number;
@@ -46,7 +47,7 @@ export const DetalhesModal: React.FC<DetalhesModalProps> = ({ funcionario, onClo
     (funcionario as unknown as { setor?: string }).setor || funcionario.departamento;
 
   return (
-    <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+    <ModalOverlay className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
       <div className="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
         {/* Header Sticky */}
         <div className="sticky top-0 bg-white border-b border-slate-200 p-6 flex items-center justify-between z-10">
@@ -251,7 +252,7 @@ export const DetalhesModal: React.FC<DetalhesModalProps> = ({ funcionario, onClo
           </div>
         </div>
       </div>
-    </div>
+    </ModalOverlay>
   );
 };
 

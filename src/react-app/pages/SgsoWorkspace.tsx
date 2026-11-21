@@ -9,6 +9,7 @@ import AppLayout from '../components/AppLayout';
 import PageHeader from '../components/PageHeader';
 import { useAuth } from '../hooks/useAuth';
 import { API_BASE_URL, getAccessToken, fetchWithAuth } from '../config/api';
+import { ModalOverlay } from '@/react-app/components/modals/ModalOverlay';
 
 // ─────────────────────────────────────────────────────────────
 // Types
@@ -1060,7 +1061,7 @@ export default function Sgso() {
       </div>
 
       {showModalRelato && (
-        <div className="fixed inset-0 z-modal flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/40">
+        <ModalOverlay className="fixed inset-0 z-modal flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/40">
           <div className="bg-white w-full sm:max-w-2xl rounded-t-2xl sm:rounded-2xl shadow-xl max-h-[95vh] flex flex-col">
             <div className="flex items-center justify-between px-5 py-4 border-b border-slate-200"><h2 className="text-base font-semibold text-slate-900">Novo Relato de Segurança</h2><button onClick={() => setShowModalRelato(false)} className="text-slate-400 hover:text-slate-600"><svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg></button></div>
             <div className="overflow-y-auto p-5 space-y-4 flex-1">
@@ -1073,11 +1074,11 @@ export default function Sgso() {
             </div>
             <div className="flex items-center justify-end gap-3 px-5 py-4 border-t border-slate-200"><button onClick={() => setShowModalRelato(false)} className="px-4 py-2 text-sm text-slate-600 hover:text-slate-900">Cancelar</button><button onClick={submitRelato} disabled={submitting} className="px-5 py-2 bg-primary text-white text-sm font-medium rounded-lg hover:bg-primary/90 disabled:opacity-50 transition-colors">{submitting ? 'Enviando...' : 'Enviar Relato'}</button></div>
           </div>
-        </div>
+        </ModalOverlay>
       )}
 
       {showModalAuditoria && (
-        <div className="fixed inset-0 z-modal flex items-center justify-center p-4 bg-black/40">
+        <ModalOverlay className="fixed inset-0 z-modal flex items-center justify-center p-4 bg-black/40">
           <div className="bg-white w-full max-w-lg rounded-2xl shadow-xl">
             <div className="flex items-center justify-between px-5 py-4 border-b border-slate-200"><h2 className="text-base font-semibold text-slate-900">Nova Auditoria</h2><button onClick={() => setShowModalAuditoria(false)} className="text-slate-400 hover:text-slate-600"><svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg></button></div>
             <div className="p-5 space-y-4">
@@ -1089,7 +1090,7 @@ export default function Sgso() {
             </div>
             <div className="flex items-center justify-end gap-3 px-5 py-4 border-t border-slate-200"><button onClick={() => setShowModalAuditoria(false)} className="px-4 py-2 text-sm text-slate-600">Cancelar</button><button onClick={submitAuditoria} disabled={submitting} className="px-5 py-2 bg-primary text-white text-sm font-medium rounded-lg hover:bg-primary/90 disabled:opacity-50 transition-colors">{submitting ? 'Salvando...' : 'Criar Auditoria'}</button></div>
           </div>
-        </div>
+        </ModalOverlay>
       )}
     </AppLayout>
   );

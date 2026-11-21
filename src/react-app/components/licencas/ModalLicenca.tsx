@@ -13,6 +13,7 @@ import { apiJson, frontendErrorMessage } from '@/react-app/lib/api-contract';
 import React, { useState, useEffect } from 'react';
 import { X } from 'lucide-react';
 import { API_BASE_URL } from '@/react-app/config/api';
+import { ModalOverlay } from '@/react-app/components/modals/ModalOverlay';
 
 type ModalLicencaProps = {
   mode: 'create' | 'edit';
@@ -199,7 +200,7 @@ export default function ModalLicenca({
   if (!aberto) return null;
 
   return (
-    <div className="fixed inset-0 z-modal flex items-center justify-center bg-black bg-opacity-50 p-4">
+    <ModalOverlay className="fixed inset-0 z-modal flex items-center justify-center bg-black bg-opacity-50 p-4">
       <div className="w-full max-w-2xl rounded-2xl bg-white p-6 shadow-xl max-h-[calc(100dvh-2rem)] overflow-y-auto">
         {/* Header */}
         <div className="mb-6 flex items-center justify-between">
@@ -340,6 +341,6 @@ export default function ModalLicenca({
           </div>
         </form>
       </div>
-    </div>
+    </ModalOverlay>
   );
 }

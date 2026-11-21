@@ -7,6 +7,7 @@
 import { useRef, useState, useEffect } from 'react';
 import { X, PenTool } from 'lucide-react';
 import { toast } from 'sonner';
+import { ModalOverlay } from '@/react-app/components/modals/ModalOverlay';
 
 interface AssinaturaModalProps {
   isOpen: boolean;
@@ -144,7 +145,7 @@ export default function AssinaturaModal({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-modal flex items-center justify-center bg-black/60 p-4 overflow-y-auto">
+    <ModalOverlay className="fixed inset-0 z-modal flex items-center justify-center bg-black/60 p-4 overflow-y-auto">
       <div className="w-full max-w-2xl rounded-xl bg-white shadow-2xl my-8 max-h-[90vh] flex flex-col">
         {/* Header */}
         <div className="flex items-center justify-between border-b border-slate-200 bg-gradient-to-r from-blue-600 to-blue-700 px-6 py-4 rounded-t-xl">
@@ -317,6 +318,6 @@ export default function AssinaturaModal({
           </div>
         </div>
       </div>
-    </div>
+    </ModalOverlay>
   );
 }

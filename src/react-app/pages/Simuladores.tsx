@@ -22,6 +22,7 @@ import PageHeader from '@/react-app/components/PageHeader';
 import { Button as UIButton } from '@/react-app/components/UI';
 import { importWithRetry, lazyWithRetry } from '@/react-app/utils/lazyWithRetry';
 import { useGuiasInstrutorPermissions } from '@/react-app/hooks/guias-instrutor/useGuiasInstrutorPermissions';
+import { ModalOverlay } from '@/react-app/components/modals/ModalOverlay';
 
 const ModalNovaSessao = lazyWithRetry(
   () => import('@/react-app/components/modals/ModalNovaSessao'),
@@ -204,9 +205,9 @@ export default function Simuladores() {
         {modalNovaSessaoOpen && (
           <Suspense
             fallback={
-              <div className="fixed inset-0 z-modal flex items-center justify-center bg-black/30">
+              <ModalOverlay className="fixed inset-0 z-modal flex items-center justify-center bg-black/30">
                 <Loader className="w-8 h-8 animate-spin text-white" />
-              </div>
+              </ModalOverlay>
             }
           >
             <ModalNovaSessao

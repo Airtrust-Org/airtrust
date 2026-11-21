@@ -310,7 +310,7 @@ export default function ModalAdicionarTripulacao({
 
   useEffect(() => {
     if (!alocacaoSelecionada) return;
-    setFuncao(alocacaoSelecionada.funcao);
+    if (alocacaoSelecionada.funcao) setFuncao(alocacaoSelecionada.funcao);
     setDataInicio(alocacaoSelecionada.data_inicio);
     setDataFim(alocacaoSelecionada.data_fim);
     setObservacoes(alocacaoSelecionada.observacoes || '');

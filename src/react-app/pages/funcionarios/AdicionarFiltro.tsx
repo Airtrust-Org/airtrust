@@ -1,4 +1,5 @@
 import { X, Plus } from 'lucide-react';
+import { ModalOverlay } from '@/react-app/components/modals/ModalOverlay';
 
 interface Props {
   onClose: () => void;
@@ -21,7 +22,7 @@ export default function AdicionarFiltro({ onClose, filtrosAtivos, onAdicionar }:
   const filtrosDisponiveis = FILTROS_DISPONIVEIS.filter((f) => !filtrosAtivos.includes(f.id));
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+    <ModalOverlay className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
       <div className="bg-white rounded-lg w-full max-w-md">
         {/* Header */}
         <div className="flex items-center justify-between p-6 border-b">
@@ -62,6 +63,6 @@ export default function AdicionarFiltro({ onClose, filtrosAtivos, onAdicionar }:
           </button>
         </div>
       </div>
-    </div>
+    </ModalOverlay>
   );
 }

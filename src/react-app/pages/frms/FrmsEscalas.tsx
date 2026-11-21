@@ -24,6 +24,7 @@ import { useApi } from '@/react-app/hooks/useApi';
 import { useFrmsEscalas, useFrmsMutation } from '@/react-app/hooks/useFrms';
 import type { FrmsEscalaRow } from '@/react-app/hooks/useFrms';
 import { toast } from 'sonner';
+import { ModalOverlay } from '@/react-app/components/modals/ModalOverlay';
 
 function getTodayLocalKey(): string {
   const now = new Date();
@@ -127,7 +128,7 @@ function EscalaFormModal({ tripulanteId, escala, onClose, onSaved }: FormModalPr
   };
 
   return (
-    <div className="fixed inset-0 z-modal flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
+    <ModalOverlay className="fixed inset-0 z-modal flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
       <div className="w-full max-w-lg rounded-2xl bg-white shadow-2xl max-h-[calc(100dvh-2rem)] overflow-y-auto">
         <div className="flex items-center justify-between border-b border-gray-100 px-6 py-4">
           <h2 className="text-base font-bold text-gray-900">
@@ -263,7 +264,7 @@ function EscalaFormModal({ tripulanteId, escala, onClose, onSaved }: FormModalPr
           </div>
         </form>
       </div>
-    </div>
+    </ModalOverlay>
   );
 }
 

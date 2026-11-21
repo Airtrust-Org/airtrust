@@ -91,6 +91,7 @@ import {
   useLmsCourseCompliance,
   type ComplianceRow,
 } from './LmsCourseComplianceMetrics';
+import { ModalOverlay } from '@/react-app/components/modals/ModalOverlay';
 
 // ── Types & helpers ─────────────────────────────────────────────────────────
 
@@ -886,7 +887,7 @@ function CourseDrawer({
   };
 
   return createPortal(
-    <div
+    <ModalOverlay
       className="fixed inset-0 z-50 bg-slate-950/45 backdrop-blur-[2px] animate-fade-in"
       onClick={safeClose}
     >
@@ -1569,7 +1570,7 @@ function CourseDrawer({
           </form>
         </div>
       </div>
-    </div>,
+    </ModalOverlay>,
     document.body,
   );
 }

@@ -42,6 +42,7 @@ import SharedSessionForm, {
   type SharedSessionFormState,
   type SharedSessionStep,
 } from './SharedSessionForm';
+import { ModalOverlay } from '@/react-app/components/modals/ModalOverlay';
 
 interface ModeloAeronave {
   id: number;
@@ -1811,7 +1812,7 @@ export default function ModalNovaSessao({
         : 'Criar Sessão';
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-modal p-4">
+    <ModalOverlay className="fixed inset-0 bg-black/50 flex items-center justify-center z-modal p-4">
       <AlertModal
         isOpen={conflitoModal.isOpen}
         onClose={() => setConflitoModal({ isOpen: false, message: '' })}
@@ -2528,6 +2529,6 @@ export default function ModalNovaSessao({
         title="Excluir Sessão"
         message="Tem certeza que deseja excluir esta sessão de treinamento? Esta ação não pode ser desfeita."
       />
-    </div>
+    </ModalOverlay>
   );
 }

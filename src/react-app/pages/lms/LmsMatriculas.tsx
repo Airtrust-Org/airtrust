@@ -50,6 +50,7 @@ import {
   LmsEnrollmentAlertModal,
 } from './LmsEnrollmentAlertModal';
 import { shouldShowLmsEnrollmentDeadline } from './lmsEnrollmentDeadline';
+import { ModalOverlay } from '@/react-app/components/modals/ModalOverlay';
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -332,7 +333,7 @@ export function ModalMatricular({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 animate-fade-in dark:bg-black/70" onClick={onClose}>
+    <ModalOverlay className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 animate-fade-in dark:bg-black/70" onClick={onClose}>
       <div className="flex w-full max-w-xl flex-col rounded-xl bg-white shadow-2xl max-h-[90vh] animate-scale-in dark:bg-slate-900" onClick={(e) => e.stopPropagation()}>
         {/* Header */}
         <div className="flex items-center justify-between border-b border-slate-100 px-6 py-4 dark:border-slate-800">
@@ -526,7 +527,7 @@ export function ModalMatricular({
           </div>
         </div>
       </div>
-    </div>
+    </ModalOverlay>
   );
 }
 

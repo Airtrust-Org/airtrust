@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { X, Eye, EyeOff, GripVertical } from 'lucide-react';
+import { ModalOverlay } from '@/react-app/components/modals/ModalOverlay';
 
 interface Coluna {
   id: string;
@@ -112,7 +113,7 @@ export default function ConfigurarColunas({ onClose, onSalvar }: Props) {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+    <ModalOverlay className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
       <div className="w-full max-w-lg rounded-lg border border-slate-200 bg-white text-slate-900 shadow-xl dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100">
         <div className="flex items-center justify-between border-b border-slate-200 p-6 dark:border-slate-700">
           <div>
@@ -188,6 +189,6 @@ export default function ConfigurarColunas({ onClose, onSalvar }: Props) {
           </button>
         </div>
       </div>
-    </div>
+    </ModalOverlay>
   );
 }

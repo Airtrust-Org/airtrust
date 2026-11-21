@@ -16,6 +16,7 @@ import { API_BASE_URL, getAccessToken } from '@/react-app/config/api';
 import TimeInput from '@/react-app/components/TimeInput';
 import { normalizeTimeInput } from '@/react-app/lib/time-input';
 import { showAlertDialog } from '@/react-app/utils/confirmDialog';
+import { ModalOverlay } from '@/react-app/components/modals/ModalOverlay';
 
 interface Simulador {
   id: number;
@@ -238,7 +239,7 @@ export default function SessaoModal({ isOpen, onClose, onSalvar, sessaoId }: Ses
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-modal flex items-center justify-center bg-black/50">
+    <ModalOverlay className="fixed inset-0 z-modal flex items-center justify-center bg-black/50">
       <div className="bg-white dark:bg-slate-900 rounded-lg shadow-xl w-full max-w-3xl max-h-[90vh] overflow-hidden flex flex-col">
         {/* Header */}
         <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 px-6 py-4">
@@ -438,6 +439,6 @@ export default function SessaoModal({ isOpen, onClose, onSalvar, sessaoId }: Ses
           </button>
         </div>
       </div>
-    </div>
+    </ModalOverlay>
   );
 }

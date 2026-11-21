@@ -4,6 +4,7 @@ import { parseISO, format, isValid } from 'date-fns';
 import { API_BASE_URL, getAccessToken } from '@/react-app/config/api';
 import { converterParaFormatoHTML, getDataHojeHTML, validarData } from '@/react-app/utils/dateUtils';
 import { emitirEventoModulo } from '@/react-app/lib/moduloBus';
+import { ModalOverlay } from '@/react-app/components/modals/ModalOverlay';
 
 interface ModalRenovarQualificacaoProps {
   isOpen: boolean;
@@ -157,7 +158,7 @@ export function ModalRenovarQualificacao({
   };
 
   return (
-    <div className="fixed inset-0 z-modal flex items-center justify-center bg-black/50 p-4">
+    <ModalOverlay className="fixed inset-0 z-modal flex items-center justify-center bg-black/50 p-4">
       <div className="bg-white rounded-lg shadow-xl w-full max-w-md max-h-[calc(100dvh-2rem)] overflow-hidden flex flex-col">
         <div className="flex items-center justify-between p-6 border-b flex-shrink-0">
           <div className="flex items-center gap-3">
@@ -276,6 +277,6 @@ export function ModalRenovarQualificacao({
           </div>
         </div>
       </div>
-    </div>
+    </ModalOverlay>
   );
 }

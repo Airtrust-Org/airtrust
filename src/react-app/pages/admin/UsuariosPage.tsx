@@ -66,6 +66,7 @@ import {
   perfilUsuarioLabel as perfilLabel,
   perfisUsuariosSelecionaveis,
 } from './perfis-usuarios';
+import { ModalOverlay } from '@/react-app/components/modals/ModalOverlay';
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 
@@ -965,7 +966,7 @@ function ModalCriarUsuario({
   };
 
   return (
-    <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+    <ModalOverlay className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md">
         <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200">
           <h2 className="text-lg font-semibold text-slate-900 flex items-center gap-2">
@@ -1101,7 +1102,7 @@ function ModalCriarUsuario({
           </div>
         </form>
       </div>
-    </div>
+    </ModalOverlay>
   );
 }
 
@@ -1229,7 +1230,7 @@ function ModalEditarUsuario({
   };
 
   return (
-    <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+    <ModalOverlay className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md">
         <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200">
           <h2 className="text-lg font-semibold text-slate-900 flex items-center gap-2">
@@ -1335,7 +1336,7 @@ function ModalEditarUsuario({
           </div>
         </form>
       </div>
-    </div>
+    </ModalOverlay>
   );
 }
 
@@ -1438,7 +1439,7 @@ function ModalPermissoes({
   const activeGrupo = PERMISSOES_DISPONIVEIS.find((g) => g.grupo === activeTab);
 
   return (
-    <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+    <ModalOverlay className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl flex flex-col max-h-[90vh]">
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 shrink-0">
@@ -1628,7 +1629,7 @@ function ModalPermissoes({
           </button>
         </div>
       </div>
-    </div>
+    </ModalOverlay>
   );
 }
 
@@ -1881,7 +1882,7 @@ function ModalPerfis({ onClose }: { onClose: () => void }) {
   const hasDirty = perfis.some((p) => p.dirty);
 
   return (
-    <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+    <ModalOverlay className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl flex flex-col max-h-[90vh]">
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 shrink-0">
@@ -2177,7 +2178,7 @@ function ModalPerfis({ onClose }: { onClose: () => void }) {
           </div>
         </div>
       </div>
-    </div>
+    </ModalOverlay>
   );
 }
 
@@ -2199,7 +2200,7 @@ function ModalLinkConvite({
   };
 
   return (
-    <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+    <ModalOverlay className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6">
         <div className="flex items-center gap-3 mb-4">
           <div className="w-10 h-10 rounded-full bg-emerald-100 flex items-center justify-center">
@@ -2241,7 +2242,7 @@ function ModalLinkConvite({
           </button>
         </div>
       </div>
-    </div>
+    </ModalOverlay>
   );
 }
 
@@ -2293,7 +2294,7 @@ function ModalResetSenha({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+    <ModalOverlay className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md">
         <div className="flex items-center justify-between border-b border-slate-100 px-6 py-4">
           <div>
@@ -2360,6 +2361,6 @@ function ModalResetSenha({
           </div>
         </form>
       </div>
-    </div>
+    </ModalOverlay>
   );
 }

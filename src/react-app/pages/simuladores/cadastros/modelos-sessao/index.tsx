@@ -12,6 +12,7 @@ import {
   filterCompatibleChecks,
 } from '@/react-app/utils/checkCompatibility';
 import { isQualificationCheck } from '@/react-app/utils/isQualificationCheck';
+import { ModalOverlay } from '@/react-app/components/modals/ModalOverlay';
 
 interface TipoSessao {
   id: number;
@@ -902,7 +903,7 @@ export default function ModelosSessaoPage({ embedded = false, onBack }: ModelosS
 
       {/* Modal Principal */}
       {modalAberto && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 animate-fade-in" onClick={() => setModalAberto(false)}>
+        <ModalOverlay className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 animate-fade-in" onClick={() => setModalAberto(false)}>
           <div className="bg-white dark:bg-slate-900 rounded-lg max-w-3xl w-full max-h-[90vh] overflow-y-auto animate-scale-in" onClick={(e) => e.stopPropagation()}>
             <div className="p-6 border-b border-gray-200 dark:border-slate-700 sticky top-0 bg-white dark:bg-slate-900">
               <h3 className="text-lg font-semibold text-gray-900 dark:text-slate-100">{modoEdicao ? 'Editar' : 'Novo'} Modelo</h3>
@@ -1236,12 +1237,12 @@ export default function ModelosSessaoPage({ embedded = false, onBack }: ModelosS
               <Button onClick={salvar}>{modoEdicao ? 'Atualizar' : 'Criar'}</Button>
             </div>
           </div>
-        </div>
+        </ModalOverlay>
       )}
 
       {/* Modal Manobras */}
       {modalManobras && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60] p-4 animate-fade-in" onClick={() => setModalManobras(false)}>
+        <ModalOverlay className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60] p-4 animate-fade-in" onClick={() => setModalManobras(false)}>
           <div className="bg-white dark:bg-slate-900 rounded-lg max-w-2xl w-full max-h-[80vh] overflow-hidden flex flex-col animate-scale-in" onClick={(e) => e.stopPropagation()}>
             <div className="p-6 border-b border-gray-200 dark:border-slate-700">
               <h3 className="text-lg font-semibold text-gray-900 dark:text-slate-100">Adicionar Manobras</h3>
@@ -1284,7 +1285,7 @@ export default function ModelosSessaoPage({ embedded = false, onBack }: ModelosS
               </Button>
             </div>
           </div>
-        </div>
+        </ModalOverlay>
       )}
     </div>
   );

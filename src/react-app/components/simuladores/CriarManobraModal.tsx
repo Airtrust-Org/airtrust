@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { X, Save, AlertCircle } from 'lucide-react';
+import { ModalOverlay } from '@/react-app/components/modals/ModalOverlay';
 
 interface CriarManobraModalProps {
   isOpen: boolean;
@@ -122,7 +123,7 @@ const CriarManobraModal: React.FC<CriarManobraModalProps> = ({
   if (!isOpen) return null;
 
   return (
-    <div 
+    <ModalOverlay 
       className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
       onClick={handleBackdropClick}
     >
@@ -263,7 +264,7 @@ const CriarManobraModal: React.FC<CriarManobraModalProps> = ({
           </div>
         </form>
       </div>
-    </div>
+    </ModalOverlay>
   );
 };
 

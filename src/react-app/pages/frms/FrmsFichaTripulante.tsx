@@ -44,6 +44,7 @@ import {
   formatSnapshotSource,
 } from './frmsPresentation';
 import { localTodayIso, resolveCalendarFortnightRange, resolveFrmsOperationalDate } from './frmsOperationalDate';
+import { ModalOverlay } from '@/react-app/components/modals/ModalOverlay';
 
 const FrmsEffectivenessTimeline = lazy(() => import('./components/FrmsEffectivenessTimeline'));
 
@@ -1061,7 +1062,7 @@ export default function FrmsFichaTripulante() {
         )}
 
         {selectedExplanationDate && id && (
-          <div className="fixed inset-0 z-modal flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
+          <ModalOverlay className="fixed inset-0 z-modal flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
             <div className="w-full max-w-5xl max-h-[90vh] overflow-y-auto rounded-[28px] bg-white shadow-2xl">
               <div className="sticky top-0 z-10 flex items-start justify-between gap-4 border-b border-slate-200 bg-white/95 px-5 py-4 backdrop-blur">
                 <div>
@@ -1090,7 +1091,7 @@ export default function FrmsFichaTripulante() {
                 />
               </div>
             </div>
-          </div>
+          </ModalOverlay>
         )}
       </div>
     </AppLayout>

@@ -2,6 +2,7 @@ import { useState, useRef } from 'react';
 import { X, Upload, FileText, Download, CheckCircle, AlertTriangle } from 'lucide-react';
 import { toast } from 'sonner';
 import { useImportacao, type MergeMode } from '../../hooks/useImportacao';
+import { ModalOverlay } from '@/react-app/components/modals/ModalOverlay';
 
 interface ModalImportacaoProps {
   entidade: 'funcionarios' | 'qualificacoes_tipos' | 'qualificacoes_historico';
@@ -149,7 +150,7 @@ export function ModalImportacao({ entidade, onClose, onSucesso }: ModalImportaca
   };
 
   return (
-    <div
+    <ModalOverlay
       className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
       onClick={onClose}
     >
@@ -500,6 +501,6 @@ export function ModalImportacao({ entidade, onClose, onSucesso }: ModalImportaca
           )}
         </div>
       </div>
-    </div>
+    </ModalOverlay>
   );
 }

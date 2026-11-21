@@ -4,6 +4,7 @@ import { toast } from 'sonner';
 import { API_BASE_URL, getAccessToken } from '@/react-app/config/api';
 import { X, Check } from 'lucide-react';
 import { TemplateSessao, TemplateSessionManobra } from '../../../shared/types';
+import { ModalOverlay } from '@/react-app/components/modals/ModalOverlay';
 
 interface CriarTemplateModalProps {
   isOpen: boolean;
@@ -165,7 +166,7 @@ export const CriarTemplateModal: React.FC<CriarTemplateModalProps> = ({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+    <ModalOverlay className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
       <div className="bg-white rounded-lg w-full max-w-5xl max-h-screen overflow-y-auto m-4">
         <div className="flex justify-between items-center p-6 border-b">
           <h2 className="text-xl font-semibold">
@@ -343,7 +344,7 @@ export const CriarTemplateModal: React.FC<CriarTemplateModalProps> = ({
           </div>
         </form>
       </div>
-    </div>
+    </ModalOverlay>
   );
 };
 

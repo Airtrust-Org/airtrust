@@ -40,6 +40,7 @@ import { useEscalaPageCtx } from '../EscalaPageContext';
 import FiltroQuinzena from '../components/Filtros/FiltroQuinzena';
 import { API_BASE_URL, getAccessToken } from '@/react-app/config/api';
 import { parseSyntheticId } from '../components/EscalaCalendario/GradeTripulantes.utils';
+import { ModalOverlay } from '@/react-app/components/modals/ModalOverlay';
 
 const PainelTripulacoes = lazyWithRetry(
   () => import('../components/Paineis/PainelTripulacoes'),
@@ -1864,7 +1865,7 @@ export default function EscalasDetalheView() {
 
         {/* Confirmação de remoção de alocação */}
         {confirmarRemoverAlocacao && (
-          <div className="fixed inset-0 z-modal flex items-center justify-center bg-black/30">
+          <ModalOverlay className="fixed inset-0 z-modal flex items-center justify-center bg-black/30">
             <div className="mx-4 w-full max-w-sm space-y-4 rounded-2xl bg-white p-4 shadow-xl dark:bg-slate-900">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 bg-red-100 rounded-full flex items-center justify-center">
@@ -1909,11 +1910,11 @@ export default function EscalasDetalheView() {
                 </button>
               </div>
             </div>
-          </div>
+          </ModalOverlay>
         )}
 
         {confirmarRemoverSituacao && (
-          <div className="fixed inset-0 z-modal flex items-center justify-center bg-black/30">
+          <ModalOverlay className="fixed inset-0 z-modal flex items-center justify-center bg-black/30">
             <div className="mx-4 w-full max-w-sm space-y-4 rounded-2xl bg-white p-4 shadow-xl dark:bg-slate-900">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 bg-amber-100 rounded-full flex items-center justify-center">
@@ -1954,12 +1955,12 @@ export default function EscalasDetalheView() {
                 </button>
               </div>
             </div>
-          </div>
+          </ModalOverlay>
         )}
 
         {/* Modal FDP / Fadiga */}
         {fdpModalAberto && (
-          <div className="fixed inset-0 z-modal flex items-center justify-center bg-black/40">
+          <ModalOverlay className="fixed inset-0 z-modal flex items-center justify-center bg-black/40">
             <div className="mx-4 w-full max-w-lg overflow-hidden rounded-xl bg-white shadow-2xl dark:bg-slate-900">
               <div className="flex items-center justify-between border-b border-slate-200 px-5 py-4 dark:border-slate-800">
                 <div className="flex items-center gap-2">
@@ -2022,7 +2023,7 @@ export default function EscalasDetalheView() {
                 </button>
               </div>
             </div>
-          </div>
+          </ModalOverlay>
         )}
 
         {/* Vista por Tripulante modal */}
@@ -2091,7 +2092,7 @@ export default function EscalasDetalheView() {
 
         {/* Histórico de Revisões */}
         {showRevisoes && escalaAtual && (
-          <div className="fixed inset-0 z-modal bg-black/40 flex items-center justify-center p-4">
+          <ModalOverlay className="fixed inset-0 z-modal bg-black/40 flex items-center justify-center p-4">
             <div className="flex max-h-[70vh] w-full max-w-md flex-col overflow-hidden rounded-2xl bg-white shadow-2xl dark:bg-slate-900">
               <Suspense fallback={panelFallback}>
                 <PainelRevisoes
@@ -2109,7 +2110,7 @@ export default function EscalasDetalheView() {
                 />
               </Suspense>
             </div>
-          </div>
+          </ModalOverlay>
         )}
       </div>
     </AppLayout>

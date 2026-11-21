@@ -3,6 +3,7 @@ import { CheckCircle2, Plus, RefreshCw, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { API_BASE_URL, fetchWithAuth } from '@/react-app/config/api';
 import { confirmDialog } from '@/react-app/utils/confirmDialog';
+import { ModalOverlay } from '@/react-app/components/modals/ModalOverlay';
 
 type AuditResult = 'CONFORME' | 'NC_MAJOR' | 'NC_MINOR' | 'OBSERVACAO' | 'NAO_APLICAVEL';
 
@@ -220,7 +221,7 @@ export default function SgsoAuditoriaWorkflow({ auditoriaId, onClose, onChanged 
   };
 
   return (
-    <div className="fixed inset-0 z-modal flex items-end justify-center bg-black/50 sm:items-center sm:p-4">
+    <ModalOverlay className="fixed inset-0 z-modal flex items-end justify-center bg-black/50 sm:items-center sm:p-4">
       <div className="flex max-h-[96vh] w-full max-w-5xl flex-col overflow-hidden rounded-t-2xl bg-white shadow-2xl sm:rounded-2xl">
         <div className="flex items-center justify-between border-b border-slate-200 px-5 py-4">
           <div>
@@ -445,6 +446,6 @@ export default function SgsoAuditoriaWorkflow({ auditoriaId, onClose, onChanged 
           )}
         </div>
       </div>
-    </div>
+    </ModalOverlay>
   );
 }

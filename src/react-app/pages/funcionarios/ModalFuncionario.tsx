@@ -32,6 +32,7 @@ import {
   aplicarMascaraCodigoANAC,
   removerMascara,
 } from '@/react-app/utils/mascaras';
+import { ModalOverlay } from '@/react-app/components/modals/ModalOverlay';
 
 interface Props {
   aberto: boolean;
@@ -876,7 +877,7 @@ export default function ModalFuncionario({
   if (!aberto) return null;
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+    <ModalOverlay className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
       <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg w-full max-w-5xl max-h-[90vh] overflow-hidden flex flex-col">
         {/* Header */}
         <div className="flex items-center justify-between p-6 border-b border-slate-200 dark:border-slate-800">
@@ -1994,6 +1995,6 @@ export default function ModalFuncionario({
           onSalvar={handleLicencaSalva}
         />
       )}
-    </div>
+    </ModalOverlay>
   );
 }

@@ -14,6 +14,7 @@ import {
   getNotechsItensPorGrupo,
 } from '../../../../lib/simuladores/notechs';
 import { FICHA_AVALIACAO_FAIXAS } from '../../../../lib/simuladores/avaliacaoScale';
+import { ModalOverlay } from '@/react-app/components/modals/ModalOverlay';
 
 interface ModalNotechsReferenciaProps {
   isOpen: boolean;
@@ -27,7 +28,7 @@ export default function ModalNotechsReferencia({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+    <ModalOverlay className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
       <div className="flex max-h-[90vh] w-full max-w-3xl flex-col rounded-lg bg-white shadow-xl">
         <div className="flex items-center justify-between border-b border-slate-200 px-6 py-4">
           <div>
@@ -99,6 +100,6 @@ export default function ModalNotechsReferencia({
           </button>
         </div>
       </div>
-    </div>
+    </ModalOverlay>
   );
 }

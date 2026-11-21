@@ -11,6 +11,7 @@ import { SimuladoresCard, EmptyState } from '../../components/SimuladoresLayout'
 import { Plus, Users, Trash2 } from 'lucide-react';
 import { RowActionsMenu } from '@/react-app/components/UI/RowActionsMenu';
 import { confirmDialog } from '@/react-app/utils/confirmDialog';
+import { ModalOverlay } from '@/react-app/components/modals/ModalOverlay';
 
 interface Instrutor {
   id: number;
@@ -240,7 +241,7 @@ export default function CrudInstrutores() {
 
       {/* Modal */}
       {modalAberto && (
-        <div className="fixed inset-0 z-modal flex items-center justify-center bg-black/50">
+        <ModalOverlay className="fixed inset-0 z-modal flex items-center justify-center bg-black/50">
           <div className="w-full max-w-md rounded-lg bg-white p-6 shadow-xl">
             <h3 className="text-lg font-bold text-slate-900 mb-4">
               {instrutorEditando ? 'Editar Instrutor' : 'Novo Instrutor'}
@@ -306,7 +307,7 @@ export default function CrudInstrutores() {
               </button>
             </div>
           </div>
-        </div>
+        </ModalOverlay>
       )}
     </div>
   );

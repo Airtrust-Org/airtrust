@@ -17,6 +17,7 @@ import type { FuncionarioResumo } from '@/react-app/services/qualificacoes';
 import { showToast } from '../../../utils/toast';
 import { confirmDialog } from '@/react-app/utils/confirmDialog';
 import { SettingsSectionIntro } from '../components/SettingsSectionIntro';
+import { ModalOverlay } from '@/react-app/components/modals/ModalOverlay';
 
 type SigvoosStatus = 'PROCESSANDO' | 'SUCESSO' | 'ERRO' | string;
 type SigvoosOperationalStatus =
@@ -1136,7 +1137,7 @@ export default function IntegracoesEdApp() {
       </div>
 
       {mappingTarget ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/45 p-4">
+        <ModalOverlay className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/45 p-4">
           <div className="w-full max-w-2xl rounded-3xl bg-white p-6 shadow-2xl">
             <div className="flex items-start justify-between gap-4">
               <div>
@@ -1214,7 +1215,7 @@ export default function IntegracoesEdApp() {
               </button>
             </div>
           </div>
-        </div>
+        </ModalOverlay>
       ) : null}
     </div>
   );

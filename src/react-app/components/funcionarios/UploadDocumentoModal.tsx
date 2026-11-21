@@ -8,6 +8,7 @@ import {
 } from '@/react-app/config/pastaVirtual';
 import { API_BASE_URL, getAccessToken } from '@/react-app/config/api';
 import { preparePdfUploadFile } from '@/react-app/utils/certificateUploadOptimization';
+import { ModalOverlay } from '@/react-app/components/modals/ModalOverlay';
 
 interface UploadDocumentoModalProps {
   isOpen: boolean;
@@ -268,7 +269,7 @@ export default function UploadDocumentoModal({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-modal flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm">
+    <ModalOverlay className="fixed inset-0 z-modal flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm">
       <div className="max-h-[92vh] w-full max-w-2xl overflow-y-auto rounded-lg bg-white shadow-2xl dark:bg-slate-900">
         <div className="flex items-center justify-between border-b border-slate-200 p-6 dark:border-slate-700">
           <div className="flex items-center gap-3">
@@ -480,6 +481,6 @@ export default function UploadDocumentoModal({
           </Button>
         </div>
       </div>
-    </div>
+    </ModalOverlay>
   );
 }

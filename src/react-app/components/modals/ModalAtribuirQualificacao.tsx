@@ -16,6 +16,7 @@ import { showAlertDialog } from '@/react-app/utils/confirmDialog';
 import { emitirEventoModulo } from '@/react-app/lib/moduloBus';
 import { tryAddCalendarMonthsClamped } from '@/shared/utils/validade-meses';
 import { isCmaCode, resolveCmaValidity } from '@/shared/utils/cma-validity';
+import { ModalOverlay } from '@/react-app/components/modals/ModalOverlay';
 
 interface Props {
   isOpen: boolean;
@@ -442,7 +443,7 @@ export function ModalAtribuirQualificacao({
 
   return (
     <>
-      <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-modal p-4">
+      <ModalOverlay className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-modal p-4">
         <div className="bg-white rounded-lg shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto relative">
           {/* Overlay de salvamento */}
           {saving && (
@@ -797,7 +798,7 @@ export function ModalAtribuirQualificacao({
             </div>
           </form>
         </div>
-      </div>
+      </ModalOverlay>
     </>
   );
 }

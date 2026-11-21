@@ -54,6 +54,7 @@ import {
   Loader2,
 } from 'lucide-react';
 import { SettingsSectionIntro } from './components/SettingsSectionIntro';
+import { ModalOverlay } from '@/react-app/components/modals/ModalOverlay';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -268,7 +269,7 @@ function CreateBackupModal({ onClose, onSuccess }: CreateModalProps) {
   };
 
   return (
-    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+    <ModalOverlay className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
       <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl w-full max-w-2xl border border-slate-200 dark:border-slate-700">
         {/* Header */}
         <div className="flex items-center gap-3 p-6 border-b border-slate-200 dark:border-slate-700">
@@ -428,7 +429,7 @@ function CreateBackupModal({ onClose, onSuccess }: CreateModalProps) {
           </button>
         </div>
       </div>
-    </div>
+    </ModalOverlay>
   );
 }
 
@@ -484,7 +485,7 @@ function LogsModal({ backup, onClose }: LogsModalProps) {
   };
 
   return (
-    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+    <ModalOverlay className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
       <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl w-full max-w-2xl border border-slate-200 dark:border-slate-700 flex flex-col max-h-[80vh]">
         {/* Header */}
         <div className="flex items-center justify-between p-6 border-b border-slate-200 dark:border-slate-700">
@@ -575,7 +576,7 @@ function LogsModal({ backup, onClose }: LogsModalProps) {
           </button>
         </div>
       </div>
-    </div>
+    </ModalOverlay>
   );
 }
 
@@ -640,7 +641,7 @@ function RestoreModal({ backup, onClose, onSuccess }: RestoreModalProps) {
   };
 
   return (
-    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+    <ModalOverlay className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
       <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl w-full max-w-lg border border-slate-200 dark:border-slate-700">
         {/* Header */}
         <div className="flex items-center gap-3 p-6 border-b border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-900/20 rounded-t-2xl">
@@ -766,7 +767,7 @@ function RestoreModal({ backup, onClose, onSuccess }: RestoreModalProps) {
           </button>
         </div>
       </div>
-    </div>
+    </ModalOverlay>
   );
 }
 

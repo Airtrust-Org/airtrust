@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { X, GripVertical } from "lucide-react";
 import ModernCheckbox from "../../components/shared/ModernCheckbox";
+import { ModalOverlay } from '@/react-app/components/modals/ModalOverlay';
 
 interface Props {
   onClose: () => void;
@@ -111,7 +112,7 @@ export default function ConfigurarColunasQualificacoes({
   };
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center">
+    <ModalOverlay className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center">
       <div className="bg-white rounded-lg shadow-xl p-6 max-w-md w-full mx-4 max-h-[calc(100dvh-2rem)] overflow-y-auto">
         <div className="flex justify-between items-center mb-4">
           <h3 className="text-lg font-semibold">Configurar Colunas</h3>
@@ -170,6 +171,6 @@ export default function ConfigurarColunasQualificacoes({
           </button>
         </div>
       </div>
-    </div>
+    </ModalOverlay>
   );
 }

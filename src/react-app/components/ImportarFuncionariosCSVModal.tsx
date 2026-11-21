@@ -3,6 +3,7 @@ import { Upload, Download, X, AlertCircle, CheckCircle } from 'lucide-react';
 import Papa from 'papaparse';
 import { showToast } from '../utils/toast';
 import { API_BASE_URL } from '@/react-app/config/api';
+import { ModalOverlay } from '@/react-app/components/modals/ModalOverlay';
 
 interface ImportarFuncionariosCSVModalProps {
   isOpen: boolean;
@@ -276,7 +277,7 @@ export default function ImportarFuncionariosCSVModal({
   const templateUrl = `${API_BASE_URL}/templates/funcionarios.csv`;
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+    <ModalOverlay className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
       <div className="bg-white rounded-lg p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
         <div className="flex justify-between items-center mb-6">
           <h2 className="text-2xl font-bold text-gray-900">Importar Funcionários</h2>
@@ -462,6 +463,6 @@ export default function ImportarFuncionariosCSVModal({
           </button>
         </div>
       </div>
-    </div>
+    </ModalOverlay>
   );
 }

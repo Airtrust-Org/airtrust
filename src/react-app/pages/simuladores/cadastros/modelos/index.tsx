@@ -15,6 +15,7 @@ import { confirmDialog, showAlertDialog } from '@/react-app/utils/confirmDialog'
 
 import ImportarRelacoesInteligente from '../../components/ImportarRelacoes';
 import { Badge, EmptyState, SimuladoresCard } from '../../components/SimuladoresLayout';
+import { ModalOverlay } from '@/react-app/components/modals/ModalOverlay';
 
 interface Modelo {
   id: number;
@@ -782,7 +783,7 @@ export default function CrudModelos({ onBack }: Props = {}) {
           </SimuladoresCard>
 
           {showAddManobra && (
-            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
+            <ModalOverlay className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
               <div className="mx-4 max-h-[80vh] w-full max-w-2xl overflow-y-auto rounded-lg bg-white shadow-xl">
                 <div className="border-b border-slate-200 p-6">
                   <h3 className="text-xl font-bold text-slate-900">Adicionar Manobra</h3>
@@ -830,7 +831,7 @@ export default function CrudModelos({ onBack }: Props = {}) {
                   </button>
                 </div>
               </div>
-            </div>
+            </ModalOverlay>
           )}
         </div>
       )}

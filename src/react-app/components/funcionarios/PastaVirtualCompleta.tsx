@@ -29,6 +29,7 @@ import {
   isTripulacaoVooFuncionario,
 } from '@/react-app/config/pastaVirtual';
 import UploadDocumentoModal from './UploadDocumentoModal';
+import { ModalOverlay } from '@/react-app/components/modals/ModalOverlay';
 
 interface PastaVirtualCompletaProps {
   funcionarioId: number;
@@ -529,7 +530,7 @@ export default function PastaVirtualCompleta({
       />
 
       {showConfirmDelete && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+        <ModalOverlay className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
           <div className="w-full max-w-sm rounded-lg bg-white p-6 shadow-lg dark:bg-slate-900">
             <div className="mb-4 flex items-center gap-3">
               <AlertCircle className="h-6 w-6 text-red-600" />
@@ -567,7 +568,7 @@ export default function PastaVirtualCompleta({
               </button>
             </div>
           </div>
-        </div>
+        </ModalOverlay>
       )}
     </div>
   );

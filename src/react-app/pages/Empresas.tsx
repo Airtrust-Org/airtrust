@@ -6,6 +6,7 @@ import { API_BASE_URL, fetchWithAuth } from '@/react-app/config/api';
 import { Plus, Edit, Trash2, Upload, Edit2, Eye, Save, X } from 'lucide-react';
 import { PageLayout, PageSection } from '@/react-app/components/layout/PageLayout';
 import { classHelpers } from '@/react-app/styles/design-tokens';
+import { ModalOverlay } from '@/react-app/components/modals/ModalOverlay';
 
 interface Empresa {
   id: number;
@@ -270,7 +271,7 @@ export default function Empresas() {
 
       {/* MODAL DE EDIÇÃO DE TEMPLATE */}
       {showTemplateModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+        <ModalOverlay className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg shadow-lg p-6 max-w-2xl w-full max-h-96 overflow-auto">
             <div className="flex justify-between items-center mb-4">
               <h3 className="text-lg font-bold text-neutral-900">✏️ Editar Template</h3>
@@ -312,7 +313,7 @@ export default function Empresas() {
               </button>
             </div>
           </div>
-        </div>
+        </ModalOverlay>
       )}
     </PageLayout>
   );
