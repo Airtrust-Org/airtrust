@@ -36,7 +36,7 @@ vi.mock('../../middleware/tenant', () => ({
   getEmpresaId: (c: any) => Number(c.get('empresaId') ?? 0),
 }));
 
-vi.mock('../../routes/escalas-alocacoes-helpers-internal', () => ({
+vi.mock('../../services/escalas/alocacao-helpers', () => ({
   verificarHabilitacaoModelo: vi.fn(async () => ({ habilitado: true })),
 }));
 

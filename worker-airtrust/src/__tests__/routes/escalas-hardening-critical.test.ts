@@ -26,7 +26,7 @@ vi.mock('../../shared/domainEvents', () => ({
 import escalasRoutes from '../../routes/escalas';
 import {
   regenerarEventosAutomaticosFuncionarioEscala,
-} from '../../routes/escalas-alocacoes-engine';
+} from '../../services/escalas/alocacao-engine';
 import { substituirAlocacaoSobreposta } from '../../routes/escalas-alocacoes';
 
 type QueryLog = { sql: string; binds: unknown[]; method: 'first' | 'all' | 'run' };

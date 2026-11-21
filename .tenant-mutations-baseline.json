@@ -9,7 +9,7 @@
   "worker-airtrust/src/middleware/lms-completion-reversal.ts:documentos",
   "worker-airtrust/src/middleware/lms-completion-reversal.ts:qualificacoes_historico",
   "worker-airtrust/src/routes/empresas.ts:certificados_templates",
-  "worker-airtrust/src/routes/escalas-alocacoes-engine.ts:escala_alertas",
+  "worker-airtrust/src/services/escalas/alocacao-engine.ts:escala_alertas",
   "worker-airtrust/src/routes/escalas-crud.ts:escalas_mensais",
   "worker-airtrust/src/routes/escalas-status.ts:escalas_mensais",
   "worker-airtrust/src/routes/escalas-templates.ts:escalas_templates_tripulacao",

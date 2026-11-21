@@ -8,7 +8,7 @@ import type {
   SituacaoTipoCodigo,
   SituacaoTipoRow,
   AlocacaoDetalhadaRow,
-} from './escalas-alocacoes-schemas';
+} from './alocacao-schemas';
 
 export type SobreposicaoFuncionarioDetalhe = {
   id: string;

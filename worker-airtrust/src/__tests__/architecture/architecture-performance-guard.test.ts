@@ -32,7 +32,6 @@ const LARGE_FILE_LINE_CAPS = {
   // course PUT is one call; the logic lives in lib/lms/lms-course-policy-guard.ts).
   'routes/lms-cursos-legacy.ts': 3001,
   // Cap raised 2026-06-29: counted 2277 (pre-existing growth).
-  'routes/escalas-alocacoes.ts': 2277,
   // Acknowledged growth (audit remediation A1): EVD now integrates training commitments.
   'routes/escalas-evd.ts': 2162,
   // Cap raised 2026-08-03: counted 3826 after explicit partial-source diagnostics,
@@ -139,7 +138,6 @@ const DIRECT_SCHEMA_INTROSPECTION_CAPS = { pragmaTableInfo: 31, sqliteMaster: 31
 
 const CRITICAL_SELECT_STAR_CAPS = {
   'routes/aeronaves.ts': 1,
-  'routes/escalas-alocacoes.ts': 1,
   'routes/escalas-padroes.ts': 1,
   'routes/escalas-tripulacoes.ts': 4,
   'routes/frms-fadiga-checkin-legacy.ts': 3,
