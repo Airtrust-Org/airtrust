@@ -90,6 +90,43 @@ describe('Training Compliance organization flows', () => {
     vi.clearAllMocks();
   });
 
+  it('keeps explicit NAO_APLICA overrides reversible in the default applicable view', async () => {
+    const excluded = {
+      ...matrixRows[2],
+      qualificacao_tipo_id: 203,
+      qualificacao_tipo_codigo: 'QA-EXCLUSION',
+      qualificacao_tipo_nome: 'Treinamento explicitamente não aplicável',
+      efetiva: { id: 903, escopo: 'SETOR', obrigatoriedade: 'NAO_APLICA' },
+      direta: { id: 903, escopo: 'SETOR', obrigatoriedade: 'NAO_APLICA' },
+    };
+    fetchWithAuthMock.mockImplementation(async (url: string, init?: RequestInit) => {
+      if (url.endsWith('/catalogos')) {
+        return ok({
+          setores: [{ id: 1, nome: 'Operações' }],
+          funcoes: [],
+          setor_funcoes: [],
+        });
+      }
+      if (url.includes('/matriz-organizacao')) return ok([matrixRows[2], excluded]);
+      if (url.endsWith('/regras/903') && init?.method === 'DELETE') return ok({ id: 903 });
+      throw new Error(`unexpected url ${url}`);
+    });
+
+    renderWithClient(<TrainingComplianceOrganizationEditor />);
+    await screen.findByRole('option', { name: 'Operações' });
+    fireEvent.change(screen.getByLabelText('Setor'), { target: { value: '1' } });
+    expect(screen.getByLabelText('Exibir treinamentos')).toHaveValue('applicable');
+
+    const excludedTraining = await screen.findByText('Treinamento explicitamente não aplicável');
+    expect(screen.queryByText('Treinamento não atribuído')).not.toBeInTheDocument();
+    const row = excludedTraining.closest('tr')!;
+    fireEvent.change(within(row).getByRole('combobox'), { target: { value: 'HERDAR' } });
+    await waitFor(() => expect(fetchWithAuthMock).toHaveBeenCalledWith(
+      '/api/compliance-treinamentos/regras/903',
+      expect.objectContaining({ method: 'DELETE' }),
+    ));
+  });
+
   it('filters roles by sector and creates, updates and removes organization rules', async () => {
     fetchWithAuthMock.mockImplementation(async (url: string, init?: RequestInit) => {
       if (url.endsWith('/catalogos')) {
