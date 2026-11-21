@@ -170,36 +170,68 @@ export default function LmsAvaliacoesGestao(){
      </select>
     </div>
     {(data.coursesTruncated||data.plansTruncated)&&<p role="status" className="text-sm text-amber-700">Catálogo parcial: o servidor aplicou limite de resultados.</p>}
-    <div className="hidden overflow-x-auto md:block"><table className="w-full min-w-[680px] text-left text-sm">
-     <thead className="border-b text-xs uppercase text-slate-500"><tr>
-      <th className="py-3 pr-3">Treinamento</th><th>Questões</th><th>Provas</th><th>Situação</th><th className="text-right">Ação</th>
-     </tr></thead>
-     <tbody className="divide-y dark:divide-slate-800">{visible.map(({c,published,draft,plans,binds})=><tr key={c.id}>
-      <td className="py-3 pr-3"><strong className="block">{c.titulo}</strong>
-       <small className="text-slate-500">Curso #{c.id} · {c.publicado?'Publicado':'Não publicado'}</small></td>
-      <td>{published} publicada(s)<small className="block text-slate-500 dark:text-slate-400">{draft} em preparação</small></td>
-      <td>{plans.length} plano(s){plans[0]&&<small className="block text-slate-500 dark:text-slate-400">{plans[0].title||plans[0].examId}</small>}</td>
-      <td>{c.activeExamId?
-        <span className="font-medium text-emerald-700">Prova da edição atual: {c.activeExamId} v{c.activeExamVersion}</span>:
-        !c.activePackageSha256?'Sem edição SCORM ativa':
-        binds.length>0?'Prova vinculada somente a outra edição':
-        plans.length?'Prova publicada — vínculo com edição atual pendente':'Prova final não configurada'}
-       <small className="block text-slate-500 dark:text-slate-400">Política do SCORM: {c.scorm_assessment_policy||'Não definida'} · a exigência externa depende da edição homologada</small></td>
-      <td className="text-right"><Link to={'/lms/admin/provas/'+c.id}
-       className={examPrimary}>
-       {c.activeExamId?'Gerenciar':plans.length?'Vincular prova':'Configurar prova'}</Link></td>
-     </tr>)}</tbody>
-    </table>{visible.length===0&&<p className="py-8 text-center text-slate-600">Nenhum curso encontrado.</p>}</div>
-    <div className="space-y-3 md:hidden" aria-label="Treinamentos e situação das provas">
+    <div className="hidden lg:block">
+     <table aria-label="Avaliações por treinamento" className="w-full table-fixed text-left text-sm">
+      <colgroup>
+       <col className="w-[36%]"/><col className="w-[12%]"/><col className="w-[10%]"/>
+       <col className="w-[27%]"/><col className="w-[15%]"/>
+      </colgroup>
+      <thead className="border-b text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">
+       <tr>
+        <th scope="col" className="py-3 pr-3 font-semibold">Treinamento</th>
+        <th scope="col" className="px-2 py-3 font-semibold">Questões</th>
+        <th scope="col" className="px-2 py-3 font-semibold">Provas</th>
+        <th scope="col" className="px-2 py-3 font-semibold">Situação</th>
+        <th scope="col" className="py-3 pl-2 text-right font-semibold">Ação</th>
+       </tr>
+      </thead>
+      <tbody className="divide-y divide-slate-200 dark:divide-slate-700">
+       {visible.map(({c,published,draft,plans,binds})=><tr key={c.id} className="align-top">
+        <td className="min-w-0 py-4 pr-3">
+         <strong className="block break-words font-semibold leading-5 text-slate-900 dark:text-slate-100">{c.titulo}</strong>
+         <span className="mt-1 block text-xs text-slate-500 dark:text-slate-400">Curso #{c.id} · {c.publicado?'Publicado':'Não publicado'}</span>
+        </td>
+        <td className="px-2 py-4">
+         <strong className="block text-base font-semibold tabular-nums">{published}</strong>
+         <span className="block whitespace-nowrap text-xs text-slate-500 dark:text-slate-400">{draft} em preparo</span>
+        </td>
+        <td className="px-2 py-4">
+         <strong className="block text-base font-semibold tabular-nums">{plans.length}</strong>
+         {plans[0]&&<span className="mt-1 block break-words text-xs text-slate-500 dark:text-slate-400">{plans[0].title||plans[0].examId}</span>}
+        </td>
+        <td className="min-w-0 px-2 py-4">
+         <span className="block break-words font-medium leading-5 text-slate-900 dark:text-slate-100">
+          {c.activeExamId?'Prova ativa nesta edição':
+           !c.activePackageSha256?'Sem edição SCORM ativa':
+           binds.length?'Vínculo em outra edição':
+           plans.length?'Vínculo pendente':'Prova não configurada'}
+         </span>
+         <span className="mt-1 block text-xs text-slate-500 dark:text-slate-400">
+          SCORM: {c.scorm_assessment_policy||'Não definida'}
+         </span>
+        </td>
+        <td className="py-3 pl-2 text-right">
+         <Link to={'/lms/admin/provas/'+c.id}
+          className={examPrimary+' w-full whitespace-nowrap px-2.5'}>
+          {c.activeExamId?'Gerenciar':plans.length?'Vincular prova':'Configurar prova'}
+         </Link>
+        </td>
+       </tr>)}
+      </tbody>
+     </table>
+     {visible.length===0&&<p className="py-8 text-center text-slate-600 dark:text-slate-300">Nenhum curso encontrado.</p>}
+    </div>
+    <div className="space-y-3 lg:hidden" aria-label="Treinamentos e situação das provas">
      {visible.map(({c,published,draft,plans,binds})=><article key={c.id} className="rounded-xl border border-slate-200 p-4 dark:border-slate-700">
       <h3 className="font-semibold text-slate-900 dark:text-white">{c.titulo}</h3>
       <p className={examSmall+' mt-1'}>Curso #{c.id} · {c.publicado?'Publicado':'Não publicado'}</p>
       <p className="mt-3 text-sm font-semibold">{c.activeExamId?'Prova ativa nesta edição':!c.activePackageSha256?'Sem edição ativa':binds.length?'Vínculo em outra edição':plans.length?'Plano publicado — vínculo pendente':'Prova não configurada'}</p>
-      <p className={examSmall+' mt-1'}>{published} questões publicadas · {draft} em preparação</p>
+      <p className={examSmall+' mt-1'}>SCORM: {c.scorm_assessment_policy||'Não definida'} · {published} questões publicadas · {draft} em preparação</p>
       <Link to={'/lms/admin/provas/'+c.id} className={examPrimary+' mt-3 w-full'}>{c.activeExamId?'Gerenciar prova':plans.length?'Vincular prova':'Configurar prova'}</Link>
      </article>)}
      {visible.length===0&&<ExamEmpty title="Nenhum treinamento encontrado" details="Altere a busca ou o filtro."/>}
     </div>
+    <p className="mt-4 text-xs text-slate-600 dark:text-slate-400">Uma política de avaliação no SCORM não torna a prova externa obrigatória. O vínculo depende de edição homologada e autorizada.</p>
    </section>}
    {tab==='resultados'&&<section className={panel}>
     <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
