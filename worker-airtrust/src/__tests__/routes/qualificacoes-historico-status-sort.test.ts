@@ -198,6 +198,23 @@ describe('qualificacoes historico status sort contract', () => {
     }
   });
 
+  it.each([
+    '/historico/stats',
+    '/historico/stats-extended?extended=true',
+  ])('%s: KPIs usam vencimento derivado de histórico legado com data NULL', async (endpoint) => {
+    const { db, calls } = createMockDb();
+    const response = await createApp(db).request(endpoint);
+    expect(response.status).toBe(200);
+    const effectiveExpiry = `COALESCE(qh.data_vencimento, ${sqlAddMonthsClamped('qh.data_conclusao', sqlEffectiveValidityMonths('qh.validade_meses', 'qt.codigo', 'qt.validade', sqlCmaAgeValidityMonths('qh.data_conclusao', 'f.nascimento')))})`;
+    const predicates = buildVencimentoStatusPredicates(effectiveExpiry);
+    const countSql = calls.find((call) => call.method === 'first' && call.query.includes('as vencidas'))?.query || '';
+    expect(countSql).toContain(effectiveExpiry);
+    expect(countSql).toContain(predicates.vencida);
+    expect(countSql).toContain(predicates.vencendo);
+    expect(countSql).toContain(`${effectiveExpiry} IS NOT NULL AND ${predicates.valida}`);
+    expect(countSql).not.toContain('qh.data_vencimento IS NOT NULL AND');
+  });
+
   it('usa rank server-side para status e preserva filtro planejada com paginação', async () => {
     const { db, calls } = createMockDb();
     const app = createApp(db);
