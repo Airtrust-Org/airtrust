@@ -1834,7 +1834,7 @@ function CourseCard({
                   {getLmsActionLabel(matricula?.status ?? 'NAO_INICIADO')}
                 </button>
               )}
-              <Button variant="secondary" onClick={() => navigate(`/lms/cursos/${curso.id}`)}>
+              <Button aria-label="Visualizar" variant="secondary" onClick={() => navigate(`/lms/cursos/${curso.id}`)}>
                 <Eye className="h-4 w-4" />
               </Button>
             </div>

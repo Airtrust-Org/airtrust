@@ -302,6 +302,7 @@ export default function PermissoesPage() {
                       return (
                         <td key={acao} className="text-center px-4 py-3.5">
                           <ToggleSwitch
+                            label={`${mod.label} — ${acao}`}
                             checked={checked}
                             disabled={!editingEnabled}
                             onChange={() => toggle(abaPerfil, mod.id, acao)}
@@ -337,15 +338,19 @@ function ToggleSwitch({
   checked,
   disabled,
   onChange,
+  label,
 }: {
   checked: boolean;
   disabled: boolean;
   onChange: () => void;
+  /** Nome acessível: "<módulo> — <ação>" */
+  label: string;
 }) {
   return (
     <button
       type="button"
       role="switch"
+      aria-label={label}
       aria-checked={checked}
       disabled={disabled}
       onClick={onChange}

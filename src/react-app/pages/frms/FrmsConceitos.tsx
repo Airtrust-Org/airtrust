@@ -89,7 +89,7 @@ export default function FrmsConceitos() {
         <span className="text-sm font-semibold text-slate-700">Como funciona o FRMS</span>
       </div>
 
-      <div className="mx-auto max-w-4xl space-y-6 px-4 py-8 sm:px-6">
+      <main className="mx-auto max-w-4xl space-y-6 px-4 py-8 sm:px-6">
         <div className="pb-2 text-center">
           <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-blue-100 bg-blue-50 px-4 py-1.5 text-xs font-semibold text-blue-700">
             <Activity className="h-3.5 w-3.5" />
@@ -468,7 +468,7 @@ export default function FrmsConceitos() {
             Voltar ao Dashboard FRMS
           </button>
         </div>
-      </div>
+      </main>
     </div>
   );
 }

@@ -315,10 +315,10 @@ export default function Aeronaves() {
                     </td>
                     <td className=" py-4 whitespace-nowrap text-right text-sm font-medium">
                       <div className="flex justify-end space-x-2">
-                        <Button variant="ghost" size="sm" onClick={() => handleEdit(aeronave)}>
+                        <Button aria-label="Editar" variant="ghost" size="sm" onClick={() => handleEdit(aeronave)}>
                           <Edit2 className="w-4 h-4" />
                         </Button>
-                        <Button
+                        <Button aria-label="Excluir"
                           variant="ghost"
                           size="sm"
                           onClick={() => handleDelete(aeronave)}

@@ -509,10 +509,16 @@ export function UsuariosAdminContent({ embedded = false }: { embedded?: boolean 
               </button>
             )}
             <div>
-              <h1 className="text-xl font-bold text-slate-900 flex items-center gap-2">
-                <Users className="h-5 w-5 text-primary" />
-                Gestão de Usuários
-              </h1>
+              {/* Embutida em Configurações (que já tem o h1 da página): usa h2 */}
+              {(() => {
+                const Heading = embedded ? 'h2' : 'h1';
+                return (
+                  <Heading className="text-xl font-bold text-slate-900 flex items-center gap-2">
+                    <Users className="h-5 w-5 text-primary" />
+                    Gestão de Usuários
+                  </Heading>
+                );
+              })()}
               <p className="text-sm text-slate-500 mt-0.5">
                 Cadastro, perfis, convites e permissões
               </p>

@@ -330,7 +330,7 @@ export default function PastaVirtual() {
         {/* Header */}
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-4">
-            <Button variant="ghost" onClick={() => navigate('/funcionarios')} className="p-2">
+            <Button aria-label="Voltar" variant="ghost" onClick={() => navigate('/funcionarios')} className="p-2">
               <ArrowLeft className="w-5 h-5" />
             </Button>
             <div>

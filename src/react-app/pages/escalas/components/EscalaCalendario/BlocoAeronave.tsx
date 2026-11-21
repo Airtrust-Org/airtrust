@@ -275,8 +275,9 @@ export default function BlocoAeronave({
                 </span>
                 {instrutorEmVoo && (
                   <span
-                    className="inline-flex h-4 min-w-[1.15rem] shrink-0 items-center justify-center rounded-full bg-amber-500 px-1 text-[8px] font-bold leading-none text-amber-950 shadow-sm"
+                    className="inline-flex h-5 min-w-[1.25rem] shrink-0 items-center justify-center rounded-full bg-amber-500 px-1 text-xs font-bold leading-none text-amber-950 shadow-sm"
                     title="Instrutor em voo"
+                    aria-label="Instrutor em voo"
                   >
                     IN
                   </span>

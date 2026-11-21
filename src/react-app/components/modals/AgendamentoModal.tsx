@@ -39,7 +39,7 @@ export function AgendamentoModal({ open, onClose, initialData, onSave }: Agendam
       <Card className="w-full max-w-2xl max-h-[90vh] overflow-y-auto">
         <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle>{initialData ? 'Editar Agendamento' : 'Novo Agendamento'}</CardTitle>
-          <Button variant="ghost" size="sm" onClick={onClose} className="h-8 w-8 p-0">
+          <Button aria-label="Fechar" variant="ghost" size="sm" onClick={onClose} className="h-8 w-8 p-0">
             <X size={18} />
           </Button>
         </CardHeader>

@@ -836,7 +836,7 @@ export default function CalendarioAgendamentos() {
           <div className={`font-semibold ${cores.text} truncate flex items-center gap-1`}>
             {agendamento.hora_inicio.substring(0, 5)}
             {Boolean(agendamento.modo_compartilhado) && (
-              <span className="rounded bg-indigo-100 px-1 text-[8px] font-semibold uppercase text-indigo-700">
+              <span className="rounded bg-indigo-100 px-1 text-xs font-semibold uppercase text-indigo-700">
                 Compartilhada
               </span>
             )}

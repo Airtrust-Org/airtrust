@@ -32,10 +32,11 @@ export default function ControleVoosDateControls({
         <ChevronLeft className="h-4 w-4" />
         Dia anterior
       </button>
-      <label className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200">
+      <label className="inline-flex items-center gap-2 rounded-lg border focus-within:ring-2 focus-within:ring-primary/40 border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200">
         <Calendar className="h-4 w-4 text-slate-400" />
         <input
           type="date"
+          aria-label="Data de referência"
           value={value}
           onChange={(event) => onChange(event.target.value)}
           className="bg-transparent outline-none"
