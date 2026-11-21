@@ -10,6 +10,7 @@
  */
 
 import { forwardRef, InputHTMLAttributes, useMemo } from 'react';
+import { AlertTriangle } from 'lucide-react';
 import { cn } from '@/react-app/lib/utils';
 
 interface InputProps extends InputHTMLAttributes<HTMLInputElement> {
@@ -56,8 +57,9 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
           <label htmlFor={inputId} className="block text-sm font-medium text-slate-700 mb-2">
             {label}
             {required && (
-              <span id={requiredId} className="text-critical ml-1" aria-label="obrigatório">
-                *
+              <span id={requiredId} className="text-critical ml-1">
+                <span aria-hidden="true">*</span>
+                <span className="sr-only">obrigatório</span>
               </span>
             )}
           </label>
@@ -98,7 +100,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
             role="alert"
             className="mt-1 text-sm font-medium text-critical flex items-center gap-1"
           >
-            <span>⚠</span>
+            <AlertTriangle className="h-4 w-4 shrink-0" aria-hidden="true" />
             {error}
           </p>
         )}
@@ -148,8 +150,9 @@ export const TextArea = forwardRef<HTMLTextAreaElement, TextAreaProps>(
           <label htmlFor={textareaId} className="block text-sm font-medium text-slate-700 mb-2">
             {label}
             {required && (
-              <span id={requiredId} className="text-critical ml-1" aria-label="obrigatório">
-                *
+              <span id={requiredId} className="text-critical ml-1">
+                <span aria-hidden="true">*</span>
+                <span className="sr-only">obrigatório</span>
               </span>
             )}
           </label>
@@ -182,7 +185,7 @@ export const TextArea = forwardRef<HTMLTextAreaElement, TextAreaProps>(
             role="alert"
             className="mt-1 text-sm font-medium text-critical flex items-center gap-1"
           >
-            <span>⚠</span>
+            <AlertTriangle className="h-4 w-4 shrink-0" aria-hidden="true" />
             {error}
           </p>
         )}
@@ -244,8 +247,9 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(
           <label htmlFor={selectId} className="block text-sm font-medium text-slate-700 mb-2">
             {label}
             {required && (
-              <span id={requiredId} className="text-critical ml-1" aria-label="obrigatório">
-                *
+              <span id={requiredId} className="text-critical ml-1">
+                <span aria-hidden="true">*</span>
+                <span className="sr-only">obrigatório</span>
               </span>
             )}
           </label>
@@ -284,7 +288,7 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(
             role="alert"
             className="mt-1 text-sm font-medium text-critical flex items-center gap-1"
           >
-            <span>⚠</span>
+            <AlertTriangle className="h-4 w-4 shrink-0" aria-hidden="true" />
             {error}
           </p>
         )}
