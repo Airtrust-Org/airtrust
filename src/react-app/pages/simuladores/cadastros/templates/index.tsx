@@ -229,10 +229,10 @@ export default function CrudTemplates() {
 
             <div className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">
+                <label htmlFor="index-nome" className="block text-sm font-medium text-slate-700 mb-1">
                   Nome <span className="text-red-500">*</span>
                 </label>
-                <input aria-label="Nome"
+                <input id="index-nome" aria-label="Nome"
                   type="text"
                   value={formData.nome}
                   onChange={(e) => setFormData({ ...formData, nome: e.target.value })}
@@ -241,8 +241,8 @@ export default function CrudTemplates() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Tipo</label>
-                <select aria-label="Tipo"
+                <label htmlFor="index-tipo" className="block text-sm font-medium text-slate-700 mb-1">Tipo</label>
+                <select id="index-tipo" aria-label="Tipo"
                   value={formData.tipo}
                   onChange={(e) =>
                     setFormData({
@@ -259,8 +259,8 @@ export default function CrudTemplates() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Descrição</label>
-                <textarea aria-label="Descrição"
+                <label htmlFor="index-descricao" className="block text-sm font-medium text-slate-700 mb-1">Descrição</label>
+                <textarea id="index-descricao" aria-label="Descrição"
                   value={formData.descricao}
                   onChange={(e) => setFormData({ ...formData, descricao: e.target.value })}
                   className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
@@ -269,10 +269,10 @@ export default function CrudTemplates() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">
+                <label htmlFor="index-conteudo-html" className="block text-sm font-medium text-slate-700 mb-1">
                   Conteúdo HTML
                 </label>
-                <textarea aria-label="Conteúdo HTML"
+                <textarea id="index-conteudo-html" aria-label="Conteúdo HTML"
                   value={formData.conteudo}
                   onChange={(e) => setFormData({ ...formData, conteudo: e.target.value })}
                   className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm font-mono"

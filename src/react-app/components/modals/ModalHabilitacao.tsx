@@ -273,8 +273,8 @@ export function ModalHabilitacao({ isOpen, onClose, onSave, habilitacao }: Props
         <form onSubmit={handleSubmit} className="p-6 space-y-4">
           {/* FUNCIONÁRIO */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Funcionário *</label>
-            <select aria-label="Funcionário"
+            <label htmlFor="modalhabilitacao-funcionario" className="block text-sm font-medium text-gray-700 mb-1">Funcionário *</label>
+            <select id="modalhabilitacao-funcionario" aria-label="Funcionário"
               value={form.funcionario_id}
               onChange={(e) => setForm({ ...form, funcionario_id: e.target.value })}
               required
@@ -292,8 +292,8 @@ export function ModalHabilitacao({ isOpen, onClose, onSave, habilitacao }: Props
           {/* QUALIFICAÇÃO E VALIDADE */}
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Qualificação *</label>
-              <select aria-label="Qualificação"
+              <label htmlFor="modalhabilitacao-qualificacao" className="block text-sm font-medium text-gray-700 mb-1">Qualificação *</label>
+              <select id="modalhabilitacao-qualificacao" aria-label="Qualificação"
                 value={form.qualificacao_id}
                 onChange={handleQualificacaoChange}
                 required
@@ -320,10 +320,10 @@ export function ModalHabilitacao({ isOpen, onClose, onSave, habilitacao }: Props
           {/* DATA DE CONCLUSÃO E VENCIMENTO */}
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label htmlFor="modalhabilitacao-data-de-conclusao" className="block text-sm font-medium text-gray-700 mb-1">
                 Data de Conclusão *
               </label>
-              <input aria-label="Data de Conclusão"
+              <input id="modalhabilitacao-data-de-conclusao" aria-label="Data de Conclusão"
                 type="date"
                 value={form.data_conclusao}
                 onChange={handleDataConclusaoChange}
@@ -352,8 +352,8 @@ export function ModalHabilitacao({ isOpen, onClose, onSave, habilitacao }: Props
 
           {/* RESULTADO */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Resultado</label>
-            <select aria-label="Resultado"
+            <label htmlFor="modalhabilitacao-resultado" className="block text-sm font-medium text-gray-700 mb-1">Resultado</label>
+            <select id="modalhabilitacao-resultado" aria-label="Resultado"
               value={form.resultado}
               onChange={(e) => setForm({ ...form, resultado: e.target.value })}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary"
@@ -366,8 +366,8 @@ export function ModalHabilitacao({ isOpen, onClose, onSave, habilitacao }: Props
 
           {/* OBSERVAÇÕES */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Observações</label>
-            <textarea aria-label="Observações"
+            <label htmlFor="modalhabilitacao-observacoes" className="block text-sm font-medium text-gray-700 mb-1">Observações</label>
+            <textarea id="modalhabilitacao-observacoes" aria-label="Observações"
               value={form.observacoes}
               onChange={(e) => setForm({ ...form, observacoes: e.target.value })}
               rows={3}
@@ -377,8 +377,8 @@ export function ModalHabilitacao({ isOpen, onClose, onSave, habilitacao }: Props
 
           {/* INSTRUTOR */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Instrutor</label>
-            <select aria-label="Instrutor"
+            <label htmlFor="modalhabilitacao-instrutor" className="block text-sm font-medium text-gray-700 mb-1">Instrutor</label>
+            <select id="modalhabilitacao-instrutor" aria-label="Instrutor"
               value={form.instrutor}
               onChange={(e) => setForm({ ...form, instrutor: e.target.value })}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary"

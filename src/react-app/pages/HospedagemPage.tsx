@@ -191,8 +191,8 @@ function ModalHospedagem({ hospedagem, funcionarios, onClose, onSaved }: ModalPr
         <form onSubmit={handleSubmit} className="p-6 space-y-4">
           {/* Tripulante */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Tripulante *</label>
-            <select aria-label="Tripulante"
+            <label htmlFor="hospedagempage-tripulante" className="block text-sm font-medium text-gray-700 mb-1">Tripulante *</label>
+            <select id="hospedagempage-tripulante" aria-label="Tripulante"
               value={form.funcionario_id}
               onChange={(e) => set('funcionario_id', parseInt(e.target.value))}
               className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
@@ -210,8 +210,8 @@ function ModalHospedagem({ hospedagem, funcionarios, onClose, onSaved }: ModalPr
           {/* Tipo + Local */}
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Tipo *</label>
-              <select aria-label="Tipo"
+              <label htmlFor="hospedagempage-tipo" className="block text-sm font-medium text-gray-700 mb-1">Tipo *</label>
+              <select id="hospedagempage-tipo" aria-label="Tipo"
                 value={form.tipo}
                 onChange={(e) => set('tipo', e.target.value)}
                 className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
@@ -224,8 +224,8 @@ function ModalHospedagem({ hospedagem, funcionarios, onClose, onSaved }: ModalPr
               </select>
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Local *</label>
-              <input aria-label="Local"
+              <label htmlFor="hospedagempage-local" className="block text-sm font-medium text-gray-700 mb-1">Local *</label>
+              <input id="hospedagempage-local" aria-label="Local"
                 type="text"
                 value={form.local}
                 onChange={(e) => set('local', e.target.value)}
@@ -238,8 +238,8 @@ function ModalHospedagem({ hospedagem, funcionarios, onClose, onSaved }: ModalPr
           {/* Cidade + Estado */}
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Cidade</label>
-              <input aria-label="Cidade"
+              <label htmlFor="hospedagempage-cidade" className="block text-sm font-medium text-gray-700 mb-1">Cidade</label>
+              <input id="hospedagempage-cidade" aria-label="Cidade"
                 type="text"
                 value={form.cidade}
                 onChange={(e) => set('cidade', e.target.value)}
@@ -247,8 +247,8 @@ function ModalHospedagem({ hospedagem, funcionarios, onClose, onSaved }: ModalPr
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Estado</label>
-              <input aria-label="Estado"
+              <label htmlFor="hospedagempage-estado" className="block text-sm font-medium text-gray-700 mb-1">Estado</label>
+              <input id="hospedagempage-estado" aria-label="Estado"
                 type="text"
                 value={form.estado}
                 onChange={(e) => set('estado', e.target.value)}
@@ -261,8 +261,8 @@ function ModalHospedagem({ hospedagem, funcionarios, onClose, onSaved }: ModalPr
           {/* Datas */}
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Check-in *</label>
-              <input aria-label="Check-in"
+              <label htmlFor="hospedagempage-check-in" className="block text-sm font-medium text-gray-700 mb-1">Check-in *</label>
+              <input id="hospedagempage-check-in" aria-label="Check-in"
                 type="date"
                 value={form.data_checkin}
                 onChange={(e) => set('data_checkin', e.target.value)}
@@ -270,8 +270,8 @@ function ModalHospedagem({ hospedagem, funcionarios, onClose, onSaved }: ModalPr
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Check-out</label>
-              <input aria-label="Check-out"
+              <label htmlFor="hospedagempage-check-out" className="block text-sm font-medium text-gray-700 mb-1">Check-out</label>
+              <input id="hospedagempage-check-out" aria-label="Check-out"
                 type="date"
                 value={form.data_checkout ?? ''}
                 onChange={(e) => set('data_checkout', e.target.value)}
@@ -283,8 +283,8 @@ function ModalHospedagem({ hospedagem, funcionarios, onClose, onSaved }: ModalPr
           {/* Quarto + Custo */}
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Nº Quarto</label>
-              <input aria-label="Nº Quarto"
+              <label htmlFor="hospedagempage-no-quarto" className="block text-sm font-medium text-gray-700 mb-1">Nº Quarto</label>
+              <input id="hospedagempage-no-quarto" aria-label="Nº Quarto"
                 type="text"
                 value={form.numero_quarto}
                 onChange={(e) => set('numero_quarto', e.target.value)}
@@ -293,8 +293,8 @@ function ModalHospedagem({ hospedagem, funcionarios, onClose, onSaved }: ModalPr
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Custo/diária</label>
-              <input aria-label="Custo/diária"
+              <label htmlFor="hospedagempage-custo-diaria" className="block text-sm font-medium text-gray-700 mb-1">Custo/diária</label>
+              <input id="hospedagempage-custo-diaria" aria-label="Custo/diária"
                 type="number"
                 min={0}
                 step={0.01}
@@ -308,8 +308,8 @@ function ModalHospedagem({ hospedagem, funcionarios, onClose, onSaved }: ModalPr
 
           {/* Observações */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Observações</label>
-            <textarea aria-label="Observações"
+            <label htmlFor="hospedagempage-observacoes" className="block text-sm font-medium text-gray-700 mb-1">Observações</label>
+            <textarea id="hospedagempage-observacoes" aria-label="Observações"
               value={form.observacoes}
               onChange={(e) => set('observacoes', e.target.value)}
               rows={2}

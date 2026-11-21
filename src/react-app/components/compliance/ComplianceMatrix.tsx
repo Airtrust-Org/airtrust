@@ -235,10 +235,10 @@ export default function ComplianceMatrix({ onBack }: ComplianceMatrixProps) {
       <div className="block lg:hidden">
         <Card>
           <CardContent className="p-4">
-            <label className="block text-sm font-medium text-gray-700 mb-2">
+            <label htmlFor="compliancematrix-selecionar-funcao" className="block text-sm font-medium text-gray-700 mb-2">
               Selecionar Função
             </label>
-            <select aria-label="Selecionar Função"
+            <select id="compliancematrix-selecionar-funcao" aria-label="Selecionar Função"
               value={selectedFuncao}
               onChange={(e) => setSelectedFuncao(e.target.value)}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"

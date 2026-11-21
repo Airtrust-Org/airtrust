@@ -338,8 +338,8 @@ export default function FuncoesManagement() {
           )}
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Nome *</label>
-            <input aria-label="Nome"
+            <label htmlFor="funcoesmanagement-nome" className="block text-sm font-medium text-gray-700 mb-2">Nome *</label>
+            <input id="funcoesmanagement-nome" aria-label="Nome"
               type="text"
               name="nome"
               value={formData.nome}
@@ -351,8 +351,8 @@ export default function FuncoesManagement() {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Categoria</label>
-            <select aria-label="Categoria"
+            <label htmlFor="funcoesmanagement-categoria" className="block text-sm font-medium text-gray-700 mb-2">Categoria</label>
+            <select id="funcoesmanagement-categoria" aria-label="Categoria"
               name="categoria"
               value={formData.categoria}
               onChange={handleInputChange}
@@ -367,8 +367,8 @@ export default function FuncoesManagement() {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Descrição</label>
-            <textarea aria-label="Descrição"
+            <label htmlFor="funcoesmanagement-descricao" className="block text-sm font-medium text-gray-700 mb-2">Descrição</label>
+            <textarea id="funcoesmanagement-descricao" aria-label="Descrição"
               name="descricao"
               value={formData.descricao}
               onChange={handleInputChange}
@@ -399,8 +399,8 @@ export default function FuncoesManagement() {
           )}
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Nome *</label>
-            <input aria-label="Nome"
+            <label htmlFor="funcoesmanagement-nome-2" className="block text-sm font-medium text-gray-700 mb-2">Nome *</label>
+            <input id="funcoesmanagement-nome-2" aria-label="Nome"
               type="text"
               name="nome"
               value={formData.nome}
@@ -412,8 +412,8 @@ export default function FuncoesManagement() {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Categoria</label>
-            <select aria-label="Categoria"
+            <label htmlFor="funcoesmanagement-categoria-2" className="block text-sm font-medium text-gray-700 mb-2">Categoria</label>
+            <select id="funcoesmanagement-categoria-2" aria-label="Categoria"
               name="categoria"
               value={formData.categoria}
               onChange={handleInputChange}
@@ -428,8 +428,8 @@ export default function FuncoesManagement() {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Descrição</label>
-            <textarea aria-label="Descrição"
+            <label htmlFor="funcoesmanagement-descricao-2" className="block text-sm font-medium text-gray-700 mb-2">Descrição</label>
+            <textarea id="funcoesmanagement-descricao-2" aria-label="Descrição"
               name="descricao"
               value={formData.descricao}
               onChange={handleInputChange}

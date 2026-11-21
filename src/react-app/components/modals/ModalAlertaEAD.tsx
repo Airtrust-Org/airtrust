@@ -354,10 +354,10 @@ Por favor, providencie a renovação quando aplicável.`;
 
         {/* Mensagem editável */}
         <div>
-          <label className="mb-2 block text-sm font-medium text-slate-700">
+          <label htmlFor="modalalertaead-mensagem-do-alerta" className="mb-2 block text-sm font-medium text-slate-700">
             Mensagem do Alerta
           </label>
-          <textarea aria-label="Mensagem do Alerta"
+          <textarea id="modalalertaead-mensagem-do-alerta" aria-label="Mensagem do Alerta"
             value={mensagem}
             onChange={(e) => setMensagem(e.target.value)}
             rows={8}

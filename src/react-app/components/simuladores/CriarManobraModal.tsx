@@ -157,10 +157,10 @@ const CriarManobraModal: React.FC<CriarManobraModalProps> = ({
 
           {/* CÓDIGO DA MANOBRA */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label htmlFor="criarmanobramodal-codigo-da-manobra" className="block text-sm font-medium text-gray-700 mb-1">
               Código da Manobra *
             </label>
-            <input aria-label="Código da Manobra"
+            <input id="criarmanobramodal-codigo-da-manobra" aria-label="Código da Manobra"
               ref={codigoRef}
               type="text"
               value={formData.codigo}
@@ -190,10 +190,10 @@ const CriarManobraModal: React.FC<CriarManobraModalProps> = ({
 
           {/* NOME DA MANOBRA */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label htmlFor="criarmanobramodal-nome-da-manobra" className="block text-sm font-medium text-gray-700 mb-1">
               Nome da Manobra *
             </label>
-            <input aria-label="Nome da Manobra"
+            <input id="criarmanobramodal-nome-da-manobra" aria-label="Nome da Manobra"
               type="text"
               value={formData.nome}
               onChange={(e) => handleInputChange('nome', e.target.value)}
@@ -217,10 +217,10 @@ const CriarManobraModal: React.FC<CriarManobraModalProps> = ({
 
           {/* REFERÊNCIA QRH */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label htmlFor="criarmanobramodal-referencia-no-qrh" className="block text-sm font-medium text-gray-700 mb-1">
               Referência no QRH *
             </label>
-            <input aria-label="Referência no QRH"
+            <input id="criarmanobramodal-referencia-no-qrh" aria-label="Referência no QRH"
               type="text"
               value={formData.referencia_qrh}
               onChange={(e) => handleInputChange('referencia_qrh', e.target.value)}

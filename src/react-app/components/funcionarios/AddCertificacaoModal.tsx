@@ -258,11 +258,11 @@ export default function AddCertificacaoModal({
 
         {/* Data de Vencimento */}
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
+          <label htmlFor="addcertificacaomodal-data-de-vencimento" className="block text-sm font-medium text-gray-700 mb-2">
             <Calendar className="w-4 h-4 inline mr-2" />
             Data de Vencimento
           </label>
-          <input aria-label="Data de Vencimento"
+          <input id="addcertificacaomodal-data-de-vencimento" aria-label="Data de Vencimento"
             type="date"
             name="data_vencimento"
             value={formData.data_vencimento}
@@ -296,8 +296,8 @@ export default function AddCertificacaoModal({
 
         {/* Observações */}
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">Observações</label>
-          <textarea aria-label="Observações"
+          <label htmlFor="addcertificacaomodal-observacoes" className="block text-sm font-medium text-gray-700 mb-2">Observações</label>
+          <textarea id="addcertificacaomodal-observacoes" aria-label="Observações"
             name="observacoes"
             value={formData.observacoes}
             onChange={handleInputChange}
@@ -309,10 +309,10 @@ export default function AddCertificacaoModal({
 
         {/* Upload de Certificado */}
         <div className="mb-4">
-          <label className="block text-sm font-medium text-gray-700 mb-2">
+          <label htmlFor="addcertificacaomodal-anexar-certificado-pdf-jpg" className="block text-sm font-medium text-gray-700 mb-2">
             Anexar Certificado (PDF/JPG)
           </label>
-          <input aria-label="Anexar Certificado (PDF/JPG)"
+          <input id="addcertificacaomodal-anexar-certificado-pdf-jpg" aria-label="Anexar Certificado (PDF/JPG)"
             type="file"
             accept=".pdf,.jpg,.jpeg,.png"
             onChange={handleFileSelect}

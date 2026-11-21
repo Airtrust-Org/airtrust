@@ -1276,10 +1276,10 @@ export default function FrmsImportacaoFira() {
 
               {/* Observação */}
               <div>
-                <label className="mb-1.5 block text-sm font-medium text-gray-700">
+                <label htmlFor="frmsimportacaofira-observacao-opcional" className="mb-1.5 block text-sm font-medium text-gray-700">
                   Observação (opcional)
                 </label>
-                <textarea aria-label="Observação (opcional)"
+                <textarea id="frmsimportacaofira-observacao-opcional" aria-label="Observação (opcional)"
                   value={observacao}
                   onChange={(e) => setObservacao(e.target.value)}
                   rows={2}

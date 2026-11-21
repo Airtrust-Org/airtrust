@@ -382,10 +382,10 @@ function CreateBackupModal({ onClose, onSuccess }: CreateModalProps) {
 
           {/* Descrição */}
           <div>
-            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+            <label htmlFor="backup-descricao-opcional" className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
               Descrição <span className="text-slate-400 font-normal">(opcional)</span>
             </label>
-            <textarea aria-label="Descrição (opcional)"
+            <textarea id="backup-descricao-opcional" aria-label="Descrição (opcional)"
               value={descricao}
               onChange={(e) => setDescricao(e.target.value)}
               placeholder="Ex: Backup antes da migração de dados..."
@@ -727,11 +727,11 @@ function RestoreModal({ backup, onClose, onSuccess }: RestoreModalProps) {
 
           {/* Confirmation input */}
           <div>
-            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+            <label htmlFor="backup-digite-confirmar-para-prosseguir" className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
               Digite <span className="font-mono font-bold text-red-600">CONFIRMAR</span> para
               prosseguir
             </label>
-            <input aria-label="Digite CONFIRMAR para prosseguir"
+            <input id="backup-digite-confirmar-para-prosseguir" aria-label="Digite CONFIRMAR para prosseguir"
               type="text"
               value={confirmText}
               onChange={(e) => setConfirmText(e.target.value)}

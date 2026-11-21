@@ -280,8 +280,8 @@ export default function ModalDetalhesEvento({
           {/* Período */}
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs text-slate-500 mb-1">Data início</label>
-              <input aria-label="Data início"
+              <label htmlFor="modaldetalhesevento-data-inicio" className="block text-xs text-slate-500 mb-1">Data início</label>
+              <input id="modaldetalhesevento-data-inicio" aria-label="Data início"
                 type="date"
                 value={dataInicio}
                 onChange={(e) => setDataInicio(e.target.value)}
@@ -289,8 +289,8 @@ export default function ModalDetalhesEvento({
               />
             </div>
             <div>
-              <label className="block text-xs text-slate-500 mb-1">Data fim</label>
-              <input aria-label="Data fim"
+              <label htmlFor="modaldetalhesevento-data-fim" className="block text-xs text-slate-500 mb-1">Data fim</label>
+              <input id="modaldetalhesevento-data-fim" aria-label="Data fim"
                 type="date"
                 value={dataFim}
                 min={dataInicio}
@@ -302,8 +302,8 @@ export default function ModalDetalhesEvento({
           {/* Turno + Status */}
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs text-slate-500 mb-1">Turno</label>
-              <select aria-label="Turno" value={turno} onChange={(e) => setTurno(e.target.value)} className={INP}>
+              <label htmlFor="modaldetalhesevento-turno" className="block text-xs text-slate-500 mb-1">Turno</label>
+              <select id="modaldetalhesevento-turno" aria-label="Turno" value={turno} onChange={(e) => setTurno(e.target.value)} className={INP}>
                 {TURNOS.map((t) => (
                   <option key={t.value} value={t.value}>
                     {t.label}
@@ -312,8 +312,8 @@ export default function ModalDetalhesEvento({
               </select>
             </div>
             <div>
-              <label className="block text-xs text-slate-500 mb-1">Status</label>
-              <select aria-label="Status" value={status} onChange={(e) => setStatus(e.target.value)} className={INP}>
+              <label htmlFor="modaldetalhesevento-status" className="block text-xs text-slate-500 mb-1">Status</label>
+              <select id="modaldetalhesevento-status" aria-label="Status" value={status} onChange={(e) => setStatus(e.target.value)} className={INP}>
                 {Object.entries(STATUS_EVENTO).map(([k, v]) => (
                   <option key={k} value={k}>
                     {v.label}
@@ -323,8 +323,8 @@ export default function ModalDetalhesEvento({
             </div>
           </div>
           <div>
-            <label className="block text-xs text-slate-500 mb-1">Local</label>
-            <input aria-label="Local"
+            <label htmlFor="modaldetalhesevento-local" className="block text-xs text-slate-500 mb-1">Local</label>
+            <input id="modaldetalhesevento-local" aria-label="Local"
               type="text"
               value={local}
               onChange={(e) => setLocal(e.target.value)}
@@ -333,8 +333,8 @@ export default function ModalDetalhesEvento({
             />
           </div>
           <div>
-            <label className="block text-xs text-slate-500 mb-1">Observações</label>
-            <textarea aria-label="Observações"
+            <label htmlFor="modaldetalhesevento-observacoes" className="block text-xs text-slate-500 mb-1">Observações</label>
+            <textarea id="modaldetalhesevento-observacoes" aria-label="Observações"
               value={obs}
               onChange={(e) => setObs(e.target.value)}
               rows={2}

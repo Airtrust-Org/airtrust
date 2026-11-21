@@ -76,8 +76,8 @@ export function ModalNovaCategoria({ isOpen, onClose, onSave, categoria }: Props
 
         <form onSubmit={handleSubmit} className="p-6 space-y-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Nome *</label>
-            <input aria-label="Nome"
+            <label htmlFor="modalnovacategoria-nome" className="block text-sm font-medium text-gray-700 mb-1">Nome *</label>
+            <input id="modalnovacategoria-nome" aria-label="Nome"
               type="text"
               value={form.nome}
               onChange={(e) => setForm({ ...form, nome: e.target.value })}
@@ -87,8 +87,8 @@ export function ModalNovaCategoria({ isOpen, onClose, onSave, categoria }: Props
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Código *</label>
-            <input aria-label="Código"
+            <label htmlFor="modalnovacategoria-codigo" className="block text-sm font-medium text-gray-700 mb-1">Código *</label>
+            <input id="modalnovacategoria-codigo" aria-label="Código"
               type="text"
               value={form.codigo}
               onChange={(e) => setForm({ ...form, codigo: e.target.value })}
@@ -98,8 +98,8 @@ export function ModalNovaCategoria({ isOpen, onClose, onSave, categoria }: Props
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Descrição</label>
-            <textarea aria-label="Descrição"
+            <label htmlFor="modalnovacategoria-descricao" className="block text-sm font-medium text-gray-700 mb-1">Descrição</label>
+            <textarea id="modalnovacategoria-descricao" aria-label="Descrição"
               value={form.descricao}
               onChange={(e) => setForm({ ...form, descricao: e.target.value })}
               rows={3}
@@ -108,9 +108,9 @@ export function ModalNovaCategoria({ isOpen, onClose, onSave, categoria }: Props
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Cor</label>
+            <label htmlFor="modalnovacategoria-cor" className="block text-sm font-medium text-gray-700 mb-1">Cor</label>
             <div className="flex gap-2">
-              <input aria-label="Cor"
+              <input id="modalnovacategoria-cor" aria-label="Cor"
                 type="color"
                 value={form.cor}
                 onChange={(e) => setForm({ ...form, cor: e.target.value })}

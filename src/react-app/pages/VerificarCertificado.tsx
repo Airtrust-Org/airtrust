@@ -76,11 +76,11 @@ export default function VerificarCertificado() {
 
         {/* Input Card */}
         <div className="bg-white rounded-xl shadow-xl p-5 mb-6">
-          <label className="block text-sm font-medium text-gray-700 mb-3">
+          <label htmlFor="verificarcertificado-codigo-de-verificacao-16-caracteres" className="block text-sm font-medium text-gray-700 mb-3">
             Código de Verificação (16 caracteres)
           </label>
           <div className="flex gap-3">
-            <input aria-label="Código de Verificação (16 caracteres)"
+            <input id="verificarcertificado-codigo-de-verificacao-16-caracteres" aria-label="Código de Verificação (16 caracteres)"
               type="text"
               value={hash}
               onChange={(e) => setHash(e.target.value.toUpperCase())}

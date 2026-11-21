@@ -143,10 +143,10 @@ const TemplateForm: React.FC<TemplateFormProps> = ({ template, onSubmit, onCance
           {/* Informações Básicas */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
+              <label htmlFor="templateform-nome-do-modelo" className="block text-sm font-medium text-gray-700 mb-2">
                 Nome do Modelo *
               </label>
-              <input aria-label="Nome do Modelo"
+              <input id="templateform-nome-do-modelo" aria-label="Nome do Modelo"
                 type="text"
                 value={formData.nome}
                 onChange={(e) => setFormData({ ...formData, nome: e.target.value })}
@@ -157,8 +157,8 @@ const TemplateForm: React.FC<TemplateFormProps> = ({ template, onSubmit, onCance
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Categoria *</label>
-              <select aria-label="Categoria"
+              <label htmlFor="templateform-categoria" className="block text-sm font-medium text-gray-700 mb-2">Categoria *</label>
+              <select id="templateform-categoria" aria-label="Categoria"
                 value={formData.categoria}
                 onChange={(e) => setFormData({ ...formData, categoria: e.target.value })}
                 className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-primary"
@@ -173,10 +173,10 @@ const TemplateForm: React.FC<TemplateFormProps> = ({ template, onSubmit, onCance
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
+              <label htmlFor="templateform-duracao-minutos" className="block text-sm font-medium text-gray-700 mb-2">
                 Duração (minutos)
               </label>
-              <input aria-label="Duração (minutos)"
+              <input id="templateform-duracao-minutos" aria-label="Duração (minutos)"
                 type="number"
                 value={formData.duracao_minutos}
                 onChange={(e) =>
@@ -189,8 +189,8 @@ const TemplateForm: React.FC<TemplateFormProps> = ({ template, onSubmit, onCance
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Nota Mínima</label>
-              <input aria-label="Nota Mínima"
+              <label htmlFor="templateform-nota-minima" className="block text-sm font-medium text-gray-700 mb-2">Nota Mínima</label>
+              <input id="templateform-nota-minima" aria-label="Nota Mínima"
                 type="number"
                 step="0.1"
                 value={formData.nota_minima}
@@ -204,10 +204,10 @@ const TemplateForm: React.FC<TemplateFormProps> = ({ template, onSubmit, onCance
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
+              <label htmlFor="templateform-equipamento-aplicavel" className="block text-sm font-medium text-gray-700 mb-2">
                 Equipamento Aplicável
               </label>
-              <input aria-label="Equipamento Aplicável"
+              <input id="templateform-equipamento-aplicavel" aria-label="Equipamento Aplicável"
                 type="text"
                 value={formData.aeronave_aplicavel}
                 onChange={(e) => setFormData({ ...formData, aeronave_aplicavel: e.target.value })}
@@ -219,8 +219,8 @@ const TemplateForm: React.FC<TemplateFormProps> = ({ template, onSubmit, onCance
 
           {/* Descrição */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Descrição</label>
-            <textarea aria-label="Descrição"
+            <label htmlFor="templateform-descricao" className="block text-sm font-medium text-gray-700 mb-2">Descrição</label>
+            <textarea id="templateform-descricao" aria-label="Descrição"
               value={formData.descricao}
               onChange={(e) => setFormData({ ...formData, descricao: e.target.value })}
               rows={3}

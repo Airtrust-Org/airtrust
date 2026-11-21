@@ -981,8 +981,8 @@ function ModalCriarUsuario({
         <form onSubmit={handleSubmit} className="p-6 space-y-4">
           {/* Nome */}
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Nome completo</label>
-            <input aria-label="Nome completo"
+            <label htmlFor="usuariospage-nome-completo" className="block text-sm font-medium text-slate-700 mb-1">Nome completo</label>
+            <input id="usuariospage-nome-completo" aria-label="Nome completo"
               type="text"
               value={nome}
               onChange={(e) => setNome(e.target.value)}
@@ -994,8 +994,8 @@ function ModalCriarUsuario({
 
           {/* Email */}
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">E-mail</label>
-            <input aria-label="E-mail"
+            <label htmlFor="usuariospage-e-mail" className="block text-sm font-medium text-slate-700 mb-1">E-mail</label>
+            <input id="usuariospage-e-mail" aria-label="E-mail"
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
@@ -1007,10 +1007,10 @@ function ModalCriarUsuario({
 
           {/* Perfil */}
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">
+            <label htmlFor="usuariospage-perfil-de-acesso" className="block text-sm font-medium text-slate-700 mb-1">
               Perfil de acesso
             </label>
-            <select aria-label="Perfil de acesso"
+            <select id="usuariospage-perfil-de-acesso" aria-label="Perfil de acesso"
               value={perfil}
               onChange={(e) => setPerfil(e.target.value)}
               className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-primary/30 focus:border-primary bg-white"
@@ -1246,8 +1246,8 @@ function ModalEditarUsuario({
           <p className="text-sm text-slate-500">{usuario.email}</p>
 
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Nome</label>
-            <input aria-label="Nome"
+            <label htmlFor="usuariospage-nome" className="block text-sm font-medium text-slate-700 mb-1">Nome</label>
+            <input id="usuariospage-nome" aria-label="Nome"
               type="text"
               value={nome}
               onChange={(e) => setNome(e.target.value)}
@@ -1257,10 +1257,10 @@ function ModalEditarUsuario({
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">
+            <label htmlFor="usuariospage-perfil-de-acesso-2" className="block text-sm font-medium text-slate-700 mb-1">
               Perfil de acesso
             </label>
-            <select aria-label="Perfil de acesso"
+            <select id="usuariospage-perfil-de-acesso-2" aria-label="Perfil de acesso"
               value={perfil}
               onChange={(e) => {
                 setPerfil(e.target.value);
@@ -1300,10 +1300,10 @@ function ModalEditarUsuario({
           )}
 
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">
+            <label htmlFor="usuariospage-funcionario-vinculado-opcional" className="block text-sm font-medium text-slate-700 mb-1">
               Funcionário vinculado <span className="text-slate-400 font-normal">(opcional)</span>
             </label>
-            <select aria-label="Funcionário vinculado (opcional)"
+            <select id="usuariospage-funcionario-vinculado-opcional" aria-label="Funcionário vinculado (opcional)"
               value={funcionarioId ?? ''}
               onChange={(e) => setFuncionarioId(Number(e.target.value) || null)}
               className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-primary/30 bg-white"
@@ -2312,8 +2312,8 @@ function ModalResetSenha({
         </div>
         <form onSubmit={handleSubmit} className="p-6 space-y-4">
           <div>
-            <label className="block text-xs font-medium text-slate-700 mb-1">Nova Senha *</label>
-            <input aria-label="Nova Senha"
+            <label htmlFor="usuariospage-nova-senha" className="block text-xs font-medium text-slate-700 mb-1">Nova Senha *</label>
+            <input id="usuariospage-nova-senha" aria-label="Nova Senha"
               type="password"
               value={novaSenha}
               onChange={(e) => setNovaSenha(e.target.value)}
@@ -2325,10 +2325,10 @@ function ModalResetSenha({
             />
           </div>
           <div>
-            <label className="block text-xs font-medium text-slate-700 mb-1">
+            <label htmlFor="usuariospage-confirmar-nova-senha" className="block text-xs font-medium text-slate-700 mb-1">
               Confirmar Nova Senha *
             </label>
-            <input aria-label="Confirmar Nova Senha"
+            <input id="usuariospage-confirmar-nova-senha" aria-label="Confirmar Nova Senha"
               type="password"
               value={confirmarSenha}
               onChange={(e) => setConfirmarSenha(e.target.value)}

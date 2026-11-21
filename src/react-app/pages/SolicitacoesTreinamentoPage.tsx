@@ -163,8 +163,8 @@ function CriarModal({ onClose, selfId, canAdmin }: CriarModalProps) {
         <form onSubmit={handleSubmit} className="space-y-4" data-testid="solicitacao-form">
           {canAdmin && (
             <div>
-              <label className="mb-1 block text-sm font-medium text-slate-700">Solicitante</label>
-              <select aria-label="Solicitante"
+              <label htmlFor="solicitacoestreinamentopage-solicitante" className="mb-1 block text-sm font-medium text-slate-700">Solicitante</label>
+              <select id="solicitacoestreinamentopage-solicitante" aria-label="Solicitante"
                 value={solicitanteId}
                 onChange={(e) => setSolicitanteId(Number(e.target.value))}
                 className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -182,8 +182,8 @@ function CriarModal({ onClose, selfId, canAdmin }: CriarModalProps) {
           )}
 
           <div>
-            <label className="mb-1 block text-sm font-medium text-slate-700">Qualificação</label>
-            <select aria-label="Qualificação"
+            <label htmlFor="solicitacoestreinamentopage-qualificacao" className="mb-1 block text-sm font-medium text-slate-700">Qualificação</label>
+            <select id="solicitacoestreinamentopage-qualificacao" aria-label="Qualificação"
               value={qualificacaoId}
               onChange={(e) => {
                 const nextId = e.target.value;
@@ -210,10 +210,10 @@ function CriarModal({ onClose, selfId, canAdmin }: CriarModalProps) {
           </div>
 
           <div>
-            <label className="mb-1 block text-sm font-medium text-slate-700">
+            <label htmlFor="solicitacoestreinamentopage-tipo-de-treinamento" className="mb-1 block text-sm font-medium text-slate-700">
               Tipo de treinamento
             </label>
-            <select aria-label="Tipo de treinamento"
+            <select id="solicitacoestreinamentopage-tipo-de-treinamento" aria-label="Tipo de treinamento"
               value={tipo}
               onChange={(e) => setTipo(e.target.value as TipoTreinamentoType)}
               className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -236,8 +236,8 @@ function CriarModal({ onClose, selfId, canAdmin }: CriarModalProps) {
           </div>
 
           <div>
-            <label className="mb-1 block text-sm font-medium text-slate-700">Título *</label>
-            <input aria-label="Título"
+            <label htmlFor="solicitacoestreinamentopage-titulo" className="mb-1 block text-sm font-medium text-slate-700">Título *</label>
+            <input id="solicitacoestreinamentopage-titulo" aria-label="Título"
               value={titulo}
               onChange={(e) => setTitulo(e.target.value)}
               placeholder="Ex: Renovação CMA Classe 1"
@@ -249,8 +249,8 @@ function CriarModal({ onClose, selfId, canAdmin }: CriarModalProps) {
 
           <div className="grid gap-4 sm:grid-cols-2">
             <div>
-              <label className="mb-1 block text-sm font-medium text-slate-700">Prioridade</label>
-              <select aria-label="Prioridade"
+              <label htmlFor="solicitacoestreinamentopage-prioridade" className="mb-1 block text-sm font-medium text-slate-700">Prioridade</label>
+              <select id="solicitacoestreinamentopage-prioridade" aria-label="Prioridade"
                 value={prioridade}
                 onChange={(e) => setPrioridade(e.target.value as PrioridadeType)}
                 className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -264,8 +264,8 @@ function CriarModal({ onClose, selfId, canAdmin }: CriarModalProps) {
               </select>
             </div>
             <div>
-              <label className="mb-1 block text-sm font-medium text-slate-700">Data prevista</label>
-              <input aria-label="Data prevista"
+              <label htmlFor="solicitacoestreinamentopage-data-prevista" className="mb-1 block text-sm font-medium text-slate-700">Data prevista</label>
+              <input id="solicitacoestreinamentopage-data-prevista" aria-label="Data prevista"
                 type="date"
                 value={dataPrevista}
                 onChange={(e) => setDataPrevista(e.target.value)}
@@ -276,8 +276,8 @@ function CriarModal({ onClose, selfId, canAdmin }: CriarModalProps) {
           </div>
 
           <div>
-            <label className="mb-1 block text-sm font-medium text-slate-700">Justificativa</label>
-            <textarea aria-label="Justificativa"
+            <label htmlFor="solicitacoestreinamentopage-justificativa" className="mb-1 block text-sm font-medium text-slate-700">Justificativa</label>
+            <textarea id="solicitacoestreinamentopage-justificativa" aria-label="Justificativa"
               value={justificativa}
               onChange={(e) => setJustificativa(e.target.value)}
               rows={3}
@@ -453,10 +453,10 @@ function DetalheModal({ item, canAdmin, onClose }: DetalheModalProps) {
             {/* Agendar */}
             {item.status === 'APROVADA_OPS' && (
               <div className="space-y-2">
-                <label className="block text-sm font-medium text-slate-700">
+                <label htmlFor="solicitacoestreinamentopage-data-do-treinamento" className="block text-sm font-medium text-slate-700">
                   Data do treinamento
                 </label>
-                <input aria-label="Data do treinamento"
+                <input id="solicitacoestreinamentopage-data-do-treinamento" aria-label="Data do treinamento"
                   type="date"
                   value={dataAgendada}
                   onChange={(e) => setDataAgendada(e.target.value)}

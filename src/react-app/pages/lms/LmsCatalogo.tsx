@@ -1081,8 +1081,8 @@ function CourseDrawer({
                           </div>
                         )}
                         <div>
-                          <label className="mb-1 block text-xs font-medium text-slate-500">Versão SCORM</label>
-                          <select aria-label="Versão SCORM"
+                          <label htmlFor="lmscatalogo-versao-scorm" className="mb-1 block text-xs font-medium text-slate-500">Versão SCORM</label>
+                          <select id="lmscatalogo-versao-scorm" aria-label="Versão SCORM"
                             value={form.scorm_versao ?? '1.2'}
                             onChange={(e) =>
                               setForm((c) => ({

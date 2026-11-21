@@ -546,8 +546,8 @@ export default function ImportacaoPage() {
 
             <div className="mt-6 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
               <div className="flex flex-wrap items-center gap-2">
-                <label className="text-sm font-medium text-slate-600">Modo:</label>
-                <select aria-label="Modo"
+                <label htmlFor="importacao-modo" className="text-sm font-medium text-slate-600">Modo:</label>
+                <select id="importacao-modo" aria-label="Modo"
                   value={selectedMode}
                   onChange={(event) => setSelectedMode(event.target.value as ImportMode)}
                   className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700"

@@ -229,8 +229,8 @@ export default function ModalLicenca({
             </div>
           ) : (
             <div>
-              <label className="mb-1 block text-sm font-medium text-gray-700">Funcionário *</label>
-              <select aria-label="Funcionário"
+              <label htmlFor="modallicenca-funcionario" className="mb-1 block text-sm font-medium text-gray-700">Funcionário *</label>
+              <select id="modallicenca-funcionario" aria-label="Funcionário"
                 value={formData.funcionario_id}
                 onChange={(e) =>
                   setFormData((prev) => ({ ...prev, funcionario_id: e.target.value }))
@@ -251,8 +251,8 @@ export default function ModalLicenca({
           {/* Tipo + Número */}
           <div className="grid gap-4 md:grid-cols-2">
             <div>
-              <label className="mb-1 block text-sm font-medium text-gray-700">Tipo *</label>
-              <select aria-label="Tipo"
+              <label htmlFor="modallicenca-tipo" className="mb-1 block text-sm font-medium text-gray-700">Tipo *</label>
+              <select id="modallicenca-tipo" aria-label="Tipo"
                 value={formData.tipo}
                 onChange={(e) => setFormData((prev) => ({ ...prev, tipo: e.target.value }))}
                 required
@@ -268,8 +268,8 @@ export default function ModalLicenca({
             </div>
 
             <div>
-              <label className="mb-1 block text-sm font-medium text-gray-700">Número *</label>
-              <input aria-label="Número"
+              <label htmlFor="modallicenca-numero" className="mb-1 block text-sm font-medium text-gray-700">Número *</label>
+              <input id="modallicenca-numero" aria-label="Número"
                 type="text"
                 value={formData.numero}
                 onChange={(e) => setFormData((prev) => ({ ...prev, numero: e.target.value }))}
@@ -283,10 +283,10 @@ export default function ModalLicenca({
           {/* Datas */}
           <div className="grid gap-4 md:grid-cols-2">
             <div>
-              <label className="mb-1 block text-sm font-medium text-gray-700">
+              <label htmlFor="modallicenca-data-de-emissao" className="mb-1 block text-sm font-medium text-gray-700">
                 Data de emissão *
               </label>
-              <input aria-label="Data de emissão"
+              <input id="modallicenca-data-de-emissao" aria-label="Data de emissão"
                 type="date"
                 value={formData.data_emissao}
                 onChange={(e) => setFormData((prev) => ({ ...prev, data_emissao: e.target.value }))}
@@ -296,10 +296,10 @@ export default function ModalLicenca({
             </div>
 
             <div>
-              <label className="mb-1 block text-sm font-medium text-gray-700">
+              <label htmlFor="modallicenca-data-de-vencimento" className="mb-1 block text-sm font-medium text-gray-700">
                 Data de vencimento *
               </label>
-              <input aria-label="Data de vencimento"
+              <input id="modallicenca-data-de-vencimento" aria-label="Data de vencimento"
                 type="date"
                 value={formData.data_vencimento}
                 onChange={(e) =>
@@ -313,8 +313,8 @@ export default function ModalLicenca({
 
           {/* Observações */}
           <div>
-            <label className="mb-1 block text-sm font-medium text-gray-700">Observações</label>
-            <textarea aria-label="Observações"
+            <label htmlFor="modallicenca-observacoes" className="mb-1 block text-sm font-medium text-gray-700">Observações</label>
+            <textarea id="modallicenca-observacoes" aria-label="Observações"
               value={formData.observacoes}
               onChange={(e) => setFormData((prev) => ({ ...prev, observacoes: e.target.value }))}
               className="w-full min-h-[80px] rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-200"

@@ -1381,10 +1381,10 @@ export default function ModalAdicionarTripulacao({
           )}
 
           <div className="rounded-2xl border border-slate-200 bg-white p-4">
-            <label className="mb-2 block text-xs font-semibold uppercase tracking-wide text-slate-500">
+            <label htmlFor="modaladicionartripulacao-observacao-operacional" className="mb-2 block text-xs font-semibold uppercase tracking-wide text-slate-500">
               Observação operacional
             </label>
-            <textarea aria-label="Observação operacional"
+            <textarea id="modaladicionartripulacao-observacao-operacional" aria-label="Observação operacional"
               value={observacoes}
               onChange={(event) => setObservacoes(event.target.value)}
               rows={modoGestaoAeronave ? 2 : 3}

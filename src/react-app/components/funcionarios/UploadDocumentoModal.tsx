@@ -294,10 +294,10 @@ export default function UploadDocumentoModal({
 
         <div className="space-y-5 p-6">
           <div>
-            <label className="mb-2 block text-sm font-medium text-slate-700 dark:text-slate-200">
+            <label htmlFor="uploaddocumentomodal-categoria" className="mb-2 block text-sm font-medium text-slate-700 dark:text-slate-200">
               Categoria <span className="text-red-500">*</span>
             </label>
-            <select aria-label="Categoria"
+            <select id="uploaddocumentomodal-categoria" aria-label="Categoria"
               value={tipoDocumento}
               onChange={(e) => {
                 setTipoDocumento(e.target.value as TipoDocumento);
@@ -377,14 +377,14 @@ export default function UploadDocumentoModal({
           </div>
 
           <div>
-            <label className="mb-2 block text-sm font-medium text-slate-700 dark:text-slate-200">
+            <label htmlFor="uploaddocumentomodal-arquivo-pdf" className="mb-2 block text-sm font-medium text-slate-700 dark:text-slate-200">
               Arquivo PDF <span className="text-red-500">*</span>
             </label>
             <div
               onClick={() => fileInputRef.current?.click()}
               className={`cursor-pointer rounded-lg border-2 border-dashed p-5 text-center transition ${file ? 'border-green-500 bg-green-50 dark:bg-green-950/20' : 'border-slate-300 hover:border-primary hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800'}`}
             >
-              <input aria-label="Arquivo PDF"
+              <input id="uploaddocumentomodal-arquivo-pdf" aria-label="Arquivo PDF"
                 ref={fileInputRef}
                 type="file"
                 accept="application/pdf,.pdf"
@@ -425,10 +425,10 @@ export default function UploadDocumentoModal({
           )}
 
           <div>
-            <label className="mb-2 block text-sm font-medium text-slate-700 dark:text-slate-200">
+            <label htmlFor="uploaddocumentomodal-descricao-opcional" className="mb-2 block text-sm font-medium text-slate-700 dark:text-slate-200">
               Descrição <span className="font-normal text-slate-400">(opcional)</span>
             </label>
-            <textarea aria-label="Descrição (opcional)"
+            <textarea id="uploaddocumentomodal-descricao-opcional" aria-label="Descrição (opcional)"
               value={descricao}
               onChange={(e) => setDescricao(e.target.value)}
               placeholder="Observação objetiva que ajude a identificar o documento..."

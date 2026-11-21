@@ -586,10 +586,10 @@ export default function CrudModelos({ onBack }: Props = {}) {
             <div className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="mb-1 block text-sm font-medium text-slate-700">
+                  <label htmlFor="index-codigo" className="mb-1 block text-sm font-medium text-slate-700">
                     Codigo <span className="text-red-500">*</span>
                   </label>
-                  <input aria-label="Codigo"
+                  <input id="index-codigo" aria-label="Codigo"
                     type="text"
                     value={formData.codigo || ''}
                     onChange={(e) => setFormData({ ...formData, codigo: e.target.value })}
@@ -599,8 +599,8 @@ export default function CrudModelos({ onBack }: Props = {}) {
                 </div>
 
                 <div>
-                  <label className="mb-1 block text-sm font-medium text-slate-700">Tipo</label>
-                  <select aria-label="Tipo"
+                  <label htmlFor="index-tipo" className="mb-1 block text-sm font-medium text-slate-700">Tipo</label>
+                  <select id="index-tipo" aria-label="Tipo"
                     value={formData.tipo || 'INICIAL'}
                     onChange={(e) =>
                       setFormData({
@@ -617,10 +617,10 @@ export default function CrudModelos({ onBack }: Props = {}) {
               </div>
 
               <div>
-                <label className="mb-1 block text-sm font-medium text-slate-700">
+                <label htmlFor="index-nome" className="mb-1 block text-sm font-medium text-slate-700">
                   Nome <span className="text-red-500">*</span>
                 </label>
-                <input aria-label="Nome"
+                <input id="index-nome" aria-label="Nome"
                   type="text"
                   value={formData.nome || ''}
                   onChange={(e) => setFormData({ ...formData, nome: e.target.value })}
@@ -630,10 +630,10 @@ export default function CrudModelos({ onBack }: Props = {}) {
               </div>
 
               <div>
-                <label className="mb-1 block text-sm font-medium text-slate-700">
+                <label htmlFor="index-duracao-minutos" className="mb-1 block text-sm font-medium text-slate-700">
                   Duracao (minutos) <span className="text-red-500">*</span>
                 </label>
-                <input aria-label="Duracao (minutos)"
+                <input id="index-duracao-minutos" aria-label="Duracao (minutos)"
                   type="number"
                   value={formData.duracao_minutos || 120}
                   onChange={(e) =>
@@ -644,8 +644,8 @@ export default function CrudModelos({ onBack }: Props = {}) {
               </div>
 
               <div>
-                <label className="mb-1 block text-sm font-medium text-slate-700">Descricao</label>
-                <textarea aria-label="Descricao"
+                <label htmlFor="index-descricao" className="mb-1 block text-sm font-medium text-slate-700">Descricao</label>
+                <textarea id="index-descricao" aria-label="Descricao"
                   value={formData.descricao || ''}
                   onChange={(e) => setFormData({ ...formData, descricao: e.target.value })}
                   rows={3}
@@ -793,10 +793,10 @@ export default function CrudModelos({ onBack }: Props = {}) {
                 </div>
 
                 <div className="p-6">
-                  <label className="mb-2 block text-sm font-medium text-slate-700">
+                  <label htmlFor="index-manobra" className="mb-2 block text-sm font-medium text-slate-700">
                     Manobra <span className="text-red-500">*</span>
                   </label>
-                  <select aria-label="Manobra"
+                  <select id="index-manobra" aria-label="Manobra"
                     value={manobraSelecionada || ''}
                     onChange={(e) => setManobraSelecionada(Number(e.target.value))}
                     className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"

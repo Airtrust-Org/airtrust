@@ -200,10 +200,10 @@ export default function ModalPublicarEscala({
             )}
 
             <div>
-              <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-slate-500">
+              <label htmlFor="modalpublicarescala-observacao-sobre-esta-revisao-opcional" className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-slate-500">
                 Observação sobre esta revisão (opcional)
               </label>
-              <textarea aria-label="Observação sobre esta revisão (opcional)"
+              <textarea id="modalpublicarescala-observacao-sobre-esta-revisao-opcional" aria-label="Observação sobre esta revisão (opcional)"
                 value={justificativa}
                 onChange={(e) => setJustificativa(e.target.value)}
                 rows={2}
@@ -316,10 +316,10 @@ export default function ModalPublicarEscala({
             )}
 
             <div>
-              <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-slate-500">
+              <label htmlFor="modalpublicarescala-observacao-opcional" className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-slate-500">
                 Observação (opcional)
               </label>
-              <textarea aria-label="Observação (opcional)"
+              <textarea id="modalpublicarescala-observacao-opcional" aria-label="Observação (opcional)"
                 value={justificativa}
                 onChange={(e) => setJustificativa(e.target.value)}
                 rows={2}

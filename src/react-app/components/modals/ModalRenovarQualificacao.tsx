@@ -209,12 +209,12 @@ export function ModalRenovarQualificacao({
             </div>
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
+            <label htmlFor="modalrenovarqualificacao-nova-data-de-conclusao-realizacao" className="block text-sm font-medium text-gray-700 mb-2">
               Nova Data de Conclusão/Realização *
             </label>
             <div className="relative">
               <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-              <input aria-label="Nova Data de Conclusão/Realização"
+              <input id="modalrenovarqualificacao-nova-data-de-conclusao-realizacao" aria-label="Nova Data de Conclusão/Realização"
                 type="date"
                 value={inputNovaDataConclusao}
                 onChange={(e) => setNovaDataConclusao(converterParaFormatoHTML(e.target.value))}
@@ -237,8 +237,8 @@ export function ModalRenovarQualificacao({
             </p>
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Observações</label>
-            <textarea aria-label="Observações"
+            <label htmlFor="modalrenovarqualificacao-observacoes" className="block text-sm font-medium text-gray-700 mb-2">Observações</label>
+            <textarea id="modalrenovarqualificacao-observacoes" aria-label="Observações"
               value={observacao}
               onChange={(e) => setObservacao(e.target.value)}
               disabled={salvando}

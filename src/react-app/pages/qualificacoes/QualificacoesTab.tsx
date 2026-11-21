@@ -105,10 +105,10 @@ export const QualificacoesTab: React.FC<QualificacoesTabProps> = ({
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {/* Filtro: Nome */}
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-2">Nome</label>
+            <label htmlFor="qualificacoestab-nome" className="block text-sm font-medium text-slate-700 mb-2">Nome</label>
             <div className="relative">
               <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
-              <input aria-label="Nome"
+              <input id="qualificacoestab-nome" aria-label="Nome"
                 type="text"
                 placeholder="Buscar qualificação..."
                 value={filtroNome}
@@ -120,8 +120,8 @@ export const QualificacoesTab: React.FC<QualificacoesTabProps> = ({
 
           {/* Filtro: Categoria */}
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-2">Categoria</label>
-            <select aria-label="Categoria"
+            <label htmlFor="qualificacoestab-categoria" className="block text-sm font-medium text-slate-700 mb-2">Categoria</label>
+            <select id="qualificacoestab-categoria" aria-label="Categoria"
               value={filtroCategoria}
               onChange={(e) => setFiltroCategoria(e.target.value)}
               className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/50 bg-white"

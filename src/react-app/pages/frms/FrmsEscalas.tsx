@@ -147,8 +147,8 @@ function EscalaFormModal({ tripulanteId, escala, onClose, onSaved }: FormModalPr
             </p>
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="block text-xs text-gray-500 mb-1">Início</label>
-                <input aria-label="Início"
+                <label htmlFor="frmsescalas-inicio" className="block text-xs text-gray-500 mb-1">Início</label>
+                <input id="frmsescalas-inicio" aria-label="Início"
                   type="date"
                   value={dataInicioEmb}
                   onChange={(e) => setDataInicioEmb(e.target.value)}
@@ -157,8 +157,8 @@ function EscalaFormModal({ tripulanteId, escala, onClose, onSaved }: FormModalPr
                 />
               </div>
               <div>
-                <label className="block text-xs text-gray-500 mb-1">Fim</label>
-                <input aria-label="Fim"
+                <label htmlFor="frmsescalas-fim" className="block text-xs text-gray-500 mb-1">Fim</label>
+                <input id="frmsescalas-fim" aria-label="Fim"
                   type="date"
                   value={dataFimEmb}
                   onChange={(e) => setDataFimEmb(e.target.value)}
@@ -179,8 +179,8 @@ function EscalaFormModal({ tripulanteId, escala, onClose, onSaved }: FormModalPr
             </p>
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="block text-xs text-gray-500 mb-1">Início</label>
-                <input aria-label="Início"
+                <label htmlFor="frmsescalas-inicio-2" className="block text-xs text-gray-500 mb-1">Início</label>
+                <input id="frmsescalas-inicio-2" aria-label="Início"
                   type="date"
                   value={dataInicioFolga}
                   onChange={(e) => setDataInicioFolga(e.target.value)}
@@ -189,8 +189,8 @@ function EscalaFormModal({ tripulanteId, escala, onClose, onSaved }: FormModalPr
                 />
               </div>
               <div>
-                <label className="block text-xs text-gray-500 mb-1">Fim</label>
-                <input aria-label="Fim"
+                <label htmlFor="frmsescalas-fim-2" className="block text-xs text-gray-500 mb-1">Fim</label>
+                <input id="frmsescalas-fim-2" aria-label="Fim"
                   type="date"
                   value={dataFimFolga}
                   onChange={(e) => setDataFimFolga(e.target.value)}
@@ -207,11 +207,11 @@ function EscalaFormModal({ tripulanteId, escala, onClose, onSaved }: FormModalPr
           {/* Status (só na edição) */}
           {isEdit && (
             <div>
-              <label className="block text-xs font-medium text-gray-500 mb-1">
+              <label htmlFor="frmsescalas-status-do-ciclo" className="block text-xs font-medium text-gray-500 mb-1">
                 Status do Ciclo
               </label>
               <div className="relative">
-                <select aria-label="Status do Ciclo"
+                <select id="frmsescalas-status-do-ciclo" aria-label="Status do Ciclo"
                   value={statusCiclo}
                   onChange={(e) => setStatusCiclo(e.target.value)}
                   className="w-full appearance-none rounded-lg border border-gray-200 pl-3 pr-8 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-primary/30 cursor-pointer"
@@ -227,8 +227,8 @@ function EscalaFormModal({ tripulanteId, escala, onClose, onSaved }: FormModalPr
 
           {/* Observação */}
           <div>
-            <label className="block text-xs font-medium text-gray-500 mb-1">Observação</label>
-            <textarea aria-label="Observação"
+            <label htmlFor="frmsescalas-observacao" className="block text-xs font-medium text-gray-500 mb-1">Observação</label>
+            <textarea id="frmsescalas-observacao" aria-label="Observação"
               value={obs}
               onChange={(e) => setObs(e.target.value)}
               rows={2}
@@ -328,11 +328,11 @@ export default function FrmsEscalas() {
 
         {/* Seletor de Tripulante */}
         <div className="rounded-xl border border-gray-200 bg-white p-5">
-          <label className="block text-xs font-semibold uppercase tracking-wide text-gray-500 mb-2">
+          <label htmlFor="frmsescalas-selecionar-tripulante" className="block text-xs font-semibold uppercase tracking-wide text-gray-500 mb-2">
             Selecionar Tripulante
           </label>
           <div className="relative max-w-sm">
-            <select aria-label="Selecionar Tripulante"
+            <select id="frmsescalas-selecionar-tripulante" aria-label="Selecionar Tripulante"
               value={tripulanteId}
               onChange={(e) => setTripulanteId(e.target.value)}
               className="w-full appearance-none rounded-lg border border-gray-200 bg-white pl-3 pr-8 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 cursor-pointer"

@@ -249,10 +249,10 @@ export default function CrudInstrutores() {
 
             <div className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">
+                <label htmlFor="index-funcionario" className="block text-sm font-medium text-slate-700 mb-1">
                   Funcionário <span className="text-red-500">*</span>
                 </label>
-                <select aria-label="Funcionário"
+                <select id="index-funcionario" aria-label="Funcionário"
                   value={formData.funcionario_id}
                   onChange={(e) => setFormData({ ...formData, funcionario_id: e.target.value })}
                   className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
@@ -267,10 +267,10 @@ export default function CrudInstrutores() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">
+                <label htmlFor="index-habilitacoes" className="block text-sm font-medium text-slate-700 mb-1">
                   Habilitações
                 </label>
-                <input aria-label="Habilitações"
+                <input id="index-habilitacoes" aria-label="Habilitações"
                   type="text"
                   value={formData.habilitacoes}
                   onChange={(e) => setFormData({ ...formData, habilitacoes: e.target.value })}
@@ -280,8 +280,8 @@ export default function CrudInstrutores() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Observações</label>
-                <textarea aria-label="Observações"
+                <label htmlFor="index-observacoes" className="block text-sm font-medium text-slate-700 mb-1">Observações</label>
+                <textarea id="index-observacoes" aria-label="Observações"
                   value={formData.observacoes}
                   onChange={(e) => setFormData({ ...formData, observacoes: e.target.value })}
                   className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"

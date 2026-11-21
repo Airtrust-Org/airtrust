@@ -169,10 +169,10 @@ export default function ModalEditarQualificacaoSimples({
 
           {/* Data de Realização - Campo GRANDE e destacado */}
           <div>
-            <label className="block text-sm font-semibold text-gray-900 mb-2">
+            <label htmlFor="modaleditarqualificacaosimples-data-de-realizacao" className="block text-sm font-semibold text-gray-900 mb-2">
               Data de Realização *
             </label>
-            <input aria-label="Data de Realização"
+            <input id="modaleditarqualificacaosimples-data-de-realizacao" aria-label="Data de Realização"
               type="date"
               value={dataRealizacao}
               onChange={(e) => setDataRealizacao(e.target.value)}
@@ -202,8 +202,8 @@ export default function ModalEditarQualificacaoSimples({
 
           {/* Observações */}
           <div>
-            <label className="block text-sm font-semibold text-gray-900 mb-2">Observações</label>
-            <textarea aria-label="Observações"
+            <label htmlFor="modaleditarqualificacaosimples-observacoes" className="block text-sm font-semibold text-gray-900 mb-2">Observações</label>
+            <textarea id="modaleditarqualificacaosimples-observacoes" aria-label="Observações"
               value={observacoes}
               onChange={(e) => setObservacoes(e.target.value)}
               rows={4}

@@ -1939,10 +1939,10 @@ export default function ModalNovaSessao({
 
           {/* 1️⃣ EQUIPAMENTO */}
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-2">
+            <label htmlFor="modalnovasessao-1-equipamento" className="block text-sm font-medium text-slate-700 mb-2">
               1. Equipamento <span className="text-red-500">*</span>
             </label>
-            <select aria-label="1. Equipamento"
+            <select id="modalnovasessao-1-equipamento" aria-label="1. Equipamento"
               value={aeronaveId || ''}
               onChange={(e) => {
                 const id = Number(e.target.value);
@@ -1964,10 +1964,10 @@ export default function ModalNovaSessao({
           {/* 2️⃣ SIMULADOR ou AERONAVE REAL */}
           {tipoDispositivo === 'SIMULADOR' ? (
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-2">
+              <label htmlFor="modalnovasessao-2-simulador" className="block text-sm font-medium text-slate-700 mb-2">
                 2. Simulador <span className="text-red-500">*</span>
               </label>
-              <select aria-label="2. Simulador"
+              <select id="modalnovasessao-2-simulador" aria-label="2. Simulador"
                 value={simuladorId || ''}
                 onChange={(e) => handleSimuladorChange(Number(e.target.value))}
                 className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary"
@@ -1997,10 +1997,10 @@ export default function ModalNovaSessao({
             </div>
           ) : (
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-2">
+              <label htmlFor="modalnovasessao-2-aeronave" className="block text-sm font-medium text-slate-700 mb-2">
                 2. Aeronave <span className="text-red-500">*</span>
               </label>
-              <select aria-label="2. Aeronave"
+              <select id="modalnovasessao-2-aeronave" aria-label="2. Aeronave"
                 value={aeronaveRealId || ''}
                 onChange={(e) => handleAeronaveRealChange(Number(e.target.value))}
                 className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary"
@@ -2029,10 +2029,10 @@ export default function ModalNovaSessao({
           <>
           {/* 3️⃣ TIPO DE SESSÃO */}
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-2">
+            <label htmlFor="modalnovasessao-3-tipo-de-sessao" className="block text-sm font-medium text-slate-700 mb-2">
               3. Tipo de Sessão <span className="text-red-500">*</span>
             </label>
-            <select aria-label="3. Tipo de Sessão"
+            <select id="modalnovasessao-3-tipo-de-sessao" aria-label="3. Tipo de Sessão"
               value={tipoSessaoId || ''}
               onChange={(e) => handleTipoSessaoChange(Number(e.target.value))}
               className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary"
@@ -2125,10 +2125,10 @@ export default function ModalNovaSessao({
           {/* 4. DATA E HORÁRIOS */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-2">
+              <label htmlFor="modalnovasessao-data" className="block text-sm font-medium text-slate-700 mb-2">
                 Data <span className="text-red-500">*</span>
               </label>
-              <input aria-label="Data"
+              <input id="modalnovasessao-data" aria-label="Data"
                 type="date"
                 value={data}
                 onChange={(e) => {
@@ -2184,10 +2184,10 @@ export default function ModalNovaSessao({
 
           {/* 5. INSTRUTOR */}
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-2">
+            <label htmlFor="modalnovasessao-instrutor" className="block text-sm font-medium text-slate-700 mb-2">
               Instrutor <span className="text-red-500">*</span>
             </label>
-            <select aria-label="Instrutor"
+            <select id="modalnovasessao-instrutor" aria-label="Instrutor"
               value={instrutorId || ''}
               onChange={(e) => setInstrutorId(Number(e.target.value))}
               className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary"
@@ -2214,10 +2214,10 @@ export default function ModalNovaSessao({
           {/* 5.1 EXAMINADOR (OPCIONAL) + CHECKS */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-2">
+              <label htmlFor="modalnovasessao-examinador-opcional" className="block text-sm font-medium text-slate-700 mb-2">
                 Examinador (opcional)
               </label>
-              <select aria-label="Examinador (opcional)"
+              <select id="modalnovasessao-examinador-opcional" aria-label="Examinador (opcional)"
                 value={examinadorId || ''}
                 onChange={(e) => {
                   const v = e.target.value ? Number(e.target.value) : null;
@@ -2409,10 +2409,10 @@ export default function ModalNovaSessao({
             </div>
           )}
           {/* 7. OBSERVAÇÕES (OPCIONAL) */}
-            <label className="block text-sm font-medium text-slate-700 mb-2">
+            <label htmlFor="modalnovasessao-observacoes-opcional" className="block text-sm font-medium text-slate-700 mb-2">
               Observações (opcional)
             </label>
-            <textarea aria-label="Observações (opcional)"
+            <textarea id="modalnovasessao-observacoes-opcional" aria-label="Observações (opcional)"
               value={observacoes}
               onChange={(e) => setObservacoes(e.target.value)}
               placeholder="Informações adicionais sobre a sessão..."

@@ -184,10 +184,10 @@ export const CriarTemplateModal: React.FC<CriarTemplateModalProps> = ({
               <h3 className="text-lg font-medium text-gray-900">Informações do Modelo</h3>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                <label htmlFor="criartemplatemodal-nome-do-modelo" className="block text-sm font-medium text-gray-700 mb-2">
                   Nome do Modelo *
                 </label>
-                <input aria-label="Nome do Modelo"
+                <input id="criartemplatemodal-nome-do-modelo" aria-label="Nome do Modelo"
                   type="text"
                   value={formData.nome}
                   onChange={(e) => setFormData((prev) => ({ ...prev, nome: e.target.value }))}
@@ -199,10 +199,10 @@ export const CriarTemplateModal: React.FC<CriarTemplateModalProps> = ({
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <label htmlFor="criartemplatemodal-duracao-horas" className="block text-sm font-medium text-gray-700 mb-2">
                     Duração (horas)
                   </label>
-                  <input aria-label="Duração (horas)"
+                  <input id="criartemplatemodal-duracao-horas" aria-label="Duração (horas)"
                     type="number"
                     min="1"
                     max="8"
@@ -218,8 +218,8 @@ export const CriarTemplateModal: React.FC<CriarTemplateModalProps> = ({
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Tipo</label>
-                  <select aria-label="Tipo"
+                  <label htmlFor="criartemplatemodal-tipo" className="block text-sm font-medium text-gray-700 mb-2">Tipo</label>
+                  <select id="criartemplatemodal-tipo" aria-label="Tipo"
                     value={formData.tipo}
                     onChange={(e) =>
                       setFormData((prev) => ({ ...prev, tipo: e.target.value as any }))
@@ -235,8 +235,8 @@ export const CriarTemplateModal: React.FC<CriarTemplateModalProps> = ({
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Descrição</label>
-                <textarea aria-label="Descrição"
+                <label htmlFor="criartemplatemodal-descricao" className="block text-sm font-medium text-gray-700 mb-2">Descrição</label>
+                <textarea id="criartemplatemodal-descricao" aria-label="Descrição"
                   value={formData.descricao}
                   onChange={(e) => setFormData((prev) => ({ ...prev, descricao: e.target.value }))}
                   placeholder="Descreva o objetivo desta sessão..."

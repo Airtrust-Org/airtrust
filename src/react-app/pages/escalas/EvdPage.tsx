@@ -2531,8 +2531,8 @@ function EvdCreateForm({
             </h4>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-[140px_1fr]">
               <div>
-                <label className="mb-1 block text-xs font-medium text-slate-500">Base</label>
-                <input aria-label="Base"
+                <label htmlFor="evdpage-base" className="mb-1 block text-xs font-medium text-slate-500">Base</label>
+                <input id="evdpage-base" aria-label="Base"
                   type="text"
                   value={form.base}
                   onChange={(e) => setForm((prev) => ({ ...prev, base: e.target.value.toUpperCase() }))}
@@ -2541,8 +2541,8 @@ function EvdCreateForm({
                 />
               </div>
               <div>
-                <label className="mb-1 block text-xs font-medium text-slate-500">Observações</label>
-                <textarea aria-label="Observações"
+                <label htmlFor="evdpage-observacoes" className="mb-1 block text-xs font-medium text-slate-500">Observações</label>
+                <textarea id="evdpage-observacoes" aria-label="Observações"
                   value={form.observacoes}
                   onChange={(e) => setForm((prev) => ({ ...prev, observacoes: e.target.value }))}
                   rows={2}

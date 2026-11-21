@@ -121,8 +121,8 @@ export default function ConfiguracaoEmpresa() {
         <div className={styles.card}>
           <h2>Informações Básicas</h2>
           <div className={styles.formGroup}>
-            <label>Nome da Empresa *</label>
-            <input aria-label="Nome da Empresa"
+            <label htmlFor="configuracaoempresa-nome-da-empresa">Nome da Empresa *</label>
+            <input id="configuracaoempresa-nome-da-empresa" aria-label="Nome da Empresa"
               type="text"
               value={config.nome}
               onChange={(e) => setConfig({ ...config, nome: e.target.value })}
@@ -148,8 +148,8 @@ export default function ConfiguracaoEmpresa() {
           )}
 
           <div className={styles.formGroup}>
-            <label>URL da Logo</label>
-            <input aria-label="URL da Logo"
+            <label htmlFor="configuracaoempresa-url-da-logo">URL da Logo</label>
+            <input id="configuracaoempresa-url-da-logo" aria-label="URL da Logo"
               type="text"
               value={config.logo_url || ''}
               onChange={(e) => setConfig({ ...config, logo_url: e.target.value })}
@@ -168,9 +168,9 @@ export default function ConfiguracaoEmpresa() {
         <div className={styles.card}>
           <h2>Cores do Certificado</h2>
           <div className={styles.formGroup}>
-            <label>Cor Primária *</label>
+            <label htmlFor="configuracaoempresa-cor-primaria">Cor Primária *</label>
             <div className={styles.colorInput}>
-              <input aria-label="Cor Primária"
+              <input id="configuracaoempresa-cor-primaria" aria-label="Cor Primária"
                 type="color"
                 value={config.cor_primaria}
                 onChange={(e) => setConfig({ ...config, cor_primaria: e.target.value })}
@@ -180,9 +180,9 @@ export default function ConfiguracaoEmpresa() {
           </div>
 
           <div className={styles.formGroup}>
-            <label>Cor Secundária *</label>
+            <label htmlFor="configuracaoempresa-cor-secundaria">Cor Secundária *</label>
             <div className={styles.colorInput}>
-              <input aria-label="Cor Secundária"
+              <input id="configuracaoempresa-cor-secundaria" aria-label="Cor Secundária"
                 type="color"
                 value={config.cor_secundaria}
                 onChange={(e) => setConfig({ ...config, cor_secundaria: e.target.value })}
@@ -201,8 +201,8 @@ export default function ConfiguracaoEmpresa() {
         <div className={styles.card}>
           <h2>Template do Certificado</h2>
           <div className={styles.formGroup}>
-            <label>Conteúdo HTML</label>
-            <textarea aria-label="Conteúdo HTML"
+            <label htmlFor="configuracaoempresa-conteudo-html">Conteúdo HTML</label>
+            <textarea id="configuracaoempresa-conteudo-html" aria-label="Conteúdo HTML"
               value={config.template_certificado || ''}
               onChange={(e) => setConfig({ ...config, template_certificado: e.target.value })}
               placeholder="Cole aqui o template HTML do certificado..."

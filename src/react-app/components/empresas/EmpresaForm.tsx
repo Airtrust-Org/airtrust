@@ -712,10 +712,10 @@ export function EmpresaForm({
               {/* Campos Básicos */}
               <div className="space-y-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                  <label htmlFor="empresaform-nome-da-empresa" className="block text-sm font-medium text-gray-700 mb-1">
                     Nome da Empresa *
                   </label>
-                  <input aria-label="Nome da Empresa"
+                  <input id="empresaform-nome-da-empresa" aria-label="Nome da Empresa"
                     type="text"
                     value={data.nome}
                     onChange={(e) => setData({ ...data, nome: e.target.value })}
@@ -724,10 +724,10 @@ export function EmpresaForm({
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                  <label htmlFor="empresaform-codigo-slug" className="block text-sm font-medium text-gray-700 mb-1">
                     Código (Slug)
                   </label>
-                  <input aria-label="Código (Slug)"
+                  <input id="empresaform-codigo-slug" aria-label="Código (Slug)"
                     type="text"
                     value={data.codigo}
                     disabled={isSelfEdit || !!data.id}
@@ -744,8 +744,8 @@ export function EmpresaForm({
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">CNPJ</label>
-                  <input aria-label="CNPJ"
+                  <label htmlFor="empresaform-cnpj" className="block text-sm font-medium text-gray-700 mb-1">CNPJ</label>
+                  <input id="empresaform-cnpj" aria-label="CNPJ"
                     type="text"
                     value={data.cnpj || ''}
                     onChange={(e) => setData({ ...data, cnpj: e.target.value })}
@@ -754,10 +754,10 @@ export function EmpresaForm({
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                  <label htmlFor="empresaform-dominio-de-e-mail" className="block text-sm font-medium text-gray-700 mb-1">
                     Domínio de E-mail
                   </label>
-                  <input aria-label="Domínio de E-mail"
+                  <input id="empresaform-dominio-de-e-mail" aria-label="Domínio de E-mail"
                     type="text"
                     value={data.dominio || ''}
                     onChange={(e) => setData({ ...data, dominio: e.target.value.toLowerCase() })}
@@ -778,10 +778,10 @@ export function EmpresaForm({
           <div className="space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label htmlFor="empresaform-plano-de-assinatura" className="block text-sm font-medium text-gray-700 mb-1">
                   Plano de Assinatura
                 </label>
-                <select aria-label="Plano de Assinatura"
+                <select id="empresaform-plano-de-assinatura" aria-label="Plano de Assinatura"
                   value={data.plano}
                   onChange={(e) =>
                     setData({ ...data, plano: e.target.value as EmpresaData['plano'] })
@@ -794,8 +794,8 @@ export function EmpresaForm({
                 </select>
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
-                <select aria-label="Status"
+                <label htmlFor="empresaform-status" className="block text-sm font-medium text-gray-700 mb-1">Status</label>
+                <select id="empresaform-status" aria-label="Status"
                   value={data.ativo}
                   onChange={(e) => setData({ ...data, ativo: parseInt(e.target.value) })}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary/30 bg-white"
@@ -805,10 +805,10 @@ export function EmpresaForm({
                 </select>
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label htmlFor="empresaform-limite-de-usuarios" className="block text-sm font-medium text-gray-700 mb-1">
                   Limite de Usuários
                 </label>
-                <input aria-label="Limite de Usuários"
+                <input id="empresaform-limite-de-usuarios" aria-label="Limite de Usuários"
                   type="number"
                   value={data.max_funcionarios}
                   onChange={(e) => setData({ ...data, max_funcionarios: parseInt(e.target.value) })}
@@ -816,10 +816,10 @@ export function EmpresaForm({
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label htmlFor="empresaform-storage-limite-mb" className="block text-sm font-medium text-gray-700 mb-1">
                   Storage Limite (MB)
                 </label>
-                <input aria-label="Storage Limite (MB)"
+                <input id="empresaform-storage-limite-mb" aria-label="Storage Limite (MB)"
                   type="number"
                   value={data.max_storage_mb}
                   onChange={(e) => setData({ ...data, max_storage_mb: parseInt(e.target.value) })}
@@ -967,8 +967,8 @@ export function EmpresaForm({
             </div>
             <div className="flex-1 p-4 grid grid-cols-1 lg:grid-cols-2 gap-4 overflow-hidden min-h-0">
               <div className="flex flex-col min-h-0">
-                <label className="text-sm font-medium mb-2">HTML do Template</label>
-                <textarea aria-label="HTML do Template"
+                <label htmlFor="empresaform-html-do-template" className="text-sm font-medium mb-2">HTML do Template</label>
+                <textarea id="empresaform-html-do-template" aria-label="HTML do Template"
                   value={templateHtml}
                   onChange={(e) => setTemplateHtml(e.target.value)}
                   className="flex-1 w-full p-4 border border-gray-200 rounded-lg font-mono text-xs focus:ring-2 focus:ring-primary/30 resize-none overflow-auto"

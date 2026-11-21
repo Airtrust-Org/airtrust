@@ -330,15 +330,15 @@ export default function CrudSimuladores({ embedded = false, onBack }: Props = {}
             </div>
             <div className="p-6 space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">Nome <span className="text-red-500">*</span></label>
-                <Input aria-label="Nome"
+                <label htmlFor="crud-completo-nome" className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">Nome <span className="text-red-500">*</span></label>
+                <Input id="crud-completo-nome" aria-label="Nome"
                   value={formData.nome || ''}
                   onChange={(e) => setFormData({ ...formData, nome: e.target.value })}
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">Equipamento <span className="text-red-500">*</span></label>
-                <select aria-label="Equipamento"
+                <label htmlFor="crud-completo-equipamento" className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">Equipamento <span className="text-red-500">*</span></label>
+                <select id="crud-completo-equipamento" aria-label="Equipamento"
                   className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md bg-white dark:bg-slate-800 text-gray-900 dark:text-slate-100"
                   value={formData.tipo || ''}
                   onChange={(e) =>
@@ -355,25 +355,25 @@ export default function CrudSimuladores({ embedded = false, onBack }: Props = {}
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">
+                  <label htmlFor="crud-completo-localizacao" className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">
                     Localização
                   </label>
-                  <Input aria-label="Localização"
+                  <Input id="crud-completo-localizacao" aria-label="Localização"
                     value={formData.localizacao || ''}
                     onChange={(e) => setFormData({ ...formData, localizacao: e.target.value })}
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">Empresa</label>
-                  <Input aria-label="Empresa"
+                  <label htmlFor="crud-completo-empresa" className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">Empresa</label>
+                  <Input id="crud-completo-empresa" aria-label="Empresa"
                     value={formData.fabricante || ''}
                     onChange={(e) => setFormData({ ...formData, fabricante: e.target.value })}
                   />
                 </div>
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">Status</label>
-                <select aria-label="Status"
+                <label htmlFor="crud-completo-status" className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">Status</label>
+                <select id="crud-completo-status" aria-label="Status"
                   className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md bg-white dark:bg-slate-800 text-gray-900 dark:text-slate-100"
                   value={formData.status || 'ATIVO'}
                   onChange={(e) =>
@@ -386,8 +386,8 @@ export default function CrudSimuladores({ embedded = false, onBack }: Props = {}
                 </select>
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">Observações</label>
-                <textarea aria-label="Observações"
+                <label htmlFor="crud-completo-observacoes" className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">Observações</label>
+                <textarea id="crud-completo-observacoes" aria-label="Observações"
                   className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md bg-white dark:bg-slate-800 text-gray-900 dark:text-slate-100"
                   value={formData.observacoes || ''}
                   onChange={(e) => setFormData({ ...formData, observacoes: e.target.value })}

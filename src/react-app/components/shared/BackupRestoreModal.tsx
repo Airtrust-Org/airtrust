@@ -145,10 +145,10 @@ const BackupRestoreModal: React.FC<BackupRestoreModalProps> = ({ isOpen, onClose
 
           <form onSubmit={handleImportSubmit} className="space-y-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
+              <label htmlFor="backuprestoremodal-arquivo-de-backup-json" className="block text-sm font-medium text-gray-700 mb-2">
                 Arquivo de Backup (JSON)
               </label>
-              <input aria-label="Arquivo de Backup (JSON)"
+              <input id="backuprestoremodal-arquivo-de-backup-json" aria-label="Arquivo de Backup (JSON)"
                 type="file"
                 name="backup_file"
                 accept=".json"

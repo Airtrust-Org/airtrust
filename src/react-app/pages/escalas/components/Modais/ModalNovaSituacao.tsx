@@ -625,10 +625,10 @@ export default function ModalNovaSituacao({
             </div>
 
             <div className="rounded-2xl border border-slate-200 bg-white p-4">
-              <label className="mb-2 block text-xs font-semibold uppercase tracking-wide text-slate-500">
+              <label htmlFor="modalnovasituacao-observacao" className="mb-2 block text-xs font-semibold uppercase tracking-wide text-slate-500">
                 Observação
               </label>
-              <textarea aria-label="Observação"
+              <textarea id="modalnovasituacao-observacao" aria-label="Observação"
                 value={observacoes}
                 onChange={(event) => setObservacoes(event.target.value)}
                 rows={4}

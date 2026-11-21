@@ -99,10 +99,10 @@ export function FuncionarioForm({
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div>
-          <label className="block text-sm font-medium text-slate-700 mb-2">
+          <label htmlFor="funcionarioform-cargo" className="block text-sm font-medium text-slate-700 mb-2">
             Cargo <span className="text-red-500 ml-1">*</span>
           </label>
-          <select aria-label="Cargo"
+          <select id="funcionarioform-cargo" aria-label="Cargo"
             {...form.register('cargo')}
             className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30"
             disabled={isLoading || submitting}

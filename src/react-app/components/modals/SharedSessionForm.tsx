@@ -886,8 +886,8 @@ const SharedSessionForm = forwardRef<SharedSessionFormHandle, SharedSessionFormP
       </div>
 
       <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
-        <label className="mb-1 block text-xs font-medium text-slate-600">Horário da troca (divisão PF/PM)</label>
-        <input
+        <label htmlFor="sharedsessionform-horario-da-troca-divisao-pf-pm" className="mb-1 block text-xs font-medium text-slate-600">Horário da troca (divisão PF/PM)</label>
+        <input id="sharedsessionform-horario-da-troca-divisao-pf-pm"
           aria-label="Horário da troca"
           type="time"
           value={effectiveSplitTime}

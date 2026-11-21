@@ -120,8 +120,8 @@ const FuncionarioForm: React.FC<FuncionarioFormProps> = ({ funcionario, onSubmit
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {/* Nome - CAMPO OBRIGATÓRIO */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Nome Completo *</label>
-            <input aria-label="Nome Completo"
+            <label htmlFor="funcionarioform-nome-completo" className="block text-sm font-medium text-gray-700 mb-2">Nome Completo *</label>
+            <input id="funcionarioform-nome-completo" aria-label="Nome Completo"
               type="text"
               name="nome"
               value={formData.nome}
@@ -134,8 +134,8 @@ const FuncionarioForm: React.FC<FuncionarioFormProps> = ({ funcionario, onSubmit
 
           {/* Matrícula */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Matrícula *</label>
-            <input aria-label="Matrícula"
+            <label htmlFor="funcionarioform-matricula" className="block text-sm font-medium text-gray-700 mb-2">Matrícula *</label>
+            <input id="funcionarioform-matricula" aria-label="Matrícula"
               type="text"
               name="matricula"
               value={formData.matricula}
@@ -152,8 +152,8 @@ const FuncionarioForm: React.FC<FuncionarioFormProps> = ({ funcionario, onSubmit
 
           {/* CPF */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">CPF</label>
-            <input aria-label="CPF"
+            <label htmlFor="funcionarioform-cpf" className="block text-sm font-medium text-gray-700 mb-2">CPF</label>
+            <input id="funcionarioform-cpf" aria-label="CPF"
               type="text"
               name="cpf"
               value={formData.cpf}
@@ -165,8 +165,8 @@ const FuncionarioForm: React.FC<FuncionarioFormProps> = ({ funcionario, onSubmit
 
           {/* Email */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Email</label>
-            <input aria-label="Email"
+            <label htmlFor="funcionarioform-email" className="block text-sm font-medium text-gray-700 mb-2">Email</label>
+            <input id="funcionarioform-email" aria-label="Email"
               type="email"
               name="email"
               value={formData.email}
@@ -178,8 +178,8 @@ const FuncionarioForm: React.FC<FuncionarioFormProps> = ({ funcionario, onSubmit
 
           {/* Telefone */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Telefone</label>
-            <input aria-label="Telefone"
+            <label htmlFor="funcionarioform-telefone" className="block text-sm font-medium text-gray-700 mb-2">Telefone</label>
+            <input id="funcionarioform-telefone" aria-label="Telefone"
               type="tel"
               name="telefone"
               value={formData.telefone}
@@ -191,8 +191,8 @@ const FuncionarioForm: React.FC<FuncionarioFormProps> = ({ funcionario, onSubmit
 
           {/* Função */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Função *</label>
-            <select aria-label="Função"
+            <label htmlFor="funcionarioform-funcao" className="block text-sm font-medium text-gray-700 mb-2">Função *</label>
+            <select id="funcionarioform-funcao" aria-label="Função"
               name="funcao"
               value={formData.cargo}
               onChange={handleInputChange}
@@ -210,8 +210,8 @@ const FuncionarioForm: React.FC<FuncionarioFormProps> = ({ funcionario, onSubmit
 
           {/* Base */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Base</label>
-            <input aria-label="Base"
+            <label htmlFor="funcionarioform-base" className="block text-sm font-medium text-gray-700 mb-2">Base</label>
+            <input id="funcionarioform-base" aria-label="Base"
               type="text"
               name="base"
               value={formData.base}
@@ -223,8 +223,8 @@ const FuncionarioForm: React.FC<FuncionarioFormProps> = ({ funcionario, onSubmit
 
           {/* Contrato */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Contrato</label>
-            <input aria-label="Contrato"
+            <label htmlFor="funcionarioform-contrato" className="block text-sm font-medium text-gray-700 mb-2">Contrato</label>
+            <input id="funcionarioform-contrato" aria-label="Contrato"
               type="text"
               name="contrato"
               value={formData.contrato}
@@ -236,8 +236,8 @@ const FuncionarioForm: React.FC<FuncionarioFormProps> = ({ funcionario, onSubmit
 
           {/* Status */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Status</label>
-            <select aria-label="Status"
+            <label htmlFor="funcionarioform-status" className="block text-sm font-medium text-gray-700 mb-2">Status</label>
+            <select id="funcionarioform-status" aria-label="Status"
               name="status"
               value={formData.status}
               onChange={handleInputChange}

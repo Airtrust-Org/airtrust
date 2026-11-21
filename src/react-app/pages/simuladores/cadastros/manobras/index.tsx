@@ -278,8 +278,8 @@ export default function CrudManobras({ embedded = false, onBack }: Props = {}) {
       <div className="bg-white dark:bg-slate-900 rounded-lg border border-gray-200 dark:border-slate-700 p-4 space-y-4">
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">Buscar</label>
-            <Input aria-label="Buscar"
+            <label htmlFor="index-buscar" className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">Buscar</label>
+            <Input id="index-buscar" aria-label="Buscar"
               placeholder="Código ou nome..."
               value={busca}
               onChange={(e) => setBusca(e.target.value)}
@@ -287,8 +287,8 @@ export default function CrudManobras({ embedded = false, onBack }: Props = {}) {
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">Equipamento</label>
-            <select aria-label="Equipamento"
+            <label htmlFor="index-equipamento" className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">Equipamento</label>
+            <select id="index-equipamento" aria-label="Equipamento"
               className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md text-sm bg-white dark:bg-slate-800 text-gray-900 dark:text-slate-100"
               value={filtroModelo}
               onChange={(e) => setFiltroModelo(e.target.value)}
@@ -299,8 +299,8 @@ export default function CrudManobras({ embedded = false, onBack }: Props = {}) {
             </select>
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">Categoria</label>
-            <select aria-label="Categoria"
+            <label htmlFor="index-categoria" className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">Categoria</label>
+            <select id="index-categoria" aria-label="Categoria"
               className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md text-sm bg-white dark:bg-slate-800 text-gray-900 dark:text-slate-100"
               value={filtroCategoria}
               onChange={(e) => setFiltroCategoria(e.target.value)}
@@ -444,8 +444,8 @@ export default function CrudManobras({ embedded = false, onBack }: Props = {}) {
             <div className="p-6 space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">Código <span className="text-red-500">*</span></label>
-                  <Input aria-label="Código"
+                  <label htmlFor="index-codigo" className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">Código <span className="text-red-500">*</span></label>
+                  <Input id="index-codigo" aria-label="Código"
                     value={formData.codigo || ''}
                     onChange={(e) =>
                       setFormData({ ...formData, codigo: e.target.value.toUpperCase() })
@@ -453,10 +453,10 @@ export default function CrudManobras({ embedded = false, onBack }: Props = {}) {
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">
+                  <label htmlFor="index-equipamento-2" className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">
                     Equipamento
                   </label>
-                  <select aria-label="Equipamento"
+                  <select id="index-equipamento-2" aria-label="Equipamento"
                     className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md bg-white dark:bg-slate-800 text-gray-900 dark:text-slate-100"
                     value={formData.tipo_aeronave || ''}
                     onChange={(e) => setFormData({ ...formData, tipo_aeronave: e.target.value })}
@@ -468,8 +468,8 @@ export default function CrudManobras({ embedded = false, onBack }: Props = {}) {
                 </div>
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">Categoria</label>
-                <select aria-label="Categoria"
+                <label htmlFor="index-categoria-2" className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">Categoria</label>
+                <select id="index-categoria-2" aria-label="Categoria"
                   className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md bg-white dark:bg-slate-800 text-gray-900 dark:text-slate-100"
                   value={formData.categoria || ''}
                   onChange={(e) => setFormData({ ...formData, categoria: e.target.value })}
@@ -483,15 +483,15 @@ export default function CrudManobras({ embedded = false, onBack }: Props = {}) {
                 </select>
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">Nome <span className="text-red-500">*</span></label>
-                <Input aria-label="Nome"
+                <label htmlFor="index-nome" className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">Nome <span className="text-red-500">*</span></label>
+                <Input id="index-nome" aria-label="Nome"
                   value={formData.nome || ''}
                   onChange={(e) => setFormData({ ...formData, nome: e.target.value })}
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">Descrição</label>
-                <textarea aria-label="Descrição"
+                <label htmlFor="index-descricao" className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">Descrição</label>
+                <textarea id="index-descricao" aria-label="Descrição"
                   className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md bg-white dark:bg-slate-800 text-gray-900 dark:text-slate-100"
                   value={formData.descricao || ''}
                   onChange={(e) => setFormData({ ...formData, descricao: e.target.value })}
@@ -499,10 +499,10 @@ export default function CrudManobras({ embedded = false, onBack }: Props = {}) {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">
+                <label htmlFor="index-nivel-de-dificuldade" className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">
                   Nível de Dificuldade
                 </label>
-                <select aria-label="Nível de Dificuldade"
+                <select id="index-nivel-de-dificuldade" aria-label="Nível de Dificuldade"
                   className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md bg-white dark:bg-slate-800 text-gray-900 dark:text-slate-100"
                   value={formData.nivel_dificuldade || 'BASICO'}
                   onChange={(e) =>

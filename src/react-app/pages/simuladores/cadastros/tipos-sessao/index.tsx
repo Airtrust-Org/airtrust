@@ -277,8 +277,8 @@ export default function CrudTiposSessao({ embedded = false, onBack }: Props = {}
             </div>
             <div className="p-6 space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">Código <span className="text-red-500">*</span></label>
-                <Input aria-label="Código"
+                <label htmlFor="index-codigo" className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">Código <span className="text-red-500">*</span></label>
+                <Input id="index-codigo" aria-label="Código"
                   value={formData.codigo}
                   onChange={(e) =>
                     setFormData({ ...formData, codigo: e.target.value.toUpperCase() })
@@ -287,16 +287,16 @@ export default function CrudTiposSessao({ embedded = false, onBack }: Props = {}
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">Nome <span className="text-red-500">*</span></label>
-                <Input aria-label="Nome"
+                <label htmlFor="index-nome" className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">Nome <span className="text-red-500">*</span></label>
+                <Input id="index-nome" aria-label="Nome"
                   value={formData.nome}
                   onChange={(e) => setFormData({ ...formData, nome: e.target.value })}
                   placeholder="Ex: Treinamento Inicial"
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">Descrição</label>
-                <textarea aria-label="Descrição"
+                <label htmlFor="index-descricao" className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">Descrição</label>
+                <textarea id="index-descricao" aria-label="Descrição"
                   className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md bg-white dark:bg-slate-800 text-gray-900 dark:text-slate-100"
                   value={formData.descricao}
                   onChange={(e) => setFormData({ ...formData, descricao: e.target.value })}
@@ -305,9 +305,9 @@ export default function CrudTiposSessao({ embedded = false, onBack }: Props = {}
               </div>
               <div className="flex items-center gap-4">
                 <div className="flex-1">
-                  <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">Cor da Tag</label>
+                  <label htmlFor="index-cor-da-tag" className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">Cor da Tag</label>
                   <div className="flex items-center gap-2">
-                    <input aria-label="Cor da Tag"
+                    <input id="index-cor-da-tag" aria-label="Cor da Tag"
                       type="color"
                       value={formData.cor}
                       onChange={(e) => setFormData({ ...formData, cor: e.target.value })}

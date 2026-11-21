@@ -110,10 +110,10 @@ export const FuncoesTab: React.FC<FuncoesTapProps> = ({
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           {/* Busca */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Buscar</label>
+            <label htmlFor="funcoestab-buscar" className="block text-sm font-medium text-gray-700 mb-2">Buscar</label>
             <div className="relative">
               <Search className="absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
-              <input aria-label="Buscar"
+              <input id="funcoestab-buscar" aria-label="Buscar"
                 type="text"
                 placeholder="Código ou nome..."
                 value={busca}
@@ -125,8 +125,8 @@ export const FuncoesTab: React.FC<FuncoesTapProps> = ({
 
           {/* Nível */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Nível</label>
-            <select aria-label="Nível"
+            <label htmlFor="funcoestab-nivel" className="block text-sm font-medium text-gray-700 mb-2">Nível</label>
+            <select id="funcoestab-nivel" aria-label="Nível"
               value={filtroNivel}
               onChange={(e) => setFiltroNivel(e.target.value)}
               className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/50 bg-white"
@@ -141,8 +141,8 @@ export const FuncoesTab: React.FC<FuncoesTapProps> = ({
 
           {/* Status */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Status</label>
-            <select aria-label="Status"
+            <label htmlFor="funcoestab-status" className="block text-sm font-medium text-gray-700 mb-2">Status</label>
+            <select id="funcoestab-status" aria-label="Status"
               value={filtroAtivo}
               onChange={(e) => setFiltroAtivo(e.target.value)}
               className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/50 bg-white"

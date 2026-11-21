@@ -198,11 +198,11 @@ export default function ConfiguracoesPage() {
 
                   <div className="space-y-4">
                     <div>
-                      <label className="block text-sm font-medium text-slate-700 mb-2">
+                      <label htmlFor="configuracoespage-url-do-webhook" className="block text-sm font-medium text-slate-700 mb-2">
                         URL do Webhook
                       </label>
                       <div className="flex gap-2">
-                        <input aria-label="URL do Webhook"
+                        <input id="configuracoespage-url-do-webhook" aria-label="URL do Webhook"
                           type="text"
                           readOnly
                           value="https://api.airtrust.online/api/integracoes/edapp/webhook"

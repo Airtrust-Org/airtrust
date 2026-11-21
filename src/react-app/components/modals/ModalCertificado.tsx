@@ -1000,10 +1000,10 @@ export function ModalCertificado({
                       </div>
                     )}
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                    <label htmlFor="modalcertificado-descricao-opcional" className="block text-sm font-medium text-gray-700 mb-2">
                       Descrição (opcional)
                     </label>
-                    <input aria-label="Descrição (opcional)"
+                    <input id="modalcertificado-descricao-opcional" aria-label="Descrição (opcional)"
                       type="text"
                       value={descricao}
                       onChange={(e) => setDescricao(e.target.value)}

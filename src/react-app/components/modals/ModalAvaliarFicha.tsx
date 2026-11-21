@@ -611,10 +611,10 @@ export default function ModalAvaliarFicha({
 
             {/* Observações Gerais */}
             <div className="bg-white rounded-xl border border-gray-100 p-5">
-              <label className="block text-sm font-semibold text-gray-900 mb-3">
+              <label htmlFor="modalavaliarficha-observacoes-gerais-da-sessao" className="block text-sm font-semibold text-gray-900 mb-3">
                 Observações Gerais da Sessão
               </label>
-              <textarea aria-label="Observações Gerais da Sessão"
+              <textarea id="modalavaliarficha-observacoes-gerais-da-sessao" aria-label="Observações Gerais da Sessão"
                 value={observacoesGerais}
                 onChange={(e) => setObservacoesGerais(e.target.value)}
                 placeholder="Adicione observações gerais sobre o desempenho na sessão..."

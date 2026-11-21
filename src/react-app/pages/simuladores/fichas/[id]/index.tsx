@@ -2979,10 +2979,10 @@ export default function FichaDetalhe() {
                 </div>
 
                 <div className="mb-5">
-                  <label className="mb-2 block text-sm font-semibold text-slate-900">
+                  <label htmlFor="index-motivo-da-solicitacao" className="mb-2 block text-sm font-semibold text-slate-900">
                     Motivo da solicitação
                   </label>
-                  <textarea aria-label="Motivo da solicitação"
+                  <textarea id="index-motivo-da-solicitacao" aria-label="Motivo da solicitação"
                     value={motivoEdicao}
                     onChange={(event) => setMotivoEdicao(event.target.value)}
                     rows={3}
@@ -2992,10 +2992,10 @@ export default function FichaDetalhe() {
                 </div>
 
                 <div className="mb-5">
-                  <label className="mb-2 block text-sm font-semibold text-slate-900">
+                  <label htmlFor="index-observacoes-gerais" className="mb-2 block text-sm font-semibold text-slate-900">
                     Observações gerais
                   </label>
-                  <textarea aria-label="Observações gerais"
+                  <textarea id="index-observacoes-gerais" aria-label="Observações gerais"
                     value={observacoesGeraisEdicao}
                     onChange={(event) => setObservacoesGeraisEdicao(event.target.value)}
                     rows={4}

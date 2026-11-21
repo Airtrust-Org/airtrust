@@ -408,8 +408,8 @@ export default function SgsoAuditoriaWorkflow({ auditoriaId, onClose, onChanged 
               </div>
 
               <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-                <label className="text-sm font-semibold text-slate-800">Observações gerais</label>
-                <textarea aria-label="Observações gerais"
+                <label htmlFor="sgsoauditoriaworkflow-observacoes-gerais" className="text-sm font-semibold text-slate-800">Observações gerais</label>
+                <textarea id="sgsoauditoriaworkflow-observacoes-gerais" aria-label="Observações gerais"
                   value={generalNotes}
                   onChange={(event) => setGeneralNotes(event.target.value)}
                   disabled={!writable}

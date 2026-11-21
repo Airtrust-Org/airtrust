@@ -132,8 +132,8 @@ export default function ConfiguracaoCertificado() {
           <h2 className={styles.cardTitle}>📋 Selecione a Empresa</h2>
 
           <div className={styles.formGroup}>
-            <label>Empresa</label>
-            <select aria-label="Empresa"
+            <label htmlFor="configuracaocertificado-empresa">Empresa</label>
+            <select id="configuracaocertificado-empresa" aria-label="Empresa"
               value={selectedEmpresa || ''}
               onChange={(e) => setSelectedEmpresa(Number(e.target.value))}
               className={styles.select}

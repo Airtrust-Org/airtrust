@@ -239,10 +239,10 @@ export default function FormularioAgendamento({
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {/* Simulador */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label htmlFor="formularioagendamento-simulador" className="block text-sm font-medium text-gray-700 mb-1">
                 Simulador <span className="text-red-500">*</span>
               </label>
-              <select aria-label="Simulador"
+              <select id="formularioagendamento-simulador" aria-label="Simulador"
                 value={dadosGerais.simulador_id}
                 onChange={(e) => setDadosGerais({ ...dadosGerais, simulador_id: e.target.value })}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
@@ -259,10 +259,10 @@ export default function FormularioAgendamento({
 
             {/* Instrutor */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label htmlFor="formularioagendamento-instrutor" className="block text-sm font-medium text-gray-700 mb-1">
                 Instrutor <span className="text-red-500">*</span>
               </label>
-              <select aria-label="Instrutor"
+              <select id="formularioagendamento-instrutor" aria-label="Instrutor"
                 value={dadosGerais.instrutor_id}
                 onChange={(e) => setDadosGerais({ ...dadosGerais, instrutor_id: e.target.value })}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
@@ -279,10 +279,10 @@ export default function FormularioAgendamento({
 
             {/* Data */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label htmlFor="formularioagendamento-data" className="block text-sm font-medium text-gray-700 mb-1">
                 Data <span className="text-red-500">*</span>
               </label>
-              <input aria-label="Data"
+              <input id="formularioagendamento-data" aria-label="Data"
                 type="date"
                 value={dadosGerais.data_inicio}
                 onChange={(e) => setDadosGerais({ ...dadosGerais, data_inicio: e.target.value })}
@@ -293,8 +293,8 @@ export default function FormularioAgendamento({
 
             {/* Tipo de Sessão */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Tipo de Sessão</label>
-              <select aria-label="Tipo de Sessão"
+              <label htmlFor="formularioagendamento-tipo-de-sessao" className="block text-sm font-medium text-gray-700 mb-1">Tipo de Sessão</label>
+              <select id="formularioagendamento-tipo-de-sessao" aria-label="Tipo de Sessão"
                 value={dadosGerais.tipo_sessao}
                 onChange={(e) => setDadosGerais({ ...dadosGerais, tipo_sessao: e.target.value })}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
@@ -421,8 +421,8 @@ export default function FormularioAgendamento({
 
         {/* Observações */}
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Observações</label>
-          <textarea aria-label="Observações"
+          <label htmlFor="formularioagendamento-observacoes" className="block text-sm font-medium text-gray-700 mb-1">Observações</label>
+          <textarea id="formularioagendamento-observacoes" aria-label="Observações"
             value={dadosGerais.observacoes}
             onChange={(e) => setDadosGerais({ ...dadosGerais, observacoes: e.target.value })}
             placeholder="Observações gerais sobre a sessão..."

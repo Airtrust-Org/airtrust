@@ -167,9 +167,9 @@ export default function FrmsHistoricoFira() {
         {/* Filtros */}
         <div className="mb-6 flex flex-wrap items-end gap-3">
           <div>
-            <label className="mb-1 block text-xs font-medium text-gray-500">Status</label>
+            <label htmlFor="frmshistoricofira-status" className="mb-1 block text-xs font-medium text-gray-500">Status</label>
             <div className="relative">
-              <select aria-label="Status"
+              <select id="frmshistoricofira-status" aria-label="Status"
                 value={filtroStatus}
                 onChange={(e) => {
                   setFiltroStatus(e.target.value);
@@ -187,9 +187,9 @@ export default function FrmsHistoricoFira() {
             </div>
           </div>
           <div>
-            <label className="mb-1 block text-xs font-medium text-gray-500">Ano</label>
+            <label htmlFor="frmshistoricofira-ano" className="mb-1 block text-xs font-medium text-gray-500">Ano</label>
             <div className="relative">
-              <select aria-label="Ano"
+              <select id="frmshistoricofira-ano" aria-label="Ano"
                 value={filtroAno}
                 onChange={(e) => {
                   setFiltroAno(e.target.value);
@@ -208,9 +208,9 @@ export default function FrmsHistoricoFira() {
             </div>
           </div>
           <div>
-            <label className="mb-1 block text-xs font-medium text-gray-500">Mês</label>
+            <label htmlFor="frmshistoricofira-mes" className="mb-1 block text-xs font-medium text-gray-500">Mês</label>
             <div className="relative">
-              <select aria-label="Mês"
+              <select id="frmshistoricofira-mes" aria-label="Mês"
                 value={filtroMes}
                 onChange={(e) => {
                   setFiltroMes(e.target.value);
